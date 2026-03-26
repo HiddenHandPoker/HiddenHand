@@ -203,6 +203,8 @@ export interface CreateTableConfig {
   minBuyIn: number; // in lamports
   maxBuyIn: number; // in lamports
   maxPlayers: number;
+  rakeBps?: number; // rake in basis points (0 = no rake, max 1000 = 10%)
+  rakeCap?: number; // max rake per hand in lamports (0 = no cap)
 }
 
 export type ActionType =
@@ -670,7 +672,9 @@ export function usePokerGame(): UsePokerGameResult {
             new BN(config.bigBlind),
             new BN(config.minBuyIn),
             new BN(config.maxBuyIn),
-            config.maxPlayers
+            config.maxPlayers,
+            config.rakeBps ?? 0,
+            new BN(config.rakeCap ?? 0)
           )
           .accounts({
             authority: publicKey,

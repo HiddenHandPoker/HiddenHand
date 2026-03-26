@@ -71,9 +71,20 @@ describe("Edge Cases & Security", () => {
     );
   }
 
-  async function airdrop(address: PublicKey, amount: number = 10 * LAMPORTS_PER_SOL) {
-    const sig = await provider.connection.requestAirdrop(address, amount);
-    await provider.connection.confirmTransaction(sig);
+  async function airdrop(address: PublicKey, amount: number = 2 * LAMPORTS_PER_SOL) {
+    try {
+      const sig = await provider.connection.requestAirdrop(address, amount);
+      await provider.connection.confirmTransaction(sig);
+    } catch (e: any) {
+      const tx = new Transaction().add(
+        SystemProgram.transfer({
+          fromPubkey: provider.wallet.publicKey,
+          toPubkey: address,
+          lamports: amount,
+        })
+      );
+      await provider.sendAndConfirm(tx);
+    }
   }
 
   async function createFundedKeypair(): Promise<Keypair> {
@@ -128,7 +139,9 @@ describe("Edge Cases & Security", () => {
           new anchor.BN(BIG_BLIND),
           new anchor.BN(MIN_BUY_IN),
           new anchor.BN(MAX_BUY_IN),
-          MAX_PLAYERS
+          MAX_PLAYERS,
+          0,
+          new anchor.BN(0)
         )
         .accounts({
           authority: this.authority.publicKey,

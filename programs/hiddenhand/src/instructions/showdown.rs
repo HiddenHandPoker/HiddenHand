@@ -44,6 +44,63 @@ fn validate_seat_account(
     Some(seat)
 }
 
+/// A side pot calculated from player contributions
+struct SidePot {
+    /// Amount in this side pot
+    amount: u64,
+    /// Seat indices of active (non-folded) players eligible for this pot
+    eligible: Vec<u8>,
+}
+
+/// Calculate side pots from all player bets.
+/// This correctly handles multi-way all-in with different stack sizes.
+///
+/// Algorithm: Sort players by total_bet ascending. For each distinct bet level,
+/// calculate the incremental contribution from all players who bet at least that amount.
+/// Only active (non-folded) players are eligible to win each pot.
+fn calculate_side_pots(all_bets: &[(u8, u64, bool)]) -> Vec<SidePot> {
+    if all_bets.is_empty() {
+        return Vec::new();
+    }
+
+    let mut sorted: Vec<(u8, u64, bool)> = all_bets.to_vec();
+    sorted.sort_by_key(|b| b.1); // sort by bet amount ascending
+
+    let mut side_pots = Vec::new();
+    let mut prev_level = 0u64;
+
+    for i in 0..sorted.len() {
+        let (_, bet, _) = sorted[i];
+        if bet <= prev_level {
+            continue; // skip duplicate bet levels
+        }
+
+        let contribution = bet - prev_level;
+
+        // Count ALL players who bet at least this level (including folded)
+        let num_contributors = sorted.iter().filter(|(_, b, _)| *b >= bet).count() as u64;
+        let pot_amount = contribution * num_contributors;
+
+        // Only ACTIVE players who bet enough are eligible to win
+        let eligible: Vec<u8> = sorted
+            .iter()
+            .filter(|(_, b, active)| *active && *b >= bet)
+            .map(|(seat, _, _)| *seat)
+            .collect();
+
+        if pot_amount > 0 {
+            side_pots.push(SidePot {
+                amount: pot_amount,
+                eligible,
+            });
+        }
+
+        prev_level = bet;
+    }
+
+    side_pots
+}
+
 #[derive(Accounts)]
 pub struct Showdown<'info> {
     /// Anyone can call showdown, but non-authority must wait for timeout
@@ -94,7 +151,6 @@ pub fn handler(ctx: Context<Showdown>) -> Result<()> {
     }
 
     // Security: Check for duplicate accounts in remaining_accounts
-    // This prevents an attacker from passing the same account twice to manipulate state
     let mut seen_keys: BTreeSet<Pubkey> = BTreeSet::new();
     for account in ctx.remaining_accounts.iter() {
         if !seen_keys.insert(*account.key) {
@@ -122,30 +178,38 @@ pub fn handler(ctx: Context<Showdown>) -> Result<()> {
     );
 
     // Collect player seats from remaining accounts
-    // Store seat index and account index for later updates
-    let mut active_seats: Vec<(u8, usize)> = Vec::new();
+    let mut active_seats: Vec<(u8, usize)> = Vec::new(); // (seat_idx, acc_idx)
     let program_id = crate::ID;
 
     // === EARLY: Collect ALL player data for event emission BEFORE any modifications ===
-    // This must happen first because modifying accounts can cause borrow issues
     let mut event_results: [PlayerHandResult; 6] = Default::default();
     let mut results_count: u8 = 0;
+
+    // Also collect ALL bets for side pot calculation (including folded players)
+    let mut all_bets: Vec<(u8, u64, bool)> = Vec::new(); // (seat_idx, total_bet, is_active)
 
     for (idx, account_info) in ctx.remaining_accounts.iter().enumerate() {
         if results_count >= 6 {
             break;
         }
         if let Some(seat) = validate_seat_account(account_info, &table.key(), &program_id) {
-            // Track active seats for later processing
-            if seat.status == PlayerStatus::Playing || seat.status == PlayerStatus::AllIn {
+            let is_active = seat.status == PlayerStatus::Playing || seat.status == PlayerStatus::AllIn;
+
+            // Track active seats for hand evaluation
+            if is_active {
                 active_seats.push((seat.seat_index, idx));
             }
 
-            // Collect event data for ALL seats (including folded)
+            // Track ALL players' bets for side pot calculation (including folded)
+            if seat.total_bet_this_hand > 0 {
+                all_bets.push((seat.seat_index, seat.total_bet_this_hand, is_active));
+            }
+
+            // Collect event data for ALL seats
             let hole_1 = if seat.cards_revealed {
                 seat.revealed_card_1
             } else if seat.status == PlayerStatus::Folded {
-                255 // Don't show folded player's cards
+                255
             } else {
                 (seat.hole_card_1 & 0xFF) as u8
             };
@@ -157,7 +221,6 @@ pub fn handler(ctx: Context<Showdown>) -> Result<()> {
                 (seat.hole_card_2 & 0xFF) as u8
             };
 
-            // Calculate hand rank if cards are shown and we have community cards
             let hand_rank = if hole_1 != 255 && hole_2 != 255 && community_cards.len() == 5 {
                 let eval = evaluate_hand(&[
                     hole_1, hole_2,
@@ -166,10 +229,8 @@ pub fn handler(ctx: Context<Showdown>) -> Result<()> {
                 ]);
                 eval.rank as u8
             } else {
-                255 // Not evaluated
+                255
             };
-
-            let chips_bet = seat.total_bet_this_hand;
 
             event_results[results_count as usize] = PlayerHandResult {
                 player: seat.player,
@@ -178,7 +239,7 @@ pub fn handler(ctx: Context<Showdown>) -> Result<()> {
                 hole_card_2: hole_2,
                 hand_rank,
                 chips_won: 0,
-                chips_bet,
+                chips_bet: seat.total_bet_this_hand,
                 folded: seat.status == PlayerStatus::Folded,
                 all_in: seat.status == PlayerStatus::AllIn,
             };
@@ -186,42 +247,7 @@ pub fn handler(ctx: Context<Showdown>) -> Result<()> {
         }
     }
 
-    let mut pot = hand_state.pot;
-
-    // Collect total bets from all active players to calculate side pots
-    let mut player_bets: Vec<(u8, usize, u64)> = Vec::new(); // (seat_idx, acc_idx, total_bet)
-
-    for (seat_idx, acc_idx) in active_seats.iter() {
-        if hand_state.is_player_active(*seat_idx) {
-            let account_info = &ctx.remaining_accounts[*acc_idx];
-            let data = account_info.try_borrow_data()?;
-            if let Ok(seat) = PlayerSeat::try_deserialize(&mut &data[..]) {
-                player_bets.push((*seat_idx, *acc_idx, seat.total_bet_this_hand));
-            }
-        }
-    }
-
-    // Calculate effective pot and return excess to over-bettors
-    // The effective pot each player can win is limited by what others can match
-    if player_bets.len() >= 2 {
-        // Find minimum bet among active players
-        let min_bet = player_bets.iter().map(|(_, _, bet)| *bet).min().unwrap_or(0);
-
-        // Return excess to players who bet more than the minimum
-        for (seat_idx, acc_idx, total_bet) in player_bets.iter() {
-            if *total_bet > min_bet {
-                let excess = total_bet - min_bet;
-                let account_info = &ctx.remaining_accounts[*acc_idx];
-                let mut data = account_info.try_borrow_mut_data()?;
-                if let Ok(mut seat) = PlayerSeat::try_deserialize(&mut &data[..]) {
-                    seat.award_chips(excess);
-                    seat.try_serialize(&mut *data)?;
-                    pot = pot.saturating_sub(excess);
-                    msg!("Returning {} excess chips to seat {} (uncallable bet)", excess, seat_idx);
-                }
-            }
-        }
-    }
+    let pot = hand_state.pot;
 
     // Check that all active players have revealed their cards (required for secure showdown)
     // Skip this check if only one player remains (they win by default)
@@ -240,116 +266,179 @@ pub fn handler(ctx: Context<Showdown>) -> Result<()> {
         }
     }
 
-    // Handle single winner (everyone else folded)
+    // === RAKE CALCULATION ===
+    let total_rake = if table.rake_bps > 0 && pot > 0 {
+        let r = pot.saturating_mul(table.rake_bps as u64) / 10000;
+        if table.rake_cap > 0 { r.min(table.rake_cap) } else { r }
+    } else {
+        0
+    };
+
+    let pot_after_rake = pot.saturating_sub(total_rake);
+    if total_rake > 0 {
+        table.accumulated_rake = table.accumulated_rake.saturating_add(total_rake);
+        msg!("Rake: {} lamports ({}bps, cap {})", total_rake, table.rake_bps, table.rake_cap);
+    }
+
+    // === POT DISTRIBUTION ===
+    // Track total chips awarded to update event data
+    let mut chips_awarded: Vec<(u8, u64)> = Vec::new(); // (seat_idx, amount)
+
     if hand_state.active_count == 1 {
-        // Find the single remaining player
+        // Single winner (everyone else folded) — award entire pot after rake
         for (seat_idx, acc_idx) in active_seats.iter() {
             if hand_state.is_player_active(*seat_idx) {
-                // Award entire pot to winner
                 let account_info = &ctx.remaining_accounts[*acc_idx];
                 let mut data = account_info.try_borrow_mut_data()?;
                 if let Ok(mut seat) = PlayerSeat::try_deserialize(&mut &data[..]) {
-                    seat.award_chips(pot);
+                    seat.award_chips(pot_after_rake);
                     seat.try_serialize(&mut *data)?;
-                    msg!("Player at seat {} wins {} (all others folded)", seat_idx, pot);
+                    chips_awarded.push((*seat_idx, pot_after_rake));
+                    msg!("Player at seat {} wins {} (all others folded)", seat_idx, pot_after_rake);
                 }
                 break;
             }
         }
     } else {
-        // Showdown - evaluate hands and find winners
-        let mut player_hands: Vec<(u8, [u8; 7])> = Vec::new();
+        // === SIDE POT CALCULATION ===
+        let side_pots = calculate_side_pots(&all_bets);
 
-        for (seat_idx, acc_idx) in active_seats.iter() {
-            if hand_state.is_player_active(*seat_idx) {
-                let account_info = &ctx.remaining_accounts[*acc_idx];
-                let data = account_info.try_borrow_data()?;
-                if let Ok(seat) = PlayerSeat::try_deserialize(&mut &data[..]) {
-                    // Build 7-card hand (2 hole cards + 5 community)
-                    // Use revealed_card_1/2 from secure Ed25519-verified reveal
-                    // Falls back to hole_card lower bits for non-encrypted games
-                    let hole_card_1 = if seat.cards_revealed {
-                        seat.revealed_card_1
-                    } else {
-                        (seat.hole_card_1 & 0xFF) as u8
-                    };
-                    let hole_card_2 = if seat.cards_revealed {
-                        seat.revealed_card_2
-                    } else {
-                        (seat.hole_card_2 & 0xFF) as u8
-                    };
+        msg!("Calculated {} side pot(s) from {} player bets", side_pots.len(), all_bets.len());
 
-                    let seven_cards: [u8; 7] = [
-                        hole_card_1,
-                        hole_card_2,
-                        community_cards.get(0).copied().unwrap_or(0),
-                        community_cards.get(1).copied().unwrap_or(0),
-                        community_cards.get(2).copied().unwrap_or(0),
-                        community_cards.get(3).copied().unwrap_or(0),
-                        community_cards.get(4).copied().unwrap_or(0),
-                    ];
+        // Deduct rake from side pots (from the main pot first)
+        let mut rake_remaining = total_rake;
+        let mut adjusted_pots: Vec<(u64, Vec<u8>)> = Vec::new();
 
-                    player_hands.push((*seat_idx, seven_cards));
-                }
+        for sp in side_pots.iter() {
+            let deduction = rake_remaining.min(sp.amount);
+            rake_remaining = rake_remaining.saturating_sub(deduction);
+            let adjusted = sp.amount.saturating_sub(deduction);
+            if adjusted > 0 {
+                adjusted_pots.push((adjusted, sp.eligible.clone()));
             }
         }
 
-        // Find winners
-        let winners = find_winners(&player_hands);
-        let winner_count = winners.len() as u64;
+        // Distribute each side pot to its winners
+        for (pot_idx, (pot_amount, eligible)) in adjusted_pots.iter().enumerate() {
+            if eligible.is_empty() {
+                // No eligible active players — shouldn't happen but handle gracefully
+                continue;
+            }
 
-        require!(winner_count > 0, HiddenHandError::InvalidPhase);
-
-        // Calculate split (handle remainder)
-        let share = pot / winner_count;
-        let remainder = pot % winner_count;
-
-        msg!("Showdown - {} winner(s), pot: {}, share: {}", winner_count, pot, share);
-
-        // Distribute winnings
-        for (i, winner_seat_idx) in winners.iter().enumerate() {
-            // Find the winner's account
-            for (seat_idx, acc_idx) in active_seats.iter() {
-                if seat_idx == winner_seat_idx {
-                    let account_info = &ctx.remaining_accounts[*acc_idx];
-                    let mut data = account_info.try_borrow_mut_data()?;
-                    if let Ok(mut seat) = PlayerSeat::try_deserialize(&mut &data[..]) {
-                        // First winner gets any remainder
-                        let winnings = if i == 0 { share + remainder } else { share };
-                        seat.award_chips(winnings);
-                        seat.try_serialize(&mut *data)?;
-
-                        // Log the hand
-                        let hole_1 = if seat.cards_revealed {
-                            seat.revealed_card_1
-                        } else {
-                            (seat.hole_card_1 & 0xFF) as u8
-                        };
-                        let hole_2 = if seat.cards_revealed {
-                            seat.revealed_card_2
-                        } else {
-                            (seat.hole_card_2 & 0xFF) as u8
-                        };
-                        let hand_eval = evaluate_hand(&[
-                            hole_1, hole_2,
-                            community_cards[0], community_cards[1], community_cards[2],
-                            community_cards[3], community_cards[4],
-                        ]);
-
-                        msg!(
-                            "Seat {} wins {} with {:?}",
-                            seat_idx,
-                            winnings,
-                            hand_eval.rank
-                        );
+            if eligible.len() == 1 {
+                // Only one eligible player — auto-win (their own uncallable excess)
+                let winner_seat_idx = eligible[0];
+                for (seat_idx, acc_idx) in active_seats.iter() {
+                    if *seat_idx == winner_seat_idx {
+                        let account_info = &ctx.remaining_accounts[*acc_idx];
+                        let mut data = account_info.try_borrow_mut_data()?;
+                        if let Ok(mut seat) = PlayerSeat::try_deserialize(&mut &data[..]) {
+                            seat.award_chips(*pot_amount);
+                            seat.try_serialize(&mut *data)?;
+                            chips_awarded.push((*seat_idx, *pot_amount));
+                            msg!("Side pot {}: seat {} wins {} (sole eligible)", pot_idx, seat_idx, pot_amount);
+                        }
+                        break;
                     }
-                    break;
+                }
+                continue;
+            }
+
+            // Evaluate hands among eligible players for this side pot
+            let mut player_hands: Vec<(u8, [u8; 7])> = Vec::new();
+
+            for winner_seat_idx in eligible.iter() {
+                for (seat_idx, acc_idx) in active_seats.iter() {
+                    if seat_idx == winner_seat_idx {
+                        let account_info = &ctx.remaining_accounts[*acc_idx];
+                        let data = account_info.try_borrow_data()?;
+                        if let Ok(seat) = PlayerSeat::try_deserialize(&mut &data[..]) {
+                            let hole_card_1 = if seat.cards_revealed {
+                                seat.revealed_card_1
+                            } else {
+                                (seat.hole_card_1 & 0xFF) as u8
+                            };
+                            let hole_card_2 = if seat.cards_revealed {
+                                seat.revealed_card_2
+                            } else {
+                                (seat.hole_card_2 & 0xFF) as u8
+                            };
+
+                            let seven_cards: [u8; 7] = [
+                                hole_card_1,
+                                hole_card_2,
+                                community_cards.get(0).copied().unwrap_or(0),
+                                community_cards.get(1).copied().unwrap_or(0),
+                                community_cards.get(2).copied().unwrap_or(0),
+                                community_cards.get(3).copied().unwrap_or(0),
+                                community_cards.get(4).copied().unwrap_or(0),
+                            ];
+
+                            player_hands.push((*seat_idx, seven_cards));
+                        }
+                        break;
+                    }
+                }
+            }
+
+            // Find winners for this side pot
+            let winners = find_winners(&player_hands);
+            let winner_count = winners.len() as u64;
+
+            if winner_count == 0 {
+                continue;
+            }
+
+            let share = pot_amount / winner_count;
+            let remainder = pot_amount % winner_count;
+
+            msg!("Side pot {}: {} - {} winner(s), share: {}", pot_idx, pot_amount, winner_count, share);
+
+            for (i, winner_seat_idx) in winners.iter().enumerate() {
+                for (seat_idx, acc_idx) in active_seats.iter() {
+                    if seat_idx == winner_seat_idx {
+                        let account_info = &ctx.remaining_accounts[*acc_idx];
+                        let mut data = account_info.try_borrow_mut_data()?;
+                        if let Ok(mut seat) = PlayerSeat::try_deserialize(&mut &data[..]) {
+                            let winnings = if i == 0 { share + remainder } else { share };
+                            seat.award_chips(winnings);
+                            seat.try_serialize(&mut *data)?;
+                            chips_awarded.push((*seat_idx, winnings));
+
+                            let hole_1 = if seat.cards_revealed {
+                                seat.revealed_card_1
+                            } else {
+                                (seat.hole_card_1 & 0xFF) as u8
+                            };
+                            let hole_2 = if seat.cards_revealed {
+                                seat.revealed_card_2
+                            } else {
+                                (seat.hole_card_2 & 0xFF) as u8
+                            };
+                            let hand_eval = evaluate_hand(&[
+                                hole_1, hole_2,
+                                community_cards[0], community_cards[1], community_cards[2],
+                                community_cards[3], community_cards[4],
+                            ]);
+                            msg!("Seat {} wins {} with {:?}", seat_idx, winnings, hand_eval.rank);
+                        }
+                        break;
+                    }
                 }
             }
         }
     }
 
-    // Emit the hand completed event for audit trail (using pre-collected data)
+    // Update event results with actual winnings
+    for (seat_idx, amount) in chips_awarded.iter() {
+        for result in event_results.iter_mut().take(results_count as usize) {
+            if result.seat_index == *seat_idx {
+                result.chips_won = result.chips_won.saturating_add(*amount);
+            }
+        }
+    }
+
+    // Emit the hand completed event
     emit!(HandCompleted {
         table_id: table.table_id,
         hand_number: hand_state.hand_number,
@@ -371,18 +460,16 @@ pub fn handler(ctx: Context<Showdown>) -> Result<()> {
 
     // Reset all player states for next hand (including folded players)
     for account_info in ctx.remaining_accounts.iter() {
-        // Validate seat account (owner check + PDA verification)
         if let Some(_seat) = validate_seat_account(account_info, &table.key(), &program_id) {
-            // Reset the seat state
             let mut data = account_info.try_borrow_mut_data()?;
             if let Ok(mut seat) = PlayerSeat::try_deserialize(&mut &data[..]) {
                 seat.status = PlayerStatus::Sitting;
                 seat.current_bet = 0;
                 seat.total_bet_this_hand = 0;
-                seat.hole_card_1 = 255; // Sentinel: not dealt
-                seat.hole_card_2 = 255; // Sentinel: not dealt
-                seat.revealed_card_1 = 255; // Not revealed
-                seat.revealed_card_2 = 255; // Not revealed
+                seat.hole_card_1 = 255;
+                seat.hole_card_2 = 255;
+                seat.revealed_card_1 = 255;
+                seat.revealed_card_2 = 255;
                 seat.cards_revealed = false;
                 seat.has_acted = false;
                 seat.try_serialize(&mut *data)?;
@@ -394,11 +481,142 @@ pub fn handler(ctx: Context<Showdown>) -> Result<()> {
     hand_state.phase = GamePhase::Settled;
     hand_state.pot = 0;
 
-    // Return table to waiting state and record time (for timeout fallback)
+    // Return table to waiting state
     table.status = TableStatus::Waiting;
     table.last_ready_time = clock.unix_timestamp;
 
     msg!("Hand #{} complete", hand_state.hand_number);
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_side_pots_basic() {
+        // 3 players: A(100, folded), B(300, active), C(500, active)
+        let bets = vec![(0u8, 100u64, false), (1, 300, true), (2, 500, true)];
+        let pots = calculate_side_pots(&bets);
+
+        assert_eq!(pots.len(), 3);
+
+        // Main pot: 100 * 3 = 300, eligible: B, C
+        assert_eq!(pots[0].amount, 300);
+        assert_eq!(pots[0].eligible, vec![1, 2]);
+
+        // Side pot 1: 200 * 2 = 400, eligible: B, C
+        assert_eq!(pots[1].amount, 400);
+        assert_eq!(pots[1].eligible, vec![1, 2]);
+
+        // Side pot 2: 200 * 1 = 200, eligible: C only
+        assert_eq!(pots[2].amount, 200);
+        assert_eq!(pots[2].eligible, vec![2]);
+
+        // Total should equal sum of all bets
+        let total: u64 = pots.iter().map(|p| p.amount).sum();
+        assert_eq!(total, 900);
+    }
+
+    #[test]
+    fn test_side_pots_equal_bets() {
+        // All players bet the same: no side pots needed
+        let bets = vec![(0u8, 200u64, true), (1, 200, true), (2, 200, true)];
+        let pots = calculate_side_pots(&bets);
+
+        assert_eq!(pots.len(), 1);
+        assert_eq!(pots[0].amount, 600);
+        assert_eq!(pots[0].eligible, vec![0, 1, 2]);
+    }
+
+    #[test]
+    fn test_side_pots_heads_up() {
+        // 2 players, different bets
+        let bets = vec![(0u8, 100u64, true), (1, 300, true)];
+        let pots = calculate_side_pots(&bets);
+
+        assert_eq!(pots.len(), 2);
+        // Main: 100 * 2 = 200
+        assert_eq!(pots[0].amount, 200);
+        assert_eq!(pots[0].eligible, vec![0, 1]);
+        // Excess: 200 * 1 = 200 (returned to player 1)
+        assert_eq!(pots[1].amount, 200);
+        assert_eq!(pots[1].eligible, vec![1]);
+    }
+
+    #[test]
+    fn test_side_pots_three_way_all_in() {
+        // Classic 3-way all-in with different stacks
+        // A: 100, B: 300, C: 500 (all active)
+        let bets = vec![(0u8, 100u64, true), (1, 300, true), (2, 500, true)];
+        let pots = calculate_side_pots(&bets);
+
+        assert_eq!(pots.len(), 3);
+
+        // Main pot: 100 * 3 = 300, all eligible
+        assert_eq!(pots[0].amount, 300);
+        assert_eq!(pots[0].eligible, vec![0, 1, 2]);
+
+        // Side pot 1: 200 * 2 = 400, B and C
+        assert_eq!(pots[1].amount, 400);
+        assert_eq!(pots[1].eligible, vec![1, 2]);
+
+        // Side pot 2: 200 * 1 = 200, C only
+        assert_eq!(pots[2].amount, 200);
+        assert_eq!(pots[2].eligible, vec![2]);
+
+        let total: u64 = pots.iter().map(|p| p.amount).sum();
+        assert_eq!(total, 900);
+    }
+
+    #[test]
+    fn test_side_pots_with_multiple_folds() {
+        // A folds at 50, B folds at 100, C all-in 200, D all-in 500
+        let bets = vec![
+            (0u8, 50u64, false),  // A folded
+            (1, 100, false),      // B folded
+            (2, 200, true),       // C active
+            (3, 500, true),       // D active
+        ];
+        let pots = calculate_side_pots(&bets);
+
+        // Level 50: 50 * 4 = 200, eligible active: C, D
+        assert_eq!(pots[0].amount, 200);
+        assert_eq!(pots[0].eligible, vec![2, 3]);
+
+        // Level 100: 50 * 3 = 150, eligible active: C, D
+        assert_eq!(pots[1].amount, 150);
+        assert_eq!(pots[1].eligible, vec![2, 3]);
+
+        // Level 200: 100 * 2 = 200, eligible active: C, D
+        assert_eq!(pots[2].amount, 200);
+        assert_eq!(pots[2].eligible, vec![2, 3]);
+
+        // Level 500: 300 * 1 = 300, eligible active: D only
+        assert_eq!(pots[3].amount, 300);
+        assert_eq!(pots[3].eligible, vec![3]);
+
+        let total: u64 = pots.iter().map(|p| p.amount).sum();
+        assert_eq!(total, 850); // 50 + 100 + 200 + 500
+    }
+
+    #[test]
+    fn test_side_pots_duplicate_bets() {
+        // Two players with same bet amount
+        let bets = vec![
+            (0u8, 100u64, true),
+            (1, 100, true),
+            (2, 300, true),
+        ];
+        let pots = calculate_side_pots(&bets);
+
+        assert_eq!(pots.len(), 2);
+        // Level 100: 100 * 3 = 300
+        assert_eq!(pots[0].amount, 300);
+        assert_eq!(pots[0].eligible, vec![0, 1, 2]);
+        // Level 300: 200 * 1 = 200
+        assert_eq!(pots[1].amount, 200);
+        assert_eq!(pots[1].eligible, vec![2]);
+    }
 }

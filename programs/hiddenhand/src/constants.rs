@@ -22,3 +22,6 @@ pub const EMERGENCY_TIMEOUT_SECONDS: i64 = 86400; // 24 hours for emergency with
 
 // Betting
 pub const MIN_RAISE_MULTIPLIER: u64 = 2; // Must raise at least 2x the current bet
+
+// Rake
+pub const MAX_RAKE_BPS: u16 = 1000; // Maximum 10% rake (1000 basis points)

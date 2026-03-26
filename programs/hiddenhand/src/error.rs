@@ -142,4 +142,10 @@ pub enum HiddenHandError {
 
     #[msg("Invalid community cards for current phase")]
     InvalidCommunityCards,
+
+    #[msg("Rake basis points exceeds maximum (1000 = 10%)")]
+    RakeExceedsLimit,
+
+    #[msg("No accumulated rake to collect")]
+    NoRakeToCollect,
 }

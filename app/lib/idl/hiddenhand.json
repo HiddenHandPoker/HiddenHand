@@ -1,5 +1,5 @@
 {
-  "address": "HS3GdhRBU3jMT4G6ogKVktKaibqsMhPRhDhNsmgzeB8Q",
+  "address": "5fcckjDn8wzRSodJbQVpHeuWZ8x4B3htKv1WEMx36XJe",
   "metadata": {
     "name": "hiddenhand",
     "version": "0.1.0",
@@ -208,9 +208,91 @@
       "args": []
     },
     {
+      "name": "collect_rake",
+      "docs": [
+        "Collect accumulated rake from the table vault",
+        "Only the table authority can call this, and only when not mid-hand"
+      ],
+      "discriminator": [
+        243,
+        193,
+        227,
+        46,
+        76,
+        110,
+        183,
+        204
+      ],
+      "accounts": [
+        {
+          "name": "authority",
+          "docs": [
+            "Only the table authority can collect rake"
+          ],
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "table",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  116,
+                  97,
+                  98,
+                  108,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "table.table_id",
+                "account": "Table"
+              }
+            ]
+          }
+        },
+        {
+          "name": "vault",
+          "docs": [
+            "Vault holding player chips + accumulated rake"
+          ],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  118,
+                  97,
+                  117,
+                  108,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "table"
+              }
+            ]
+          }
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": []
+    },
+    {
       "name": "create_table",
       "docs": [
-        "Create a new poker table"
+        "Create a new poker table",
+        "rake_bps: rake in basis points (0 = no rake, max 1000 = 10%)",
+        "rake_cap: maximum rake per hand in lamports (0 = no cap)"
       ],
       "discriminator": [
         214,
@@ -308,16 +390,23 @@
         {
           "name": "max_players",
           "type": "u8"
+        },
+        {
+          "name": "rake_bps",
+          "type": "u16"
+        },
+        {
+          "name": "rake_cap",
+          "type": "u64"
         }
       ]
     },
     {
       "name": "deal_cards",
       "docs": [
-        "Deal cards to all players and post blinds",
-        "SB and BB seats are named accounts, others via remaining_accounts",
-        "NOTE: For provably fair games, use request_shuffle + callback_shuffle instead",
-        "WARNING: This stores plaintext cards - use deal_cards_encrypted for privacy!"
+        "DEPRECATED: Plaintext dealing for local testing ONLY.",
+        "Cards are stored unencrypted on-chain — DO NOT use in production.",
+        "For production, use request_shuffle + callback_shuffle (VRF + Inco FHE)."
       ],
       "discriminator": [
         38,
@@ -459,131 +548,6 @@
         {
           "name": "table",
           "writable": true,
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  116,
-                  97,
-                  98,
-                  108,
-                  101
-                ]
-              },
-              {
-                "kind": "account",
-                "path": "table.table_id",
-                "account": "Table"
-              }
-            ]
-          }
-        },
-        {
-          "name": "hand_state",
-          "writable": true,
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  104,
-                  97,
-                  110,
-                  100
-                ]
-              },
-              {
-                "kind": "account",
-                "path": "table"
-              },
-              {
-                "kind": "account",
-                "path": "table.hand_number",
-                "account": "Table"
-              }
-            ]
-          }
-        },
-        {
-          "name": "deck_state",
-          "writable": true,
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  100,
-                  101,
-                  99,
-                  107
-                ]
-              },
-              {
-                "kind": "account",
-                "path": "table"
-              },
-              {
-                "kind": "account",
-                "path": "table.hand_number",
-                "account": "Table"
-              }
-            ]
-          }
-        },
-        {
-          "name": "sb_seat",
-          "docs": [
-            "Small blind player seat"
-          ],
-          "writable": true
-        },
-        {
-          "name": "bb_seat",
-          "docs": [
-            "Big blind player seat"
-          ],
-          "writable": true
-        },
-        {
-          "name": "inco_program",
-          "docs": [
-            "The Inco Lightning program for encryption"
-          ],
-          "address": "5sjEbPiqgZrYwR31ahR6Uk9wf5awoX61YGg7jExQSwaj"
-        },
-        {
-          "name": "system_program",
-          "address": "11111111111111111111111111111111"
-        }
-      ],
-      "args": []
-    },
-    {
-      "name": "deal_cards_vrf",
-      "docs": [
-        "DEPRECATED: Use request_shuffle instead!",
-        "Deal hole cards - kept for backwards compatibility only.",
-        "With Modified Option B, callback_shuffle handles everything atomically."
-      ],
-      "discriminator": [
-        42,
-        112,
-        70,
-        2,
-        154,
-        239,
-        160,
-        161
-      ],
-      "accounts": [
-        {
-          "name": "authority",
-          "writable": true,
-          "signer": true
-        },
-        {
-          "name": "table",
           "pda": {
             "seeds": [
               {
@@ -2468,6 +2432,16 @@
       "code": 6046,
       "name": "InvalidCommunityCards",
       "msg": "Invalid community cards for current phase"
+    },
+    {
+      "code": 6047,
+      "name": "RakeExceedsLimit",
+      "msg": "Rake basis points exceeds maximum (1000 = 10%)"
+    },
+    {
+      "code": 6048,
+      "name": "NoRakeToCollect",
+      "msg": "No accumulated rake to collect"
     }
   ],
   "types": [
@@ -3134,6 +3108,27 @@
               "Timestamp when table became ready for new hand (for timeout fallback)"
             ],
             "type": "i64"
+          },
+          {
+            "name": "rake_bps",
+            "docs": [
+              "Rake in basis points (0 = no rake, max 1000 = 10%)"
+            ],
+            "type": "u16"
+          },
+          {
+            "name": "rake_cap",
+            "docs": [
+              "Maximum rake per hand in lamports (0 = no cap)"
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "accumulated_rake",
+            "docs": [
+              "Accumulated rake available for collection by authority"
+            ],
+            "type": "u64"
           },
           {
             "name": "bump",

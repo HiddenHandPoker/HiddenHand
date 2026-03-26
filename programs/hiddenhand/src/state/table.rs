@@ -58,6 +58,15 @@ pub struct Table {
     /// Timestamp when table became ready for new hand (for timeout fallback)
     pub last_ready_time: i64,
 
+    /// Rake in basis points (0 = no rake, max 1000 = 10%)
+    pub rake_bps: u16,
+
+    /// Maximum rake per hand in lamports (0 = no cap)
+    pub rake_cap: u64,
+
+    /// Accumulated rake available for collection by authority
+    pub accumulated_rake: u64,
+
     /// PDA bump
     pub bump: u8,
 }
@@ -77,6 +86,9 @@ impl Table {
         1 +  // occupied_seats
         1 +  // dealer_position
         8 +  // last_ready_time
+        2 +  // rake_bps
+        8 +  // rake_cap
+        8 +  // accumulated_rake
         1;   // bump
 
     /// Check if a seat is occupied

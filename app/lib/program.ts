@@ -2,7 +2,7 @@ import { PublicKey } from "@solana/web3.js";
 
 // Program ID from Anchor.toml - synced with keypair
 export const PROGRAM_ID = new PublicKey(
-  "HS3GdhRBU3jMT4G6ogKVktKaibqsMhPRhDhNsmgzeB8Q"
+  "5fcckjDn8wzRSodJbQVpHeuWZ8x4B3htKv1WEMx36XJe"
 );
 
 // PDA Seeds

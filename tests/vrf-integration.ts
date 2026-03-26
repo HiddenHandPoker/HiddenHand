@@ -152,7 +152,9 @@ async function main() {
         new anchor.BN(BIG_BLIND),
         new anchor.BN(MIN_BUY_IN),
         new anchor.BN(MAX_BUY_IN),
-        MAX_PLAYERS
+        MAX_PLAYERS,
+        0,
+        new anchor.BN(0)
       )
       .accounts({
         authority: authority.publicKey,

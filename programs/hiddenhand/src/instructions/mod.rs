@@ -33,6 +33,9 @@ pub mod close_inactive_table;
 // Community card allowances - enable any player to reveal if authority AFK
 pub mod grant_community_allowances;
 
+// Rake collection
+pub mod collect_rake;
+
 // Re-export everything for convenience
 // The `handler` name conflicts are expected and handled by Anchor's program macro
 #[allow(ambiguous_glob_reexports)]
@@ -71,3 +74,5 @@ pub use timeout_reveal::*;
 pub use close_inactive_table::*;
 #[allow(ambiguous_glob_reexports)]
 pub use grant_community_allowances::*;
+#[allow(ambiguous_glob_reexports)]
+pub use collect_rake::*;

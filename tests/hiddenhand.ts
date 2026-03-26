@@ -72,10 +72,22 @@ describe("hiddenhand", () => {
     );
   }
 
-  // Helper to airdrop SOL
-  async function airdrop(address: PublicKey, amount: number = 10 * LAMPORTS_PER_SOL) {
-    const sig = await provider.connection.requestAirdrop(address, amount);
-    await provider.connection.confirmTransaction(sig);
+  // Helper to fund an account - tries airdrop first, falls back to transfer from provider
+  async function airdrop(address: PublicKey, amount: number = 2 * LAMPORTS_PER_SOL) {
+    try {
+      const sig = await provider.connection.requestAirdrop(address, amount);
+      await provider.connection.confirmTransaction(sig);
+    } catch (e: any) {
+      // Airdrop rate-limited — transfer from provider wallet instead
+      const tx = new Transaction().add(
+        require("@solana/web3.js").SystemProgram.transfer({
+          fromPubkey: provider.wallet.publicKey,
+          toPubkey: address,
+          lamports: amount,
+        })
+      );
+      await provider.sendAndConfirm(tx);
+    }
   }
 
   // Helper to create a funded keypair
@@ -98,7 +110,9 @@ describe("hiddenhand", () => {
           new anchor.BN(BIG_BLIND),
           new anchor.BN(MIN_BUY_IN),
           new anchor.BN(MAX_BUY_IN),
-          MAX_PLAYERS
+          MAX_PLAYERS,
+          0,
+          new anchor.BN(0)
         )
         .accounts({
           authority: provider.wallet.publicKey,
@@ -135,7 +149,9 @@ describe("hiddenhand", () => {
             new anchor.BN(BIG_BLIND),
             new anchor.BN(MIN_BUY_IN),
             new anchor.BN(MAX_BUY_IN),
-            1 // Invalid: min is 2
+            1, // Invalid: min is 2
+            0,
+            new anchor.BN(0)
           )
           .accounts({
             authority: provider.wallet.publicKey,
@@ -163,7 +179,9 @@ describe("hiddenhand", () => {
             new anchor.BN(BIG_BLIND),
             new anchor.BN(MIN_BUY_IN),
             new anchor.BN(MAX_BUY_IN),
-            7 // Invalid: max is 6
+            7, // Invalid: max is 6
+            0,
+            new anchor.BN(0)
           )
           .accounts({
             authority: provider.wallet.publicKey,
@@ -191,7 +209,9 @@ describe("hiddenhand", () => {
             new anchor.BN(SMALL_BLIND), // Swapped
             new anchor.BN(MIN_BUY_IN),
             new anchor.BN(MAX_BUY_IN),
-            MAX_PLAYERS
+            MAX_PLAYERS,
+            0,
+            new anchor.BN(0)
           )
           .accounts({
             authority: provider.wallet.publicKey,
@@ -219,7 +239,9 @@ describe("hiddenhand", () => {
             new anchor.BN(BIG_BLIND),
             new anchor.BN(MAX_BUY_IN), // Swapped
             new anchor.BN(MIN_BUY_IN), // Swapped
-            MAX_PLAYERS
+            MAX_PLAYERS,
+            0,
+            new anchor.BN(0)
           )
           .accounts({
             authority: provider.wallet.publicKey,
@@ -247,7 +269,9 @@ describe("hiddenhand", () => {
             new anchor.BN(BIG_BLIND),
             new anchor.BN(BIG_BLIND * 5), // Only 5 BB, need 10
             new anchor.BN(MAX_BUY_IN),
-            MAX_PLAYERS
+            MAX_PLAYERS,
+            0,
+            new anchor.BN(0)
           )
           .accounts({
             authority: provider.wallet.publicKey,
@@ -281,7 +305,9 @@ describe("hiddenhand", () => {
           new anchor.BN(BIG_BLIND),
           new anchor.BN(MIN_BUY_IN),
           new anchor.BN(MAX_BUY_IN),
-          MAX_PLAYERS
+          MAX_PLAYERS,
+          0,
+          new anchor.BN(0)
         )
         .accounts({
           authority: provider.wallet.publicKey,
@@ -484,7 +510,9 @@ describe("hiddenhand", () => {
           new anchor.BN(BIG_BLIND),
           new anchor.BN(MIN_BUY_IN),
           new anchor.BN(MAX_BUY_IN),
-          MAX_PLAYERS
+          MAX_PLAYERS,
+          0,
+          new anchor.BN(0)
         )
         .accounts({
           authority: provider.wallet.publicKey,
@@ -606,7 +634,9 @@ describe("hiddenhand", () => {
           new anchor.BN(BIG_BLIND),
           new anchor.BN(MIN_BUY_IN),
           new anchor.BN(MAX_BUY_IN),
-          MAX_PLAYERS
+          MAX_PLAYERS,
+          0,
+          new anchor.BN(0)
         )
         .accounts({
           authority: authority.publicKey,
@@ -795,7 +825,9 @@ describe("hiddenhand", () => {
           new anchor.BN(BIG_BLIND),
           new anchor.BN(MIN_BUY_IN),
           new anchor.BN(MAX_BUY_IN),
-          MAX_PLAYERS
+          MAX_PLAYERS,
+          0,
+          new anchor.BN(0)
         )
         .accounts({
           authority: authority.publicKey,
@@ -943,7 +975,9 @@ describe("hiddenhand", () => {
           new anchor.BN(BIG_BLIND),
           new anchor.BN(MIN_BUY_IN),
           new anchor.BN(MAX_BUY_IN),
-          MAX_PLAYERS
+          MAX_PLAYERS,
+          0,
+          new anchor.BN(0)
         )
         .accounts({
           authority: authority.publicKey,
@@ -1163,7 +1197,9 @@ describe("hiddenhand", () => {
           new anchor.BN(BIG_BLIND),
           new anchor.BN(MIN_BUY_IN),
           new anchor.BN(MAX_BUY_IN),
-          MAX_PLAYERS
+          MAX_PLAYERS,
+          0,
+          new anchor.BN(0)
         )
         .accounts({
           authority: authority.publicKey,
@@ -1402,7 +1438,9 @@ describe("hiddenhand", () => {
           new anchor.BN(BIG_BLIND),
           new anchor.BN(MIN_BUY_IN),
           new anchor.BN(MAX_BUY_IN),
-          MAX_PLAYERS
+          MAX_PLAYERS,
+          0,
+          new anchor.BN(0)
         )
         .accounts({
           authority: authority.publicKey,

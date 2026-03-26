@@ -38,6 +38,8 @@ pub fn handler(
     min_buy_in: u64,
     max_buy_in: u64,
     max_players: u8,
+    rake_bps: u16,
+    rake_cap: u64,
 ) -> Result<()> {
     require!(
         max_players >= MIN_PLAYERS && max_players <= MAX_PLAYERS,
@@ -59,6 +61,11 @@ pub fn handler(
         HiddenHandError::InvalidBuyIn
     );
 
+    require!(
+        rake_bps <= MAX_RAKE_BPS,
+        HiddenHandError::RakeExceedsLimit
+    );
+
     let table = &mut ctx.accounts.table;
     let clock = Clock::get()?;
 
@@ -75,9 +82,12 @@ pub fn handler(
     table.occupied_seats = 0;
     table.dealer_position = 0;
     table.last_ready_time = clock.unix_timestamp;
+    table.rake_bps = rake_bps;
+    table.rake_cap = rake_cap;
+    table.accumulated_rake = 0;
     table.bump = ctx.bumps.table;
 
-    msg!("Table created: {:?}", table_id);
+    msg!("Table created: {:?} (rake: {} bps, cap: {})", table_id, rake_bps, rake_cap);
 
     Ok(())
 }

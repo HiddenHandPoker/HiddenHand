@@ -13,7 +13,7 @@ pub use inco_cpi::*;
 pub use instructions::*;
 pub use state::*;
 
-declare_id!("HS3GdhRBU3jMT4G6ogKVktKaibqsMhPRhDhNsmgzeB8Q");
+declare_id!("5fcckjDn8wzRSodJbQVpHeuWZ8x4B3htKv1WEMx36XJe");
 
 /// HiddenHand - Privacy Poker on Solana
 /// Using MagicBlock VRF for provably fair shuffling and
@@ -23,6 +23,8 @@ pub mod hiddenhand {
     use super::*;
 
     /// Create a new poker table
+    /// rake_bps: rake in basis points (0 = no rake, max 1000 = 10%)
+    /// rake_cap: maximum rake per hand in lamports (0 = no cap)
     pub fn create_table(
         ctx: Context<CreateTable>,
         table_id: [u8; 32],
@@ -31,8 +33,10 @@ pub mod hiddenhand {
         min_buy_in: u64,
         max_buy_in: u64,
         max_players: u8,
+        rake_bps: u16,
+        rake_cap: u64,
     ) -> Result<()> {
-        instructions::create_table::handler(ctx, table_id, small_blind, big_blind, min_buy_in, max_buy_in, max_players)
+        instructions::create_table::handler(ctx, table_id, small_blind, big_blind, min_buy_in, max_buy_in, max_players, rake_bps, rake_cap)
     }
 
     /// Join a table with a buy-in
@@ -61,11 +65,11 @@ pub mod hiddenhand {
         instructions::showdown::handler(ctx)
     }
 
-    /// Deal cards to all players and post blinds
-    /// SB and BB seats are named accounts, others via remaining_accounts
-    /// NOTE: For provably fair games, use request_shuffle + callback_shuffle instead
-    /// WARNING: This stores plaintext cards - use deal_cards_encrypted for privacy!
+    /// DEPRECATED: Plaintext dealing for local testing ONLY.
+    /// Cards are stored unencrypted on-chain — DO NOT use in production.
+    /// For production, use request_shuffle + callback_shuffle (VRF + Inco FHE).
     pub fn deal_cards(ctx: Context<DealAllCards>) -> Result<()> {
+        msg!("WARNING: deal_cards stores plaintext cards on-chain. Use request_shuffle for production.");
         instructions::deal_cards::handler(ctx)
     }
 
@@ -195,6 +199,12 @@ pub mod hiddenhand {
     pub fn reveal_community(ctx: Context<RevealCommunity>, cards: Vec<u8>) -> Result<()> {
         instructions::reveal_community::handler(ctx, cards)
     }
+
+    /// Collect accumulated rake from the table vault
+    /// Only the table authority can call this, and only when not mid-hand
+    pub fn collect_rake(ctx: Context<CollectRake>) -> Result<()> {
+        instructions::collect_rake::handler(ctx)
+    }
 }
 
 /// Unit tests using LiteSVM for fast execution
@@ -262,8 +272,9 @@ mod unit_tests {
         // 8 (discriminator) + 32 (authority) + 32 (table_id) + 8 (small_blind) +
         // 8 (big_blind) + 8 (min_buy_in) + 8 (max_buy_in) + 1 (max_players) +
         // 1 (current_players) + 1 (status) + 8 (hand_number) + 1 (occupied_seats) +
-        // 1 (dealer_position) + 8 (last_ready_time) + 1 (bump)
-        let expected_size = 8 + 32 + 32 + 8 + 8 + 8 + 8 + 1 + 1 + 1 + 8 + 1 + 1 + 8 + 1;
+        // 1 (dealer_position) + 8 (last_ready_time) + 2 (rake_bps) + 8 (rake_cap) +
+        // 8 (accumulated_rake) + 1 (bump)
+        let expected_size = 8 + 32 + 32 + 8 + 8 + 8 + 8 + 1 + 1 + 1 + 8 + 1 + 1 + 8 + 2 + 8 + 8 + 1;
         assert_eq!(Table::SIZE, expected_size, "Table size mismatch");
     }
 
