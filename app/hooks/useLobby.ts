@@ -131,8 +131,10 @@ export function useLobby(): UseLobbyResult {
             lastReadyTime: account.lastReadyTime.toNumber(),
           } satisfies LobbyTable;
         })
-        // Filter out closed tables -- they're irrelevant to the lobby.
-        .filter((t) => t.status !== "Closed");
+        // Filter out closed tables and tables with non-printable names
+        // (test artifacts from random keypair-based table IDs).
+        .filter((t) => t.status !== "Closed")
+        .filter((t) => t.tableId.length > 0 && /^[\x20-\x7E]+$/.test(t.tableId));
 
       setTables(mapped);
       setError(null);
