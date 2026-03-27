@@ -1,7 +1,8 @@
 "use client";
 
-import { FC, useState, useEffect, useCallback, useRef } from "react";
+import { FC, useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { solToLamports } from "@/lib/utils";
+import { getRakeForBlinds, formatRakeInfo } from "@/lib/rake";
 
 interface CreateTableModalProps {
   isOpen: boolean;
@@ -41,8 +42,12 @@ export const CreateTableModal: FC<CreateTableModalProps> = ({
   const [minBuyIn, setMinBuyIn] = useState(0.5);
   const [maxBuyIn, setMaxBuyIn] = useState(5);
   const [maxPlayers, setMaxPlayers] = useState(6);
-  const [rakePercent, setRakePercent] = useState(0);
-  const [rakeCap, setRakeCap] = useState(0);
+
+  // Auto-calculated rake based on blind level
+  const rake = useMemo(
+    () => getRakeForBlinds(solToLamports(bigBlind)),
+    [bigBlind]
+  );
 
   // Validation
   const [errors, setErrors] = useState<ValidationErrors>({});
@@ -99,8 +104,8 @@ export const CreateTableModal: FC<CreateTableModalProps> = ({
       minBuyIn: solToLamports(minBuyIn),
       maxBuyIn: solToLamports(maxBuyIn),
       maxPlayers,
-      rakeBps: Math.round(rakePercent * 100),
-      rakeCap: solToLamports(rakeCap),
+      rakeBps: rake.rakeBps,
+      rakeCap: rake.rakeCap,
     });
   };
 
@@ -282,49 +287,19 @@ export const CreateTableModal: FC<CreateTableModalProps> = ({
               </select>
             </div>
 
-            {/* Rake */}
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-[var(--text-muted)] text-sm uppercase tracking-wider mb-2">
-                  Rake %
-                </label>
-                <div className="relative">
-                  <input
-                    type="number"
-                    value={rakePercent}
-                    onChange={(e) => {
-                      const val = Number(e.target.value);
-                      setRakePercent(Math.min(10, Math.max(0, val)));
-                    }}
-                    step={0.5}
-                    min={0}
-                    max={10}
-                    className={inputClass}
-                  />
-                  <span className="absolute right-4 top-1/2 -translate-y-1/2 text-[var(--text-muted)] text-sm">
-                    %
-                  </span>
-                </div>
+            {/* Rake Info (auto-calculated) */}
+            <div className="bg-[var(--bg-dark)] rounded-xl border border-white/5 p-4">
+              <div className="flex items-center justify-between">
+                <span className="text-[var(--text-muted)] text-sm uppercase tracking-wider">
+                  Platform Rake
+                </span>
+                <span className="text-[var(--gold-light)] font-semibold text-sm">
+                  {formatRakeInfo(rake.rakeBps, rake.rakeCap)}
+                </span>
               </div>
-              <div>
-                <label className="block text-[var(--text-muted)] text-sm uppercase tracking-wider mb-2">
-                  Rake Cap
-                </label>
-                <div className="relative">
-                  <input
-                    type="number"
-                    value={rakeCap}
-                    onChange={(e) => setRakeCap(Number(e.target.value))}
-                    step={0.01}
-                    min={0}
-                    placeholder="0 = no cap"
-                    className={inputClass}
-                  />
-                  <span className="absolute right-4 top-1/2 -translate-y-1/2 text-[var(--text-muted)] text-sm">
-                    SOL
-                  </span>
-                </div>
-              </div>
+              <p className="text-[var(--text-muted)] text-xs mt-2">
+                Rake is set automatically based on stake level.
+              </p>
             </div>
           </div>
 
