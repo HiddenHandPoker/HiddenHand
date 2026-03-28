@@ -30,7 +30,7 @@ This project was started for the **Solana Privacy Hack** hackathon (Jan 12-30, 2
 - Card encoding (0-51) with Inco FHE encryption
 - **Hand evaluation algorithm** (best 5 from 7 cards)
 - **Showdown with pot distribution** (handles split pots)
-- **42 passing unit tests**
+- **48 passing unit tests**
 - **MagicBlock VRF Integration** - Provably fair card shuffling
 - **Inco FHE Encryption** - Hole cards encrypted as u128 handles
 - **Ed25519 Signature Verification** - Secure card reveals at showdown
@@ -189,7 +189,7 @@ Each table is denominated in a single SPL token (stored as `token_mint: Pubkey` 
 
 **Native SOL is not supported** — was removed when switching from SystemAccount vaults to TokenAccount vaults. SOL tables would require wrapped SOL (wSOL) with auto-wrap/unwrap in the frontend.
 
-## Current Instructions (20 total)
+## Current Instructions (18 total)
 
 ### Core Game Instructions
 
@@ -201,7 +201,6 @@ Each table is denominated in a single SPL token (stored as `token_mint: Pubkey` 
 | `start_hand` | Begin new hand, init deck | Done |
 | `player_action` | Fold/Check/Call/Raise/AllIn | Done |
 | `showdown` | Evaluate hands, determine winner, distribute pot | Done |
-| `deal_cards` | Legacy shuffle for local testing | Done |
 
 ### MagicBlock VRF Instructions (Provably Fair Shuffling)
 
@@ -214,7 +213,6 @@ Each table is denominated in a single SPL token (stored as `token_mint: Pubkey` 
 
 | Instruction | Description | Status |
 |-------------|-------------|--------|
-| `deal_cards_encrypted` | Encrypt cards during legacy deal | Done |
 | `encrypt_hole_cards` | Encrypt dealt cards for a player | Done |
 | `grant_card_allowance` | Authority grants decryption allowance | Done |
 | `grant_own_allowance` | Player grants own allowance after timeout | Done |
@@ -237,7 +235,7 @@ Each table is denominated in a single SPL token (stored as `token_mint: Pubkey` 
 hiddenhand/
 ├── programs/
 │   └── hiddenhand/src/           # Main poker program
-│       ├── lib.rs                # Program entry (19 instructions)
+│       ├── lib.rs                # Program entry (18 instructions)
 │       ├── constants.rs          # PDA seeds, game constants
 │       ├── error.rs              # 30+ custom errors
 │       ├── inco_cpi.rs           # Manual Inco CPI (no SDK)
@@ -253,8 +251,6 @@ hiddenhand/
 │           ├── leave_table.rs
 │           ├── start_hand.rs
 │           ├── player_action.rs
-│           ├── deal_cards.rs           # Legacy shuffle (local testing)
-│           ├── deal_cards_encrypted.rs # Inco encryption for dealt cards
 │           ├── showdown.rs             # Winner determination
 │           ├── reveal_cards.rs         # Ed25519 verified card reveal
 │           ├── reveal_community.rs     # Ed25519 verified community card reveal
