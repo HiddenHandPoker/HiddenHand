@@ -2,6 +2,7 @@
 
 import { FC, useState, useEffect } from "react";
 import { ConfirmDialog } from "./ConfirmDialog";
+import { type TokenInfo, getDefaultToken, baseUnitsToDisplay } from "@/lib/tokens";
 
 interface ActionPanelProps {
   isPlayerTurn: boolean;
@@ -15,6 +16,7 @@ interface ActionPanelProps {
   onRaise: (amount: number) => void;
   onAllIn: () => void;
   isLoading?: boolean;
+  token?: TokenInfo;
 }
 
 export const ActionPanel: FC<ActionPanelProps> = ({
@@ -29,7 +31,9 @@ export const ActionPanel: FC<ActionPanelProps> = ({
   onRaise,
   onAllIn,
   isLoading = false,
+  token = getDefaultToken(),
 }) => {
+  const fmt = (baseUnits: number) => baseUnitsToDisplay(baseUnits, token).toFixed(2);
   const minRaiseTotal = toCall + minRaise;
   const [raiseAmount, setRaiseAmount] = useState(minRaiseTotal);
   const [showAllInConfirm, setShowAllInConfirm] = useState(false);
@@ -97,7 +101,7 @@ export const ActionPanel: FC<ActionPanelProps> = ({
           <div className="glass-dark px-4 py-2 rounded-lg">
             <span className="text-[var(--text-muted)] text-sm">To call: </span>
             <span className="text-[var(--text-primary)] font-display font-bold">
-              {(toCall / 1e9).toFixed(2)} SOL
+              {fmt(toCall)} {token.symbol}
             </span>
           </div>
         </div>
@@ -128,7 +132,7 @@ export const ActionPanel: FC<ActionPanelProps> = ({
             >
               <span>{playerChips >= toCall ? "Call" : "Call All-In"}</span>
               <span className="text-xs opacity-80">
-                {(Math.min(toCall, playerChips) / 1e9).toFixed(2)}
+                {fmt(Math.min(toCall, playerChips))}
               </span>
             </button>
           )}
@@ -152,9 +156,9 @@ export const ActionPanel: FC<ActionPanelProps> = ({
               </span>
               <div className="glass-dark px-3 py-1.5 rounded-lg">
                 <span className="font-display font-bold text-[var(--gold-light)]">
-                  {(raiseAmount / 1e9).toFixed(2)}
+                  {fmt(raiseAmount)}
                 </span>
-                <span className="text-[var(--text-muted)] text-sm ml-1">SOL</span>
+                <span className="text-[var(--text-muted)] text-sm ml-1">{token.symbol}</span>
               </div>
             </div>
 
@@ -213,7 +217,7 @@ export const ActionPanel: FC<ActionPanelProps> = ({
               disabled={isLoading}
               className="btn-success w-full py-4 rounded-xl font-bold uppercase tracking-wide disabled:opacity-50 disabled:cursor-not-allowed transition-all"
             >
-              Raise to {(raiseAmount / 1e9).toFixed(2)} SOL
+              Raise to {fmt(raiseAmount)} {token.symbol}
             </button>
           </div>
         )}
@@ -234,7 +238,7 @@ export const ActionPanel: FC<ActionPanelProps> = ({
       <ConfirmDialog
         isOpen={showAllInConfirm}
         title="Confirm All-In"
-        message={`You are about to go all-in with ${(playerChips / 1e9).toFixed(4)} SOL. This action cannot be undone. Are you sure?`}
+        message={`You are about to go all-in with ${fmt(playerChips)} ${token.symbol}. This action cannot be undone. Are you sure?`}
         confirmLabel="Go All-In"
         cancelLabel="Cancel"
         onConfirm={handleAllInConfirm}

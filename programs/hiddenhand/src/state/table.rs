@@ -67,6 +67,14 @@ pub struct Table {
     /// Accumulated rake available for collection by authority
     pub accumulated_rake: u64,
 
+    /// SPL token mint for this table (e.g. USDC, wSOL)
+    /// Each table is denominated in a single token — players must use this token to buy in
+    pub token_mint: Pubkey,
+
+    /// Cached token decimals (e.g. 6 for USDC, 9 for SOL)
+    /// Stored on-chain to avoid passing mint account for display/logging
+    pub token_decimals: u8,
+
     /// PDA bump
     pub bump: u8,
 }
@@ -89,6 +97,8 @@ impl Table {
         2 +  // rake_bps
         8 +  // rake_cap
         8 +  // accumulated_rake
+        32 + // token_mint
+        1 +  // token_decimals
         1;   // bump
 
     /// Check if a seat is occupied

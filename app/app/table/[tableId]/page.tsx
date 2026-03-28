@@ -6,6 +6,7 @@ import { useWallet } from "@solana/wallet-adapter-react";
 import { WalletButton } from "@/components/WalletButton";
 import { PokerTable } from "@/components/PokerTable";
 import { ActionPanel } from "@/components/ActionPanel";
+import { SpectatorView } from "@/components/SpectatorView";
 import { useState, useEffect, useRef, useMemo } from "react";
 import { usePokerGame, type ActionType } from "@/hooks/usePokerGame";
 import { ActionTimer } from "@/components/ActionTimer";
@@ -16,6 +17,7 @@ import { TransactionToast, useTransactionToasts } from "@/components/Transaction
 import { GameHistory, useGameHistory } from "@/components/GameHistory";
 import { NETWORK } from "@/contexts/WalletProvider";
 import { solToLamports, lamportsToSol } from "@/lib/utils";
+import { getTokenByMint, getDefaultToken, baseUnitsToDisplay, displayToBaseUnits, type TokenInfo } from "@/lib/tokens";
 import { evaluateHand, getHandDescription } from "@/lib/handEval";
 import { useSounds, soundManager } from "@/lib/sounds";
 import { SoundToggle } from "@/components/SoundToggle";
@@ -152,8 +154,17 @@ export default function TablePage({ params }: { params: Promise<{ tableId: strin
     }
   };
 
+  // Resolve token info from table's configured mint
+  const tableToken: TokenInfo = useMemo(() => {
+    if (gameState.table?.tokenMint) {
+      return getTokenByMint(gameState.table.tokenMint) ?? getDefaultToken();
+    }
+    return getDefaultToken();
+  }, [gameState.table?.tokenMint]);
+  const fmt = (baseUnits: number) => baseUnitsToDisplay(baseUnits, tableToken).toFixed(2);
+
   // UI state
-  const [buyInSol, setBuyInSol] = useState(1);
+  const [buyInSol, setBuyInSol] = useState(10); // Default buy-in in display units (e.g. $10 USDC)
   const [selectedSeat, setSelectedSeat] = useState<number | null>(null);
 
   // Win celebration state
@@ -178,7 +189,7 @@ export default function TablePage({ params }: { params: Promise<{ tableId: strin
   // Auto-set buy-in to table minimum when table loads
   useEffect(() => {
     if (gameState.table) {
-      const minBuyIn = lamportsToSol(gameState.table.minBuyIn.toNumber());
+      const minBuyIn = baseUnitsToDisplay(gameState.table.minBuyIn.toNumber(), tableToken);
       // Set to min buy-in if current value is below minimum
       if (buyInSol < minBuyIn) {
         setBuyInSol(minBuyIn);
@@ -271,9 +282,9 @@ export default function TablePage({ params }: { params: Promise<{ tableId: strin
 
         // Add winner events and trigger chip animations
         winners.forEach((winner, index) => {
-          const winningsInSol = lamportsToSol(winner.winnings);
+          const winningsDisplay = fmt(winner.winnings);
           const handInfo = winner.handDesc ? ` with ${winner.handDesc}` : "";
-          addGameEvent("winner", `Seat ${winner.seatIndex + 1} won ${winningsInSol.toFixed(2)} SOL${handInfo}`, {
+          addGameEvent("winner", `Seat ${winner.seatIndex + 1} won ${winningsDisplay} ${tableToken.symbol}${handInfo}`, {
             seatIndex: winner.seatIndex,
             amount: winner.winnings,
           });
@@ -424,11 +435,11 @@ export default function TablePage({ params }: { params: Promise<{ tableId: strin
         break;
       case "call":
         actionType = { type: "call" };
-        actionLabel = toCall > 0 ? `Call ${lamportsToSol(toCall).toFixed(2)} SOL` : "Call";
+        actionLabel = toCall > 0 ? `Call ${fmt(toCall)} ${tableToken.symbol}` : "Call";
         break;
       case "raise":
         actionType = { type: "raise", amount: amount ?? 0 };
-        actionLabel = `Raise to ${lamportsToSol(amount ?? 0).toFixed(2)} SOL`;
+        actionLabel = `Raise to ${fmt(amount ?? 0)} ${tableToken.symbol}`;
         break;
       case "allin":
         actionType = { type: "allIn" };
@@ -469,7 +480,7 @@ export default function TablePage({ params }: { params: Promise<{ tableId: strin
     if (selectedSeat === null) return;
     try {
       await withToast(
-        () => joinTable(selectedSeat, solToLamports(buyInSol)),
+        () => joinTable(selectedSeat, displayToBaseUnits(buyInSol, tableToken)),
         `Joining table with ${buyInSol} SOL...`,
         "Joined table"
       );
@@ -709,7 +720,7 @@ export default function TablePage({ params }: { params: Promise<{ tableId: strin
                   <div className="glass-dark px-4 py-2 rounded-xl text-sm flex items-center gap-2">
                     <span className="text-[var(--text-muted)]">Buy-in:</span>
                     <span className="text-[var(--text-primary)] font-medium">
-                      {lamportsToSol(gameState.table.minBuyIn.toNumber())} - {lamportsToSol(gameState.table.maxBuyIn.toNumber())} SOL
+                      ${fmt(gameState.table.minBuyIn.toNumber())} - ${fmt(gameState.table.maxBuyIn.toNumber())} {tableToken.symbol}
                     </span>
                   </div>
 
@@ -739,24 +750,24 @@ export default function TablePage({ params }: { params: Promise<{ tableId: strin
                           type="number"
                           value={buyInSol}
                           onChange={(e) => setBuyInSol(Number(e.target.value))}
-                          min={lamportsToSol(gameState.table.minBuyIn.toNumber())}
-                          max={lamportsToSol(gameState.table.maxBuyIn.toNumber())}
-                          step={0.1}
+                          min={baseUnitsToDisplay(gameState.table.minBuyIn.toNumber(), tableToken)}
+                          max={baseUnitsToDisplay(gameState.table.maxBuyIn.toNumber(), tableToken)}
+                          step={0.01}
                           className="bg-[var(--bg-dark)] text-[var(--text-primary)] px-4 py-2.5 rounded-xl text-sm w-24 border border-white/5"
                         />
-                        <span className="text-[var(--text-muted)] text-sm">SOL</span>
+                        <span className="text-[var(--text-muted)] text-sm">{tableToken.symbol}</span>
                       </div>
                       <button
                         onClick={handleJoinTable}
-                        disabled={loading || selectedSeat === null || buyInSol < lamportsToSol(gameState.table.minBuyIn.toNumber()) || buyInSol > lamportsToSol(gameState.table.maxBuyIn.toNumber())}
+                        disabled={loading || selectedSeat === null || buyInSol < baseUnitsToDisplay(gameState.table.minBuyIn.toNumber(), tableToken) || buyInSol > baseUnitsToDisplay(gameState.table.maxBuyIn.toNumber(), tableToken)}
                         className="btn-info px-5 py-2.5 rounded-xl text-sm font-semibold disabled:opacity-50"
                       >
                         Join
                       </button>
                       {/* Warning if buy-in out of range */}
-                      {(buyInSol < lamportsToSol(gameState.table.minBuyIn.toNumber()) || buyInSol > lamportsToSol(gameState.table.maxBuyIn.toNumber())) && (
+                      {(buyInSol < baseUnitsToDisplay(gameState.table.minBuyIn.toNumber(), tableToken) || buyInSol > baseUnitsToDisplay(gameState.table.maxBuyIn.toNumber(), tableToken)) && (
                         <span className="text-[var(--status-warning)] text-xs">
-                          Buy-in must be {lamportsToSol(gameState.table.minBuyIn.toNumber())} - {lamportsToSol(gameState.table.maxBuyIn.toNumber())} SOL
+                          Buy-in must be {fmt(gameState.table.minBuyIn.toNumber())} - {fmt(gameState.table.maxBuyIn.toNumber())} {tableToken.symbol}
                         </span>
                       )}
                     </div>
@@ -1216,6 +1227,7 @@ export default function TablePage({ params }: { params: Promise<{ tableId: strin
               chipWinTrigger={winTrigger}
               showWinCelebration={showCelebration}
               winAmount={celebrationWinAmount}
+              token={tableToken}
             />
           )}
 
@@ -1454,6 +1466,7 @@ export default function TablePage({ params }: { params: Promise<{ tableId: strin
                 onRaise={(amount) => handleAction("raise", amount)}
                 onAllIn={() => handleAction("allin")}
                 isLoading={loading}
+                token={tableToken}
               />
 
             </div>

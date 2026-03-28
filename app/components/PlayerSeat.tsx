@@ -2,6 +2,7 @@
 
 import { FC } from "react";
 import { CardHand } from "./Card";
+import { type TokenInfo, getDefaultToken, baseUnitsToDisplay } from "@/lib/tokens";
 
 interface PlayerSeatProps {
   seatIndex: number;
@@ -19,6 +20,7 @@ interface PlayerSeatProps {
   isCurrentPlayer: boolean;
   isShowdownPhase?: boolean; // True during Showdown or Settled phase
   cardsRevealed?: boolean; // Whether this player has revealed their cards
+  token?: TokenInfo;
 }
 
 export const PlayerSeat: FC<PlayerSeatProps> = ({
@@ -37,7 +39,9 @@ export const PlayerSeat: FC<PlayerSeatProps> = ({
   isCurrentPlayer,
   isShowdownPhase = false,
   cardsRevealed = false,
+  token = getDefaultToken(),
 }) => {
+  const fmt = (baseUnits: number) => baseUnitsToDisplay(baseUnits, token).toFixed(2);
   const isEmpty = status === "empty";
   const isFolded = status === "folded";
   const isAllIn = status === "allin";
@@ -212,8 +216,8 @@ export const PlayerSeat: FC<PlayerSeatProps> = ({
               )}
             </p>
             <p className="font-display text-lg font-bold text-center text-gold-gradient">
-              {(chips / 1e9).toFixed(2)}
-              <span className="text-[var(--text-muted)] text-xs ml-1">SOL</span>
+              {fmt(chips)}
+              <span className="text-[var(--text-muted)] text-xs ml-1">{token.symbol}</span>
             </p>
           </div>
 
@@ -230,7 +234,7 @@ export const PlayerSeat: FC<PlayerSeatProps> = ({
                 }}
               />
               <span className="text-sm font-semibold text-[var(--text-primary)]">
-                {(currentBet / 1e9).toFixed(2)}
+                {fmt(currentBet)}
               </span>
               <span className="text-[10px] text-[var(--text-muted)] uppercase">in pot</span>
             </div>

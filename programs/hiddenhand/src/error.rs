@@ -148,4 +148,7 @@ pub enum HiddenHandError {
 
     #[msg("No accumulated rake to collect")]
     NoRakeToCollect,
+
+    #[msg("Token mint does not match table's configured token")]
+    InvalidTokenMint,
 }

@@ -1,4 +1,10 @@
-{
+/**
+ * Program IDL in camelCase format in order to be used in JS/TS.
+ *
+ * Note that this is only a type helper and is not the actual IDL. The original
+ * IDL can be found at `target/idl/hiddenhand.json`.
+ */
+export type Hiddenhand = {
   "address": "5fcckjDn8wzRSodJbQVpHeuWZ8x4B3htKv1WEMx36XJe",
   "metadata": {
     "name": "hiddenhand",
@@ -13,7 +19,7 @@
   ],
   "instructions": [
     {
-      "name": "callback_shuffle",
+      "name": "callbackShuffle",
       "docs": [
         "VRF callback - ATOMIC shuffle + encrypt",
         "Called by VRF oracle, not directly by users",
@@ -33,7 +39,7 @@
       ],
       "accounts": [
         {
-          "name": "vrf_program_identity",
+          "name": "vrfProgramIdentity",
           "signer": true,
           "address": "9irBy75QS2BN81FUgXuHcjqceJJRuc9oDkAe8TKVvvAw"
         },
@@ -55,13 +61,13 @@
               {
                 "kind": "account",
                 "path": "table.table_id",
-                "account": "Table"
+                "account": "table"
               }
             ]
           }
         },
         {
-          "name": "hand_state",
+          "name": "handState",
           "writable": true,
           "pda": {
             "seeds": [
@@ -81,13 +87,13 @@
               {
                 "kind": "account",
                 "path": "table.hand_number",
-                "account": "Table"
+                "account": "table"
               }
             ]
           }
         },
         {
-          "name": "deck_state",
+          "name": "deckState",
           "writable": true,
           "pda": {
             "seeds": [
@@ -107,7 +113,7 @@
               {
                 "kind": "account",
                 "path": "table.hand_number",
-                "account": "Table"
+                "account": "table"
               }
             ]
           }
@@ -126,7 +132,7 @@
       ]
     },
     {
-      "name": "close_inactive_table",
+      "name": "closeInactiveTable",
       "docs": [
         "Close an inactive table and return all funds to players",
         "Can be called by anyone after 1 hour of inactivity",
@@ -170,7 +176,7 @@
               {
                 "kind": "account",
                 "path": "table.table_id",
-                "account": "Table"
+                "account": "table"
               }
             ]
           }
@@ -207,17 +213,17 @@
           ]
         },
         {
-          "name": "token_program"
+          "name": "tokenProgram"
         },
         {
-          "name": "system_program",
+          "name": "systemProgram",
           "address": "11111111111111111111111111111111"
         }
       ],
       "args": []
     },
     {
-      "name": "collect_rake",
+      "name": "collectRake",
       "docs": [
         "Collect accumulated rake from the table vault",
         "Only the table authority can call this, and only when not mid-hand"
@@ -259,13 +265,13 @@
               {
                 "kind": "account",
                 "path": "table.table_id",
-                "account": "Table"
+                "account": "table"
               }
             ]
           }
         },
         {
-          "name": "authority_token_account",
+          "name": "authorityTokenAccount",
           "docs": [
             "Authority's token account to receive rake"
           ],
@@ -303,13 +309,13 @@
           ]
         },
         {
-          "name": "token_program"
+          "name": "tokenProgram"
         }
       ],
       "args": []
     },
     {
-      "name": "create_table",
+      "name": "createTable",
       "docs": [
         "Create a new poker table",
         "rake_bps: rake in basis points (0 = no rake, max 1000 = 10%)",
@@ -348,7 +354,7 @@
               },
               {
                 "kind": "arg",
-                "path": "table_id"
+                "path": "tableId"
               }
             ]
           }
@@ -385,16 +391,16 @@
           }
         },
         {
-          "name": "token_program"
+          "name": "tokenProgram"
         },
         {
-          "name": "system_program",
+          "name": "systemProgram",
           "address": "11111111111111111111111111111111"
         }
       ],
       "args": [
         {
-          "name": "table_id",
+          "name": "tableId",
           "type": {
             "array": [
               "u8",
@@ -403,37 +409,37 @@
           }
         },
         {
-          "name": "small_blind",
+          "name": "smallBlind",
           "type": "u64"
         },
         {
-          "name": "big_blind",
+          "name": "bigBlind",
           "type": "u64"
         },
         {
-          "name": "min_buy_in",
+          "name": "minBuyIn",
           "type": "u64"
         },
         {
-          "name": "max_buy_in",
+          "name": "maxBuyIn",
           "type": "u64"
         },
         {
-          "name": "max_players",
+          "name": "maxPlayers",
           "type": "u8"
         },
         {
-          "name": "rake_bps",
+          "name": "rakeBps",
           "type": "u16"
         },
         {
-          "name": "rake_cap",
+          "name": "rakeCap",
           "type": "u64"
         }
       ]
     },
     {
-      "name": "deal_cards",
+      "name": "dealCards",
       "docs": [
         "DEPRECATED: Plaintext dealing for local testing ONLY.",
         "Cards are stored unencrypted on-chain — DO NOT use in production.",
@@ -476,13 +482,13 @@
               {
                 "kind": "account",
                 "path": "table.table_id",
-                "account": "Table"
+                "account": "table"
               }
             ]
           }
         },
         {
-          "name": "hand_state",
+          "name": "handState",
           "writable": true,
           "pda": {
             "seeds": [
@@ -502,13 +508,13 @@
               {
                 "kind": "account",
                 "path": "table.hand_number",
-                "account": "Table"
+                "account": "table"
               }
             ]
           }
         },
         {
-          "name": "deck_state",
+          "name": "deckState",
           "writable": true,
           "pda": {
             "seeds": [
@@ -528,20 +534,20 @@
               {
                 "kind": "account",
                 "path": "table.hand_number",
-                "account": "Table"
+                "account": "table"
               }
             ]
           }
         },
         {
-          "name": "sb_seat",
+          "name": "sbSeat",
           "docs": [
             "Small blind player seat"
           ],
           "writable": true
         },
         {
-          "name": "bb_seat",
+          "name": "bbSeat",
           "docs": [
             "Big blind player seat"
           ],
@@ -551,7 +557,7 @@
       "args": []
     },
     {
-      "name": "deal_cards_encrypted",
+      "name": "dealCardsEncrypted",
       "docs": [
         "Deal cards with ATOMIC Inco encryption (RECOMMENDED for privacy)",
         "Cards are encrypted immediately during dealing - NEVER stored as plaintext",
@@ -594,13 +600,13 @@
               {
                 "kind": "account",
                 "path": "table.table_id",
-                "account": "Table"
+                "account": "table"
               }
             ]
           }
         },
         {
-          "name": "hand_state",
+          "name": "handState",
           "writable": true,
           "pda": {
             "seeds": [
@@ -620,13 +626,13 @@
               {
                 "kind": "account",
                 "path": "table.hand_number",
-                "account": "Table"
+                "account": "table"
               }
             ]
           }
         },
         {
-          "name": "deck_state",
+          "name": "deckState",
           "writable": true,
           "pda": {
             "seeds": [
@@ -646,41 +652,41 @@
               {
                 "kind": "account",
                 "path": "table.hand_number",
-                "account": "Table"
+                "account": "table"
               }
             ]
           }
         },
         {
-          "name": "sb_seat",
+          "name": "sbSeat",
           "docs": [
             "Small blind player seat"
           ],
           "writable": true
         },
         {
-          "name": "bb_seat",
+          "name": "bbSeat",
           "docs": [
             "Big blind player seat"
           ],
           "writable": true
         },
         {
-          "name": "inco_program",
+          "name": "incoProgram",
           "docs": [
             "The Inco Lightning program for encryption"
           ],
           "address": "5sjEbPiqgZrYwR31ahR6Uk9wf5awoX61YGg7jExQSwaj"
         },
         {
-          "name": "system_program",
+          "name": "systemProgram",
           "address": "11111111111111111111111111111111"
         }
       ],
       "args": []
     },
     {
-      "name": "encrypt_hole_cards",
+      "name": "encryptHoleCards",
       "docs": [
         "Phase 1: Encrypt hole cards using Inco FHE",
         "Called via Magic Actions after ER commit",
@@ -724,13 +730,13 @@
               {
                 "kind": "account",
                 "path": "table.table_id",
-                "account": "Table"
+                "account": "table"
               }
             ]
           }
         },
         {
-          "name": "hand_state",
+          "name": "handState",
           "pda": {
             "seeds": [
               {
@@ -749,39 +755,39 @@
               {
                 "kind": "account",
                 "path": "table.hand_number",
-                "account": "Table"
+                "account": "table"
               }
             ]
           }
         },
         {
-          "name": "player_seat",
+          "name": "playerSeat",
           "docs": [
             "The player seat to encrypt cards for"
           ],
           "writable": true
         },
         {
-          "name": "inco_program",
+          "name": "incoProgram",
           "docs": [
             "The Inco Lightning program for encryption"
           ],
           "address": "5sjEbPiqgZrYwR31ahR6Uk9wf5awoX61YGg7jExQSwaj"
         },
         {
-          "name": "system_program",
+          "name": "systemProgram",
           "address": "11111111111111111111111111111111"
         }
       ],
       "args": [
         {
-          "name": "seat_index",
+          "name": "seatIndex",
           "type": "u8"
         }
       ]
     },
     {
-      "name": "grant_card_allowance",
+      "name": "grantCardAllowance",
       "docs": [
         "Phase 2: Grant decryption allowance for encrypted cards",
         "Must be called AFTER encrypt_hole_cards",
@@ -824,19 +830,19 @@
               {
                 "kind": "account",
                 "path": "table.table_id",
-                "account": "Table"
+                "account": "table"
               }
             ]
           }
         },
         {
-          "name": "player_seat",
+          "name": "playerSeat",
           "docs": [
             "The player seat with encrypted cards"
           ]
         },
         {
-          "name": "allowance_card1",
+          "name": "allowanceCard1",
           "docs": [
             "Allowance account for card 1",
             "Must be PDA: [\"allowance\", hole_card_1.to_le_bytes(), player_pubkey]"
@@ -844,7 +850,7 @@
           "writable": true
         },
         {
-          "name": "allowance_card2",
+          "name": "allowanceCard2",
           "docs": [
             "Allowance account for card 2",
             "Must be PDA: [\"allowance\", hole_card_2.to_le_bytes(), player_pubkey]"
@@ -858,26 +864,26 @@
           ]
         },
         {
-          "name": "inco_program",
+          "name": "incoProgram",
           "docs": [
             "The Inco Lightning program"
           ],
           "address": "5sjEbPiqgZrYwR31ahR6Uk9wf5awoX61YGg7jExQSwaj"
         },
         {
-          "name": "system_program",
+          "name": "systemProgram",
           "address": "11111111111111111111111111111111"
         }
       ],
       "args": [
         {
-          "name": "seat_index",
+          "name": "seatIndex",
           "type": "u8"
         }
       ]
     },
     {
-      "name": "grant_community_allowances",
+      "name": "grantCommunityAllowances",
       "docs": [
         "Grant community card allowances to a player",
         "This enables the player to decrypt community cards via Inco, which is needed",
@@ -922,13 +928,13 @@
               {
                 "kind": "account",
                 "path": "table.table_id",
-                "account": "Table"
+                "account": "table"
               }
             ]
           }
         },
         {
-          "name": "hand_state",
+          "name": "handState",
           "pda": {
             "seeds": [
               {
@@ -947,13 +953,13 @@
               {
                 "kind": "account",
                 "path": "table.hand_number",
-                "account": "Table"
+                "account": "table"
               }
             ]
           }
         },
         {
-          "name": "deck_state",
+          "name": "deckState",
           "pda": {
             "seeds": [
               {
@@ -972,13 +978,13 @@
               {
                 "kind": "account",
                 "path": "table.hand_number",
-                "account": "Table"
+                "account": "table"
               }
             ]
           }
         },
         {
-          "name": "player_seat",
+          "name": "playerSeat",
           "docs": [
             "The player seat to grant allowances for"
           ]
@@ -990,26 +996,26 @@
           ]
         },
         {
-          "name": "inco_program",
+          "name": "incoProgram",
           "docs": [
             "The Inco Lightning program"
           ],
           "address": "5sjEbPiqgZrYwR31ahR6Uk9wf5awoX61YGg7jExQSwaj"
         },
         {
-          "name": "system_program",
+          "name": "systemProgram",
           "address": "11111111111111111111111111111111"
         }
       ],
       "args": [
         {
-          "name": "seat_index",
+          "name": "seatIndex",
           "type": "u8"
         }
       ]
     },
     {
-      "name": "grant_own_allowance",
+      "name": "grantOwnAllowance",
       "docs": [
         "Allow player to grant their OWN decryption allowance after timeout",
         "If authority doesn't grant allowances within 60 seconds, players can self-grant",
@@ -1051,13 +1057,13 @@
               {
                 "kind": "account",
                 "path": "table.table_id",
-                "account": "Table"
+                "account": "table"
               }
             ]
           }
         },
         {
-          "name": "hand_state",
+          "name": "handState",
           "pda": {
             "seeds": [
               {
@@ -1076,50 +1082,50 @@
               {
                 "kind": "account",
                 "path": "table.hand_number",
-                "account": "Table"
+                "account": "table"
               }
             ]
           }
         },
         {
-          "name": "player_seat",
+          "name": "playerSeat",
           "writable": true
         },
         {
-          "name": "allowance_card1",
+          "name": "allowanceCard1",
           "docs": [
             "Allowance account for card 1 (will be created by Inco CPI)"
           ],
           "writable": true
         },
         {
-          "name": "allowance_card2",
+          "name": "allowanceCard2",
           "docs": [
             "Allowance account for card 2 (will be created by Inco CPI)"
           ],
           "writable": true
         },
         {
-          "name": "inco_program",
+          "name": "incoProgram",
           "docs": [
             "The Inco Lightning program"
           ],
           "address": "5sjEbPiqgZrYwR31ahR6Uk9wf5awoX61YGg7jExQSwaj"
         },
         {
-          "name": "system_program",
+          "name": "systemProgram",
           "address": "11111111111111111111111111111111"
         }
       ],
       "args": [
         {
-          "name": "seat_index",
+          "name": "seatIndex",
           "type": "u8"
         }
       ]
     },
     {
-      "name": "join_table",
+      "name": "joinTable",
       "docs": [
         "Join a table with a buy-in"
       ],
@@ -1157,17 +1163,17 @@
               {
                 "kind": "account",
                 "path": "table.table_id",
-                "account": "Table"
+                "account": "table"
               }
             ]
           }
         },
         {
-          "name": "player_seat",
+          "name": "playerSeat",
           "writable": true
         },
         {
-          "name": "player_token_account",
+          "name": "playerTokenAccount",
           "docs": [
             "Player's token account (source of buy-in funds)"
           ],
@@ -1205,26 +1211,26 @@
           ]
         },
         {
-          "name": "token_program"
+          "name": "tokenProgram"
         },
         {
-          "name": "system_program",
+          "name": "systemProgram",
           "address": "11111111111111111111111111111111"
         }
       ],
       "args": [
         {
-          "name": "seat_index",
+          "name": "seatIndex",
           "type": "u8"
         },
         {
-          "name": "buy_in",
+          "name": "buyIn",
           "type": "u64"
         }
       ]
     },
     {
-      "name": "leave_table",
+      "name": "leaveTable",
       "docs": [
         "Leave a table and cash out"
       ],
@@ -1244,7 +1250,7 @@
           "writable": true,
           "signer": true,
           "relations": [
-            "player_seat"
+            "playerSeat"
           ]
         },
         {
@@ -1265,17 +1271,17 @@
               {
                 "kind": "account",
                 "path": "table.table_id",
-                "account": "Table"
+                "account": "table"
               }
             ]
           }
         },
         {
-          "name": "player_seat",
+          "name": "playerSeat",
           "writable": true
         },
         {
-          "name": "player_token_account",
+          "name": "playerTokenAccount",
           "docs": [
             "Player's token account to receive chips"
           ],
@@ -1313,17 +1319,17 @@
           ]
         },
         {
-          "name": "token_program"
+          "name": "tokenProgram"
         },
         {
-          "name": "system_program",
+          "name": "systemProgram",
           "address": "11111111111111111111111111111111"
         }
       ],
       "args": []
     },
     {
-      "name": "player_action",
+      "name": "playerAction",
       "docs": [
         "Perform a player action (fold, check, call, raise, all-in)"
       ],
@@ -1343,7 +1349,7 @@
           "writable": true,
           "signer": true,
           "relations": [
-            "player_seat"
+            "playerSeat"
           ]
         },
         {
@@ -1363,13 +1369,13 @@
               {
                 "kind": "account",
                 "path": "table.table_id",
-                "account": "Table"
+                "account": "table"
               }
             ]
           }
         },
         {
-          "name": "hand_state",
+          "name": "handState",
           "writable": true,
           "pda": {
             "seeds": [
@@ -1389,13 +1395,13 @@
               {
                 "kind": "account",
                 "path": "table.hand_number",
-                "account": "Table"
+                "account": "table"
               }
             ]
           }
         },
         {
-          "name": "deck_state",
+          "name": "deckState",
           "writable": true,
           "pda": {
             "seeds": [
@@ -1415,13 +1421,13 @@
               {
                 "kind": "account",
                 "path": "table.hand_number",
-                "account": "Table"
+                "account": "table"
               }
             ]
           }
         },
         {
-          "name": "player_seat",
+          "name": "playerSeat",
           "writable": true
         }
       ],
@@ -1430,14 +1436,14 @@
           "name": "action",
           "type": {
             "defined": {
-              "name": "Action"
+              "name": "action"
             }
           }
         }
       ]
     },
     {
-      "name": "request_shuffle",
+      "name": "requestShuffle",
       "docs": [
         "Request VRF randomness for card shuffling",
         "This initiates the shuffle - VRF oracle will callback with randomness",
@@ -1479,13 +1485,13 @@
               {
                 "kind": "account",
                 "path": "table.table_id",
-                "account": "Table"
+                "account": "table"
               }
             ]
           }
         },
         {
-          "name": "hand_state",
+          "name": "handState",
           "writable": true,
           "pda": {
             "seeds": [
@@ -1505,13 +1511,13 @@
               {
                 "kind": "account",
                 "path": "table.hand_number",
-                "account": "Table"
+                "account": "table"
               }
             ]
           }
         },
         {
-          "name": "deck_state",
+          "name": "deckState",
           "writable": true,
           "pda": {
             "seeds": [
@@ -1531,29 +1537,29 @@
               {
                 "kind": "account",
                 "path": "table.hand_number",
-                "account": "Table"
+                "account": "table"
               }
             ]
           }
         },
         {
-          "name": "oracle_queue",
+          "name": "oracleQueue",
           "writable": true,
           "address": "Cuj97ggrhhidhbu39TijNVqE74xvKJ69gDervRUXAxGh"
         },
         {
-          "name": "inco_program",
+          "name": "incoProgram",
           "docs": [
             "The Inco Lightning program for encryption (passed to callback)"
           ],
           "address": "5sjEbPiqgZrYwR31ahR6Uk9wf5awoX61YGg7jExQSwaj"
         },
         {
-          "name": "system_program",
+          "name": "systemProgram",
           "address": "11111111111111111111111111111111"
         },
         {
-          "name": "program_identity",
+          "name": "programIdentity",
           "pda": {
             "seeds": [
               {
@@ -1573,18 +1579,18 @@
           }
         },
         {
-          "name": "vrf_program",
+          "name": "vrfProgram",
           "address": "Vrf1RNUjXmQGjmQrQLvJHs9SNkvDJEsRVFPkfSQUwGz"
         },
         {
-          "name": "slot_hashes",
+          "name": "slotHashes",
           "address": "SysvarS1otHashes111111111111111111111111111"
         }
       ],
       "args": []
     },
     {
-      "name": "reveal_cards",
+      "name": "revealCards",
       "docs": [
         "Reveal cards at showdown with Ed25519 signature verification",
         "",
@@ -1628,13 +1634,13 @@
               {
                 "kind": "account",
                 "path": "table.table_id",
-                "account": "Table"
+                "account": "table"
               }
             ]
           }
         },
         {
-          "name": "hand_state",
+          "name": "handState",
           "pda": {
             "seeds": [
               {
@@ -1653,13 +1659,13 @@
               {
                 "kind": "account",
                 "path": "table.hand_number",
-                "account": "Table"
+                "account": "table"
               }
             ]
           }
         },
         {
-          "name": "player_seat",
+          "name": "playerSeat",
           "writable": true,
           "pda": {
             "seeds": [
@@ -1679,13 +1685,13 @@
               {
                 "kind": "account",
                 "path": "player_seat.seat_index",
-                "account": "PlayerSeat"
+                "account": "playerSeat"
               }
             ]
           }
         },
         {
-          "name": "instructions_sysvar",
+          "name": "instructionsSysvar",
           "docs": [
             "Instructions sysvar for Ed25519 signature verification"
           ],
@@ -1704,7 +1710,7 @@
       ]
     },
     {
-      "name": "reveal_community",
+      "name": "revealCommunity",
       "docs": [
         "Reveal community cards (flop/turn/river) with Ed25519 signature verification",
         "",
@@ -1757,13 +1763,13 @@
               {
                 "kind": "account",
                 "path": "table.table_id",
-                "account": "Table"
+                "account": "table"
               }
             ]
           }
         },
         {
-          "name": "hand_state",
+          "name": "handState",
           "writable": true,
           "pda": {
             "seeds": [
@@ -1783,13 +1789,13 @@
               {
                 "kind": "account",
                 "path": "table.hand_number",
-                "account": "Table"
+                "account": "table"
               }
             ]
           }
         },
         {
-          "name": "deck_state",
+          "name": "deckState",
           "pda": {
             "seeds": [
               {
@@ -1808,13 +1814,13 @@
               {
                 "kind": "account",
                 "path": "table.hand_number",
-                "account": "Table"
+                "account": "table"
               }
             ]
           }
         },
         {
-          "name": "instructions_sysvar",
+          "name": "instructionsSysvar",
           "docs": [
             "Instructions sysvar for Ed25519 signature verification"
           ],
@@ -1871,13 +1877,13 @@
               {
                 "kind": "account",
                 "path": "table.table_id",
-                "account": "Table"
+                "account": "table"
               }
             ]
           }
         },
         {
-          "name": "hand_state",
+          "name": "handState",
           "writable": true,
           "pda": {
             "seeds": [
@@ -1897,7 +1903,7 @@
               {
                 "kind": "account",
                 "path": "table.hand_number",
-                "account": "Table"
+                "account": "table"
               }
             ]
           }
@@ -1906,7 +1912,7 @@
       "args": []
     },
     {
-      "name": "start_hand",
+      "name": "startHand",
       "docs": [
         "Start a new hand (table authority only)"
       ],
@@ -1947,28 +1953,28 @@
               {
                 "kind": "account",
                 "path": "table.table_id",
-                "account": "Table"
+                "account": "table"
               }
             ]
           }
         },
         {
-          "name": "hand_state",
+          "name": "handState",
           "writable": true
         },
         {
-          "name": "deck_state",
+          "name": "deckState",
           "writable": true
         },
         {
-          "name": "system_program",
+          "name": "systemProgram",
           "address": "11111111111111111111111111111111"
         }
       ],
       "args": []
     },
     {
-      "name": "timeout_player",
+      "name": "timeoutPlayer",
       "docs": [
         "Timeout a player who hasn't acted within 60 seconds",
         "Anyone can call this to keep the game moving",
@@ -2009,13 +2015,13 @@
               {
                 "kind": "account",
                 "path": "table.table_id",
-                "account": "Table"
+                "account": "table"
               }
             ]
           }
         },
         {
-          "name": "hand_state",
+          "name": "handState",
           "writable": true,
           "pda": {
             "seeds": [
@@ -2035,13 +2041,13 @@
               {
                 "kind": "account",
                 "path": "table.hand_number",
-                "account": "Table"
+                "account": "table"
               }
             ]
           }
         },
         {
-          "name": "deck_state",
+          "name": "deckState",
           "pda": {
             "seeds": [
               {
@@ -2060,13 +2066,13 @@
               {
                 "kind": "account",
                 "path": "table.hand_number",
-                "account": "Table"
+                "account": "table"
               }
             ]
           }
         },
         {
-          "name": "player_seat",
+          "name": "playerSeat",
           "docs": [
             "The seat of the player being timed out"
           ],
@@ -2076,7 +2082,7 @@
       "args": []
     },
     {
-      "name": "timeout_reveal",
+      "name": "timeoutReveal",
       "docs": [
         "Timeout a player who hasn't revealed cards at showdown",
         "After 3 minutes without revealing, any player can call this to \"muck\" the non-revealer",
@@ -2118,13 +2124,13 @@
               {
                 "kind": "account",
                 "path": "table.table_id",
-                "account": "Table"
+                "account": "table"
               }
             ]
           }
         },
         {
-          "name": "hand_state",
+          "name": "handState",
           "writable": true,
           "pda": {
             "seeds": [
@@ -2144,23 +2150,23 @@
               {
                 "kind": "account",
                 "path": "table.hand_number",
-                "account": "Table"
+                "account": "table"
               }
             ]
           }
         },
         {
-          "name": "target_player",
+          "name": "targetPlayer",
           "writable": true
         },
         {
-          "name": "system_program",
+          "name": "systemProgram",
           "address": "11111111111111111111111111111111"
         }
       ],
       "args": [
         {
-          "name": "target_seat",
+          "name": "targetSeat",
           "type": "u8"
         }
       ]
@@ -2168,7 +2174,7 @@
   ],
   "accounts": [
     {
-      "name": "DeckState",
+      "name": "deckState",
       "discriminator": [
         190,
         100,
@@ -2181,7 +2187,7 @@
       ]
     },
     {
-      "name": "HandState",
+      "name": "handState",
       "discriminator": [
         85,
         99,
@@ -2194,7 +2200,7 @@
       ]
     },
     {
-      "name": "PlayerSeat",
+      "name": "playerSeat",
       "discriminator": [
         100,
         254,
@@ -2207,7 +2213,7 @@
       ]
     },
     {
-      "name": "Table",
+      "name": "table",
       "discriminator": [
         34,
         100,
@@ -2222,7 +2228,7 @@
   ],
   "events": [
     {
-      "name": "HandCompleted",
+      "name": "handCompleted",
       "discriminator": [
         84,
         11,
@@ -2238,272 +2244,272 @@
   "errors": [
     {
       "code": 6000,
-      "name": "TableFull",
+      "name": "tableFull",
       "msg": "Table is full"
     },
     {
       "code": 6001,
-      "name": "NotEnoughPlayers",
+      "name": "notEnoughPlayers",
       "msg": "Table is not full enough to start"
     },
     {
       "code": 6002,
-      "name": "PlayerNotAtTable",
+      "name": "playerNotAtTable",
       "msg": "Player is not at this table"
     },
     {
       "code": 6003,
-      "name": "PlayerAlreadyAtTable",
+      "name": "playerAlreadyAtTable",
       "msg": "Player is already at this table"
     },
     {
       "code": 6004,
-      "name": "InvalidSeatIndex",
+      "name": "invalidSeatIndex",
       "msg": "Invalid seat index"
     },
     {
       "code": 6005,
-      "name": "SeatOccupied",
+      "name": "seatOccupied",
       "msg": "Seat is already occupied"
     },
     {
       "code": 6006,
-      "name": "SeatEmpty",
+      "name": "seatEmpty",
       "msg": "Seat is empty"
     },
     {
       "code": 6007,
-      "name": "NotPlayersTurn",
+      "name": "notPlayersTurn",
       "msg": "Not player's turn"
     },
     {
       "code": 6008,
-      "name": "InvalidAction",
+      "name": "invalidAction",
       "msg": "Invalid action for current game state"
     },
     {
       "code": 6009,
-      "name": "InsufficientChips",
+      "name": "insufficientChips",
       "msg": "Insufficient chips"
     },
     {
       "code": 6010,
-      "name": "InvalidBuyIn",
+      "name": "invalidBuyIn",
       "msg": "Buy-in amount out of range"
     },
     {
       "code": 6011,
-      "name": "HandNotInProgress",
+      "name": "handNotInProgress",
       "msg": "Hand is not in progress"
     },
     {
       "code": 6012,
-      "name": "HandAlreadyInProgress",
+      "name": "handAlreadyInProgress",
       "msg": "Hand is already in progress"
     },
     {
       "code": 6013,
-      "name": "CannotFold",
+      "name": "cannotFold",
       "msg": "Cannot fold - no bet to fold from"
     },
     {
       "code": 6014,
-      "name": "CannotCheck",
+      "name": "cannotCheck",
       "msg": "Cannot check - must call or raise"
     },
     {
       "code": 6015,
-      "name": "RaiseTooSmall",
+      "name": "raiseTooSmall",
       "msg": "Raise amount too small"
     },
     {
       "code": 6016,
-      "name": "BettingRoundNotComplete",
+      "name": "bettingRoundNotComplete",
       "msg": "Betting round not complete"
     },
     {
       "code": 6017,
-      "name": "InvalidPhase",
+      "name": "invalidPhase",
       "msg": "Invalid phase for this action"
     },
     {
       "code": 6018,
-      "name": "ActionTimeout",
+      "name": "actionTimeout",
       "msg": "Player action timeout"
     },
     {
       "code": 6019,
-      "name": "ActionNotTimedOut",
+      "name": "actionNotTimedOut",
       "msg": "Player has not timed out yet - must wait 60 seconds"
     },
     {
       "code": 6020,
-      "name": "UnauthorizedAuthority",
+      "name": "unauthorizedAuthority",
       "msg": "Only table authority can perform this action"
     },
     {
       "code": 6021,
-      "name": "ShowdownRequiresPlayers",
+      "name": "showdownRequiresPlayers",
       "msg": "Showdown requires at least 2 active players"
     },
     {
       "code": 6022,
-      "name": "InvalidCardIndex",
+      "name": "invalidCardIndex",
       "msg": "Invalid card index"
     },
     {
       "code": 6023,
-      "name": "DeckAlreadyShuffled",
+      "name": "deckAlreadyShuffled",
       "msg": "Deck already shuffled for this hand"
     },
     {
       "code": 6024,
-      "name": "DeckNotShuffled",
+      "name": "deckNotShuffled",
       "msg": "Deck not yet shuffled - request VRF shuffle first"
     },
     {
       "code": 6025,
-      "name": "CardsNotDealt",
+      "name": "cardsNotDealt",
       "msg": "Cards not yet dealt"
     },
     {
       "code": 6026,
-      "name": "AllCardsRevealed",
+      "name": "allCardsRevealed",
       "msg": "All community cards already revealed"
     },
     {
       "code": 6027,
-      "name": "PlayerFolded",
+      "name": "playerFolded",
       "msg": "Player has already folded"
     },
     {
       "code": 6028,
-      "name": "PlayerAlreadyAllIn",
+      "name": "playerAlreadyAllIn",
       "msg": "Player is already all-in"
     },
     {
       "code": 6029,
-      "name": "TableNotWaiting",
+      "name": "tableNotWaiting",
       "msg": "Table is not in waiting state"
     },
     {
       "code": 6030,
-      "name": "CannotLeaveDuringHand",
+      "name": "cannotLeaveDuringHand",
       "msg": "Cannot leave during active hand"
     },
     {
       "code": 6031,
-      "name": "Overflow",
+      "name": "overflow",
       "msg": "Arithmetic overflow"
     },
     {
       "code": 6032,
-      "name": "DuplicateAccount",
+      "name": "duplicateAccount",
       "msg": "Duplicate accounts provided"
     },
     {
       "code": 6033,
-      "name": "InvalidRemainingAccounts",
+      "name": "invalidRemainingAccounts",
       "msg": "Invalid remaining accounts"
     },
     {
       "code": 6034,
-      "name": "InvalidAccountCount",
+      "name": "invalidAccountCount",
       "msg": "Invalid account count - expected multiple of 3 for encryption"
     },
     {
       "code": 6035,
-      "name": "CardsAlreadyRevealed",
+      "name": "cardsAlreadyRevealed",
       "msg": "Cards have already been revealed"
     },
     {
       "code": 6036,
-      "name": "PlayerNotActive",
+      "name": "playerNotActive",
       "msg": "Player is not active (folded or not playing)"
     },
     {
       "code": 6037,
-      "name": "InvalidCard",
+      "name": "invalidCard",
       "msg": "Invalid card value - must be 0-51"
     },
     {
       "code": 6038,
-      "name": "Ed25519VerificationFailed",
+      "name": "ed25519VerificationFailed",
       "msg": "Ed25519 signature verification failed"
     },
     {
       "code": 6039,
-      "name": "PlayersNotRevealed",
+      "name": "playersNotRevealed",
       "msg": "All active players must reveal before showdown can complete"
     },
     {
       "code": 6040,
-      "name": "TimeoutNotReached",
+      "name": "timeoutNotReached",
       "msg": "Timeout not reached - must wait longer"
     },
     {
       "code": 6041,
-      "name": "NotYourSeat",
+      "name": "notYourSeat",
       "msg": "This is not your seat"
     },
     {
       "code": 6042,
-      "name": "CardsNotEncrypted",
+      "name": "cardsNotEncrypted",
       "msg": "Cards are not encrypted yet"
     },
     {
       "code": 6043,
-      "name": "HandInProgress",
+      "name": "handInProgress",
       "msg": "Cannot perform this action while hand is in progress"
     },
     {
       "code": 6044,
-      "name": "AwaitingCommunityReveal",
+      "name": "awaitingCommunityReveal",
       "msg": "Waiting for community cards to be revealed - authority must call reveal_community"
     },
     {
       "code": 6045,
-      "name": "CommunityNotReady",
+      "name": "communityNotReady",
       "msg": "Community cards not ready for reveal - betting round not complete"
     },
     {
       "code": 6046,
-      "name": "InvalidCommunityCards",
+      "name": "invalidCommunityCards",
       "msg": "Invalid community cards for current phase"
     },
     {
       "code": 6047,
-      "name": "RakeExceedsLimit",
+      "name": "rakeExceedsLimit",
       "msg": "Rake basis points exceeds maximum (1000 = 10%)"
     },
     {
       "code": 6048,
-      "name": "NoRakeToCollect",
+      "name": "noRakeToCollect",
       "msg": "No accumulated rake to collect"
     },
     {
       "code": 6049,
-      "name": "InvalidTokenMint",
+      "name": "invalidTokenMint",
       "msg": "Token mint does not match table's configured token"
     }
   ],
   "types": [
     {
-      "name": "Action",
+      "name": "action",
       "type": {
         "kind": "enum",
         "variants": [
           {
-            "name": "Fold"
+            "name": "fold"
           },
           {
-            "name": "Check"
+            "name": "check"
           },
           {
-            "name": "Call"
+            "name": "call"
           },
           {
-            "name": "Raise",
+            "name": "raise",
             "fields": [
               {
                 "name": "amount",
@@ -2512,13 +2518,13 @@
             ]
           },
           {
-            "name": "AllIn"
+            "name": "allIn"
           }
         ]
       }
     },
     {
-      "name": "DeckState",
+      "name": "deckState",
       "docs": [
         "Encrypted deck state for a hand",
         "Cards are stored as Inco encrypted handles",
@@ -2553,14 +2559,14 @@
             }
           },
           {
-            "name": "deal_index",
+            "name": "dealIndex",
             "docs": [
               "Next card index to deal"
             ],
             "type": "u8"
           },
           {
-            "name": "is_shuffled",
+            "name": "isShuffled",
             "docs": [
               "Whether deck has been shuffled and cards encrypted"
             ],
@@ -2574,7 +2580,7 @@
             "type": "u8"
           },
           {
-            "name": "_reserved",
+            "name": "reserved",
             "docs": [
               "Reserved space for future use (maintains account size compatibility)",
               "Previously: vrf_seed [u8; 32] + seed_received bool = 33 bytes"
@@ -2590,36 +2596,36 @@
       }
     },
     {
-      "name": "GamePhase",
+      "name": "gamePhase",
       "type": {
         "kind": "enum",
         "variants": [
           {
-            "name": "Dealing"
+            "name": "dealing"
           },
           {
-            "name": "PreFlop"
+            "name": "preFlop"
           },
           {
-            "name": "Flop"
+            "name": "flop"
           },
           {
-            "name": "Turn"
+            "name": "turn"
           },
           {
-            "name": "River"
+            "name": "river"
           },
           {
-            "name": "Showdown"
+            "name": "showdown"
           },
           {
-            "name": "Settled"
+            "name": "settled"
           }
         ]
       }
     },
     {
-      "name": "HandCompleted",
+      "name": "handCompleted",
       "docs": [
         "Emitted when a hand completes (showdown or everyone folds)",
         "Contains all information needed to reconstruct and verify the hand"
@@ -2628,7 +2634,7 @@
         "kind": "struct",
         "fields": [
           {
-            "name": "table_id",
+            "name": "tableId",
             "docs": [
               "Table identifier"
             ],
@@ -2640,7 +2646,7 @@
             }
           },
           {
-            "name": "hand_number",
+            "name": "handNumber",
             "docs": [
               "Sequential hand number"
             ],
@@ -2654,7 +2660,7 @@
             "type": "i64"
           },
           {
-            "name": "community_cards",
+            "name": "communityCards",
             "docs": [
               "Community cards (5 cards, 255 = not dealt)"
             ],
@@ -2666,14 +2672,14 @@
             }
           },
           {
-            "name": "total_pot",
+            "name": "totalPot",
             "docs": [
               "Total pot that was distributed"
             ],
             "type": "u64"
           },
           {
-            "name": "player_count",
+            "name": "playerCount",
             "docs": [
               "Number of players who participated"
             ],
@@ -2689,7 +2695,7 @@
               "array": [
                 {
                   "defined": {
-                    "name": "PlayerHandResult"
+                    "name": "playerHandResult"
                   }
                 },
                 6
@@ -2697,7 +2703,7 @@
             }
           },
           {
-            "name": "results_count",
+            "name": "resultsCount",
             "docs": [
               "How many results are valid (rest are zeroed)"
             ],
@@ -2707,7 +2713,7 @@
       }
     },
     {
-      "name": "HandState",
+      "name": "handState",
       "type": {
         "kind": "struct",
         "fields": [
@@ -2719,7 +2725,7 @@
             "type": "pubkey"
           },
           {
-            "name": "hand_number",
+            "name": "handNumber",
             "docs": [
               "Hand number (matches table.hand_number when created)"
             ],
@@ -2732,7 +2738,7 @@
             ],
             "type": {
               "defined": {
-                "name": "GamePhase"
+                "name": "gamePhase"
               }
             }
           },
@@ -2744,91 +2750,91 @@
             "type": "u64"
           },
           {
-            "name": "current_bet",
+            "name": "currentBet",
             "docs": [
               "Current bet to call"
             ],
             "type": "u64"
           },
           {
-            "name": "min_raise",
+            "name": "minRaise",
             "docs": [
               "Minimum raise amount"
             ],
             "type": "u64"
           },
           {
-            "name": "dealer_position",
+            "name": "dealerPosition",
             "docs": [
               "Dealer position for this hand"
             ],
             "type": "u8"
           },
           {
-            "name": "action_on",
+            "name": "actionOn",
             "docs": [
               "Seat index of player whose turn it is"
             ],
             "type": "u8"
           },
           {
-            "name": "community_cards",
+            "name": "communityCards",
             "docs": [
               "Community cards (card indices 0-51, 255 = not revealed)"
             ],
             "type": "bytes"
           },
           {
-            "name": "community_revealed",
+            "name": "communityRevealed",
             "docs": [
               "Number of community cards revealed (0, 3, 4, or 5)"
             ],
             "type": "u8"
           },
           {
-            "name": "active_players",
+            "name": "activePlayers",
             "docs": [
               "Bitmap of players still active in hand"
             ],
             "type": "u8"
           },
           {
-            "name": "acted_this_round",
+            "name": "actedThisRound",
             "docs": [
               "Bitmap of players who have acted this round"
             ],
             "type": "u8"
           },
           {
-            "name": "active_count",
+            "name": "activeCount",
             "docs": [
               "Number of active players"
             ],
             "type": "u8"
           },
           {
-            "name": "all_in_players",
+            "name": "allInPlayers",
             "docs": [
               "Bitmap of players who are all-in"
             ],
             "type": "u8"
           },
           {
-            "name": "last_action_time",
+            "name": "lastActionTime",
             "docs": [
               "Last action timestamp for timeout tracking (unix timestamp)"
             ],
             "type": "i64"
           },
           {
-            "name": "hand_start_time",
+            "name": "handStartTime",
             "docs": [
               "Timestamp when hand started (unix timestamp)"
             ],
             "type": "i64"
           },
           {
-            "name": "awaiting_community_reveal",
+            "name": "awaitingCommunityReveal",
             "docs": [
               "Whether we're waiting for authority to reveal community cards",
               "Set to true when betting round completes and phase needs to advance"
@@ -2846,7 +2852,7 @@
       }
     },
     {
-      "name": "PlayerHandResult",
+      "name": "playerHandResult",
       "docs": [
         "Individual player's result in a hand"
       ],
@@ -2861,39 +2867,39 @@
             "type": "pubkey"
           },
           {
-            "name": "seat_index",
+            "name": "seatIndex",
             "docs": [
               "Seat index (0-5)"
             ],
             "type": "u8"
           },
           {
-            "name": "hole_card_1",
+            "name": "holeCard1",
             "docs": [
               "Hole cards (255 = not shown / folded)"
             ],
             "type": "u8"
           },
           {
-            "name": "hole_card_2",
+            "name": "holeCard2",
             "type": "u8"
           },
           {
-            "name": "hand_rank",
+            "name": "handRank",
             "docs": [
               "Hand rank (0=HighCard, 1=Pair, ..., 9=RoyalFlush, 255=folded/not evaluated)"
             ],
             "type": "u8"
           },
           {
-            "name": "chips_won",
+            "name": "chipsWon",
             "docs": [
               "Chips won this hand (0 if lost)"
             ],
             "type": "u64"
           },
           {
-            "name": "chips_bet",
+            "name": "chipsBet",
             "docs": [
               "Total bet this hand (chips put into pot)"
             ],
@@ -2907,7 +2913,7 @@
             "type": "bool"
           },
           {
-            "name": "all_in",
+            "name": "allIn",
             "docs": [
               "Whether player was all-in"
             ],
@@ -2917,7 +2923,7 @@
       }
     },
     {
-      "name": "PlayerSeat",
+      "name": "playerSeat",
       "type": {
         "kind": "struct",
         "fields": [
@@ -2936,7 +2942,7 @@
             "type": "pubkey"
           },
           {
-            "name": "seat_index",
+            "name": "seatIndex",
             "docs": [
               "Seat index (0 to max_players-1)"
             ],
@@ -2950,35 +2956,35 @@
             "type": "u64"
           },
           {
-            "name": "current_bet",
+            "name": "currentBet",
             "docs": [
               "Amount bet in current betting round"
             ],
             "type": "u64"
           },
           {
-            "name": "total_bet_this_hand",
+            "name": "totalBetThisHand",
             "docs": [
               "Total amount invested in current hand"
             ],
             "type": "u64"
           },
           {
-            "name": "hole_card_1",
+            "name": "holeCard1",
             "docs": [
               "Encrypted hole card 1 (Inco handle)"
             ],
             "type": "u128"
           },
           {
-            "name": "hole_card_2",
+            "name": "holeCard2",
             "docs": [
               "Encrypted hole card 2 (Inco handle)"
             ],
             "type": "u128"
           },
           {
-            "name": "revealed_card_1",
+            "name": "revealedCard1",
             "docs": [
               "Revealed plaintext card 1 (0-51, or 255 if not revealed)",
               "Set via reveal_cards instruction with Ed25519 verification"
@@ -2986,14 +2992,14 @@
             "type": "u8"
           },
           {
-            "name": "revealed_card_2",
+            "name": "revealedCard2",
             "docs": [
               "Revealed plaintext card 2 (0-51, or 255 if not revealed)"
             ],
             "type": "u8"
           },
           {
-            "name": "cards_revealed",
+            "name": "cardsRevealed",
             "docs": [
               "Whether player has revealed their cards for showdown"
             ],
@@ -3006,12 +3012,12 @@
             ],
             "type": {
               "defined": {
-                "name": "PlayerStatus"
+                "name": "playerStatus"
               }
             }
           },
           {
-            "name": "has_acted",
+            "name": "hasActed",
             "docs": [
               "Has acted in current betting round"
             ],
@@ -3028,27 +3034,27 @@
       }
     },
     {
-      "name": "PlayerStatus",
+      "name": "playerStatus",
       "type": {
         "kind": "enum",
         "variants": [
           {
-            "name": "Sitting"
+            "name": "sitting"
           },
           {
-            "name": "Playing"
+            "name": "playing"
           },
           {
-            "name": "Folded"
+            "name": "folded"
           },
           {
-            "name": "AllIn"
+            "name": "allIn"
           }
         ]
       }
     },
     {
-      "name": "Table",
+      "name": "table",
       "type": {
         "kind": "struct",
         "fields": [
@@ -3060,7 +3066,7 @@
             "type": "pubkey"
           },
           {
-            "name": "table_id",
+            "name": "tableId",
             "docs": [
               "Unique table identifier"
             ],
@@ -3072,42 +3078,42 @@
             }
           },
           {
-            "name": "small_blind",
+            "name": "smallBlind",
             "docs": [
               "Small blind amount in lamports"
             ],
             "type": "u64"
           },
           {
-            "name": "big_blind",
+            "name": "bigBlind",
             "docs": [
               "Big blind amount (typically 2x small blind)"
             ],
             "type": "u64"
           },
           {
-            "name": "min_buy_in",
+            "name": "minBuyIn",
             "docs": [
               "Minimum buy-in amount"
             ],
             "type": "u64"
           },
           {
-            "name": "max_buy_in",
+            "name": "maxBuyIn",
             "docs": [
               "Maximum buy-in amount"
             ],
             "type": "u64"
           },
           {
-            "name": "max_players",
+            "name": "maxPlayers",
             "docs": [
               "Maximum players allowed (2-6)"
             ],
             "type": "u8"
           },
           {
-            "name": "current_players",
+            "name": "currentPlayers",
             "docs": [
               "Current number of seated players"
             ],
@@ -3120,61 +3126,61 @@
             ],
             "type": {
               "defined": {
-                "name": "TableStatus"
+                "name": "tableStatus"
               }
             }
           },
           {
-            "name": "hand_number",
+            "name": "handNumber",
             "docs": [
               "Current hand number (increments each hand)"
             ],
             "type": "u64"
           },
           {
-            "name": "occupied_seats",
+            "name": "occupiedSeats",
             "docs": [
               "Bitmap of occupied seats (bit i = seat i occupied)"
             ],
             "type": "u8"
           },
           {
-            "name": "dealer_position",
+            "name": "dealerPosition",
             "docs": [
               "Dealer button position (seat index)"
             ],
             "type": "u8"
           },
           {
-            "name": "last_ready_time",
+            "name": "lastReadyTime",
             "docs": [
               "Timestamp when table became ready for new hand (for timeout fallback)"
             ],
             "type": "i64"
           },
           {
-            "name": "rake_bps",
+            "name": "rakeBps",
             "docs": [
               "Rake in basis points (0 = no rake, max 1000 = 10%)"
             ],
             "type": "u16"
           },
           {
-            "name": "rake_cap",
+            "name": "rakeCap",
             "docs": [
               "Maximum rake per hand in lamports (0 = no cap)"
             ],
             "type": "u64"
           },
           {
-            "name": "accumulated_rake",
+            "name": "accumulatedRake",
             "docs": [
               "Accumulated rake available for collection by authority"
             ],
             "type": "u64"
           },
           {
-            "name": "token_mint",
+            "name": "tokenMint",
             "docs": [
               "SPL token mint for this table (e.g. USDC, wSOL)",
               "Each table is denominated in a single token — players must use this token to buy in"
@@ -3182,7 +3188,7 @@
             "type": "pubkey"
           },
           {
-            "name": "token_decimals",
+            "name": "tokenDecimals",
             "docs": [
               "Cached token decimals (e.g. 6 for USDC, 9 for SOL)",
               "Stored on-chain to avoid passing mint account for display/logging"
@@ -3200,21 +3206,21 @@
       }
     },
     {
-      "name": "TableStatus",
+      "name": "tableStatus",
       "type": {
         "kind": "enum",
         "variants": [
           {
-            "name": "Waiting"
+            "name": "waiting"
           },
           {
-            "name": "Playing"
+            "name": "playing"
           },
           {
-            "name": "Closed"
+            "name": "closed"
           }
         ]
       }
     }
   ]
-}
+};

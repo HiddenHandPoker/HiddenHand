@@ -26,6 +26,8 @@ import {
 } from "@/lib/utils";
 import { decryptCardsWithAttestation, getAllowancePDA, INCO_PROGRAM_ID } from "@/lib/inco";
 import { TransactionInstruction, Transaction } from "@solana/web3.js";
+import { getDefaultToken, getTokenByMint, TOKEN_PROGRAM_ID, type TokenInfo } from "@/lib/tokens";
+import { getAssociatedTokenAddressSync } from "@solana/spl-token";
 
 // Types matching the IDL
 export interface TableAccount {
@@ -42,6 +44,11 @@ export interface TableAccount {
   occupiedSeats: number;
   dealerPosition: number;
   lastReadyTime: BN; // Unix timestamp for start_hand timeout
+  rakeBps: number;
+  rakeCap: BN;
+  accumulatedRake: BN;
+  tokenMint: PublicKey; // SPL token mint for this table
+  tokenDecimals: number; // Cached token decimals (e.g. 6 for USDC)
   bump: number;
 }
 
@@ -198,13 +205,14 @@ export interface UsePokerGameResult {
 
 export interface CreateTableConfig {
   tableId: string;
-  smallBlind: number; // in lamports
-  bigBlind: number; // in lamports
-  minBuyIn: number; // in lamports
-  maxBuyIn: number; // in lamports
+  smallBlind: number; // in token base units
+  bigBlind: number; // in token base units
+  minBuyIn: number; // in token base units
+  maxBuyIn: number; // in token base units
   maxPlayers: number;
   rakeBps?: number; // rake in basis points (0 = no rake, max 1000 = 10%)
-  rakeCap?: number; // max rake per hand in lamports (0 = no cap)
+  rakeCap?: number; // max rake per hand in token base units (0 = no cap)
+  tokenMint?: string; // SPL token mint address (default: USDC)
 }
 
 export type ActionType =
@@ -665,6 +673,11 @@ export function usePokerGame(): UsePokerGameResult {
           throw new Error(`Table "${config.tableId}" already exists. Loading existing table instead.`);
         }
 
+        // Use the configured token mint (default: USDC for the current network)
+        const token = config.tokenMint
+          ? getTokenByMint(config.tokenMint) ?? getDefaultToken()
+          : getDefaultToken();
+
         const tx = await program.methods
           .createTable(
             Array.from(tableIdBytes),
@@ -679,7 +692,9 @@ export function usePokerGame(): UsePokerGameResult {
           .accounts({
             authority: publicKey,
             table: tablePDA,
+            mint: token.mint,
             vault: vaultPDA,
+            tokenProgram: TOKEN_PROGRAM_ID,
             systemProgram: SystemProgram.programId,
           })
           .rpc();
@@ -714,6 +729,10 @@ export function usePokerGame(): UsePokerGameResult {
         const [seatPDA] = getSeatPDA(gameState.tablePDA, seatIndex);
         const [vaultPDA] = getVaultPDA(gameState.tablePDA);
 
+        // Get table's token mint for SPL transfer
+        const tableMint = gameState.table!.tokenMint;
+        const playerTokenAccount = getAssociatedTokenAddressSync(tableMint, publicKey);
+
         // Step 1: Join the table on base layer
         const tx = await program.methods
           .joinTable(seatIndex, new BN(buyInLamports))
@@ -721,7 +740,10 @@ export function usePokerGame(): UsePokerGameResult {
             player: publicKey,
             table: gameState.tablePDA,
             playerSeat: seatPDA,
+            playerTokenAccount,
             vault: vaultPDA,
+            mint: tableMint,
+            tokenProgram: TOKEN_PROGRAM_ID,
             systemProgram: SystemProgram.programId,
           })
           .rpc();
@@ -759,13 +781,20 @@ export function usePokerGame(): UsePokerGameResult {
       const [seatPDA] = getSeatPDA(gameState.tablePDA, gameState.currentPlayerSeat);
       const [vaultPDA] = getVaultPDA(gameState.tablePDA);
 
+      // Get table's token mint for SPL transfer
+      const tableMint = gameState.table!.tokenMint;
+      const playerTokenAccount = getAssociatedTokenAddressSync(tableMint, publicKey);
+
       const tx = await program.methods
         .leaveTable()
         .accounts({
           player: publicKey,
           table: gameState.tablePDA,
           playerSeat: seatPDA,
+          playerTokenAccount,
           vault: vaultPDA,
+          mint: tableMint,
+          tokenProgram: TOKEN_PROGRAM_ID,
           systemProgram: SystemProgram.programId,
         })
         .rpc();
@@ -1942,16 +1971,21 @@ export function usePokerGame(): UsePokerGameResult {
 
     try {
       const [vaultPDA] = getVaultPDA(gameState.tablePDA);
+      const tableMint = gameState.table.tokenMint;
 
-      // Build remaining accounts: [seat, wallet, seat, wallet, ...]
+      // Build remaining accounts: [seat, player_token_account, seat, player_token_account, ...]
       const remainingAccounts: { pubkey: PublicKey; isSigner: boolean; isWritable: boolean }[] = [];
 
       for (const player of gameState.players) {
         if (player.status !== "empty" && player.player) {
           const [seatPDA] = getSeatPDA(gameState.tablePDA, player.seatIndex);
+          const playerTokenAccount = getAssociatedTokenAddressSync(
+            tableMint,
+            new PublicKey(player.player),
+          );
           remainingAccounts.push(
             { pubkey: seatPDA, isSigner: false, isWritable: true },
-            { pubkey: new PublicKey(player.player), isSigner: false, isWritable: true }
+            { pubkey: playerTokenAccount, isSigner: false, isWritable: true }
           );
         }
       }
@@ -1964,6 +1998,8 @@ export function usePokerGame(): UsePokerGameResult {
           caller: publicKey,
           table: gameState.tablePDA,
           vault: vaultPDA,
+          mint: tableMint,
+          tokenProgram: TOKEN_PROGRAM_ID,
           systemProgram: SystemProgram.programId,
         })
         .remainingAccounts(remainingAccounts)
@@ -2098,7 +2134,6 @@ export function usePokerGame(): UsePokerGameResult {
           caller: publicKey,
           table: gameState.tablePDA,
           handState: handPDA,
-          vault: vaultPDA,
         })
         .remainingAccounts(remainingAccounts)
         .rpc();

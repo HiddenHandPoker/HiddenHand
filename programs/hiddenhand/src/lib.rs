@@ -167,7 +167,9 @@ pub mod hiddenhand {
     /// Can be called by anyone after 1 hour of inactivity
     /// Table must be in Waiting status (not mid-hand)
     /// All seated players receive their chips back
-    pub fn close_inactive_table(ctx: Context<CloseInactiveTable>) -> Result<()> {
+    pub fn close_inactive_table<'info>(
+        ctx: Context<'_, '_, 'info, 'info, CloseInactiveTable<'info>>,
+    ) -> Result<()> {
         instructions::close_inactive_table::handler(ctx)
     }
 
@@ -273,8 +275,8 @@ mod unit_tests {
         // 8 (big_blind) + 8 (min_buy_in) + 8 (max_buy_in) + 1 (max_players) +
         // 1 (current_players) + 1 (status) + 8 (hand_number) + 1 (occupied_seats) +
         // 1 (dealer_position) + 8 (last_ready_time) + 2 (rake_bps) + 8 (rake_cap) +
-        // 8 (accumulated_rake) + 1 (bump)
-        let expected_size = 8 + 32 + 32 + 8 + 8 + 8 + 8 + 1 + 1 + 1 + 8 + 1 + 1 + 8 + 2 + 8 + 8 + 1;
+        // 8 (accumulated_rake) + 32 (token_mint) + 1 (token_decimals) + 1 (bump)
+        let expected_size = 8 + 32 + 32 + 8 + 8 + 8 + 8 + 1 + 1 + 1 + 8 + 1 + 1 + 8 + 2 + 8 + 8 + 32 + 1 + 1;
         assert_eq!(Table::SIZE, expected_size, "Table size mismatch");
     }
 

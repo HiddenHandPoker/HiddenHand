@@ -27,6 +27,8 @@ export interface LobbyTable {
   rakeBps: number;
   rakeCap: number;
   lastReadyTime: number;
+  tokenMint: string; // SPL token mint address
+  tokenDecimals: number; // Token decimal places
 }
 
 export type LobbyFilter = "all" | "waiting" | "playing";
@@ -129,6 +131,8 @@ export function useLobby(): UseLobbyResult {
             rakeBps: account.rakeBps,
             rakeCap: account.rakeCap.toNumber(),
             lastReadyTime: account.lastReadyTime.toNumber(),
+            tokenMint: account.tokenMint.toBase58(),
+            tokenDecimals: account.tokenDecimals,
           } satisfies LobbyTable;
         })
         // Filter out closed tables and tables with non-printable names

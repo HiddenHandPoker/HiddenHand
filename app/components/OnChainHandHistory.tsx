@@ -1,7 +1,7 @@
 "use client";
 
 import { HandHistoryEntry, formatCard, getSuitColor } from "@/hooks/useHandHistory";
-import { lamportsToSol } from "@/lib/utils";
+import { getDefaultToken, baseUnitsToDisplay } from "@/lib/tokens";
 import { SECONDS_PER_MINUTE, SECONDS_PER_HOUR, SECONDS_PER_DAY } from "@/lib/constants";
 import { NETWORK } from "@/contexts/WalletProvider";
 import { Tooltip, InfoIcon } from "@/components/Tooltip";
@@ -98,7 +98,7 @@ export function OnChainHandHistory({
 
             {/* Pot */}
             <div className="text-xs text-[var(--text-secondary)] mb-2">
-              Pot: <span className="text-[var(--gold)]">{lamportsToSol(hand.totalPot).toFixed(2)} SOL</span>
+              Pot: <span className="text-[var(--gold)]">{baseUnitsToDisplay(hand.totalPot, getDefaultToken()).toFixed(2)} {getDefaultToken().symbol}</span>
             </div>
 
             {/* Player Results */}

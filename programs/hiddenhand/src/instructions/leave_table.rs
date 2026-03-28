@@ -1,5 +1,5 @@
 use anchor_lang::prelude::*;
-use anchor_lang::system_program;
+use anchor_spl::token_interface::{self, Mint, TokenAccount, TokenInterface, TransferChecked};
 
 use crate::constants::*;
 use crate::error::HiddenHandError;
@@ -26,22 +26,41 @@ pub struct LeaveTable<'info> {
     )]
     pub player_seat: Account<'info, PlayerSeat>,
 
-    /// Vault to withdraw from (SystemAccount validates System Program ownership)
+    /// Player's token account to receive chips
     #[account(
         mut,
+        token::mint = mint,
+        token::authority = player,
+        token::token_program = token_program,
+    )]
+    pub player_token_account: InterfaceAccount<'info, TokenAccount>,
+
+    /// Table's token vault
+    #[account(
+        mut,
+        token::mint = mint,
+        token::authority = table,
+        token::token_program = token_program,
         seeds = [VAULT_SEED, table.key().as_ref()],
         bump
     )]
-    pub vault: SystemAccount<'info>,
+    pub vault: InterfaceAccount<'info, TokenAccount>,
 
+    /// Token mint — must match the table's configured mint
+    #[account(
+        constraint = mint.key() == table.token_mint @ HiddenHandError::InvalidTokenMint
+    )]
+    pub mint: InterfaceAccount<'info, Mint>,
+
+    pub token_program: Interface<'info, TokenInterface>,
     pub system_program: Program<'info, System>,
 }
 
 pub fn handler(ctx: Context<LeaveTable>) -> Result<()> {
-    let table = &mut ctx.accounts.table;
+    // Read-only checks first (immutable borrow)
+    let table = &ctx.accounts.table;
     let player_seat = &ctx.accounts.player_seat;
 
-    // Cannot leave during active hand UNLESS player has 0 chips (not participating)
     require!(
         table.status != TableStatus::Playing || player_seat.chips == 0,
         HiddenHandError::CannotLeaveDuringHand
@@ -49,35 +68,39 @@ pub fn handler(ctx: Context<LeaveTable>) -> Result<()> {
 
     let chips_to_return = player_seat.chips;
     let seat_index = player_seat.seat_index;
-    let table_key = table.key();
+    let table_id = table.table_id;
+    let table_bump = table.bump;
+    let mint_decimals = ctx.accounts.mint.decimals;
 
-    // Transfer chips back to player from vault using CPI with PDA signer
+    // Transfer chips back to player from vault using table PDA as signer
     if chips_to_return > 0 {
-        let vault_bump = ctx.bumps.vault;
-        let vault_seeds: &[&[u8]] = &[
-            VAULT_SEED,
-            table_key.as_ref(),
-            &[vault_bump],
+        let signer_seeds: &[&[u8]] = &[
+            TABLE_SEED,
+            table_id.as_ref(),
+            &[table_bump],
         ];
 
-        system_program::transfer(
+        token_interface::transfer_checked(
             CpiContext::new_with_signer(
-                ctx.accounts.system_program.to_account_info(),
-                system_program::Transfer {
+                ctx.accounts.token_program.to_account_info(),
+                TransferChecked {
                     from: ctx.accounts.vault.to_account_info(),
-                    to: ctx.accounts.player.to_account_info(),
+                    mint: ctx.accounts.mint.to_account_info(),
+                    to: ctx.accounts.player_token_account.to_account_info(),
+                    authority: ctx.accounts.table.to_account_info(),
                 },
-                &[vault_seeds],
+                &[signer_seeds],
             ),
             chips_to_return,
+            mint_decimals,
         )?;
     }
 
-    // Update table
-    table.vacate_seat(seat_index);
+    // Now mutate table state (separate borrow scope)
+    ctx.accounts.table.vacate_seat(seat_index);
 
     msg!(
-        "Player {} left table, returned {} chips",
+        "Player {} left table, returned {} tokens",
         ctx.accounts.player.key(),
         chips_to_return
     );

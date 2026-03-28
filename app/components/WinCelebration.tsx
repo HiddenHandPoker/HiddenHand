@@ -1,11 +1,13 @@
 "use client";
 
 import { FC, useEffect, useState, useCallback } from "react";
+import { type TokenInfo, getDefaultToken, baseUnitsToDisplay } from "@/lib/tokens";
 
 interface WinCelebrationProps {
   isActive: boolean;
-  winAmount?: number; // In lamports
+  winAmount?: number; // In base units
   onComplete?: () => void;
+  token?: TokenInfo;
 }
 
 interface Particle {
@@ -113,7 +115,7 @@ export const WinCelebration: FC<WinCelebrationProps> = ({
 
   if (!isActive && particles.length === 0) return null;
 
-  const winInSol = winAmount ? (winAmount / 1e9).toFixed(2) : null;
+  const winDisplay = winAmount ? baseUnitsToDisplay(winAmount, getDefaultToken()).toFixed(2) : null;
 
   return (
     <div className="fixed inset-0 pointer-events-none z-50 overflow-hidden">
@@ -216,10 +218,10 @@ export const WinCelebration: FC<WinCelebrationProps> = ({
               YOU WIN!
             </h2>
 
-            {winInSol && (
+            {winDisplay && (
               <div className="flex items-center justify-center gap-2 text-[var(--text-primary)]">
                 <span className="text-2xl font-bold text-[var(--gold-light)]">
-                  +{winInSol}
+                  +{winDisplay}
                 </span>
                 <span className="text-lg text-[var(--text-secondary)]">SOL</span>
               </div>

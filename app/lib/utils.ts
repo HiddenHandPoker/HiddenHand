@@ -16,6 +16,7 @@ export function solToLamports(sol: number): number {
 
 /**
  * Format SOL amount for display (e.g., "1.5 SOL")
+ * @deprecated Use formatTokenAmount from tokens.ts instead
  */
 export function formatSol(lamports: number | bigint, decimals: number = 2): string {
   return `${lamportsToSol(lamports).toFixed(decimals)} SOL`;
@@ -205,6 +206,7 @@ export function parseAnchorError(error: unknown, context?: {
     "Overflow": "Transaction calculation error.",
     "DuplicateAccount": "Duplicate account error.",
     "InvalidRemainingAccounts": "Invalid accounts provided.",
+    "InvalidTokenMint": "Token mint does not match the table's token. Check your wallet has the correct token.",
   };
 
   // Try to extract error code from message

@@ -3,7 +3,8 @@
 import { FC } from "react";
 import Link from "next/link";
 import { type LobbyTable } from "@/hooks/useLobby";
-import { lamportsToSol } from "@/lib/utils";
+import { getTokenByMint, getDefaultToken, baseUnitsToDisplay } from "@/lib/tokens";
+import { PublicKey } from "@solana/web3.js";
 
 interface TableCardProps {
   table: LobbyTable;
@@ -11,18 +12,24 @@ interface TableCardProps {
 }
 
 /**
- * Format a SOL amount for display, trimming unnecessary trailing zeros.
+ * Format a token amount for display, trimming unnecessary trailing zeros.
  * e.g. 0.01 -> "0.01", 1.0 -> "1", 0.001 -> "0.001"
  */
-function formatSolDisplay(lamports: number): string {
-  const sol = lamportsToSol(lamports);
-  // Use up to 4 decimal places, then strip trailing zeros
-  return parseFloat(sol.toFixed(4)).toString();
+function formatDisplay(baseUnits: number, decimals: number): string {
+  const amount = baseUnits / Math.pow(10, decimals);
+  return parseFloat(amount.toFixed(4)).toString();
 }
 
 export const TableCard: FC<TableCardProps> = ({ table, isOwnTable }) => {
   const isWaiting = table.status === "Waiting";
   const fillPercent = (table.currentPlayers / table.maxPlayers) * 100;
+
+  // Resolve the table's token info
+  const tokenMintStr = (table as { tokenMint?: string }).tokenMint;
+  const token = tokenMintStr
+    ? getTokenByMint(tokenMintStr) ?? getDefaultToken()
+    : getDefaultToken();
+  const fmt = (baseUnits: number) => formatDisplay(baseUnits, token.decimals);
 
   return (
     <Link
@@ -98,11 +105,8 @@ export const TableCard: FC<TableCardProps> = ({ table, isOwnTable }) => {
                 Stakes
               </span>
               <span className="text-sm font-semibold text-[var(--text-primary)]">
-                {formatSolDisplay(table.smallBlind)} /{" "}
-                {formatSolDisplay(table.bigBlind)}{" "}
-                <span className="text-[var(--text-muted)] font-normal">
-                  SOL
-                </span>
+                ${fmt(table.smallBlind)} /{" "}
+                ${fmt(table.bigBlind)}
               </span>
             </div>
             <div>
@@ -110,11 +114,8 @@ export const TableCard: FC<TableCardProps> = ({ table, isOwnTable }) => {
                 Buy-in
               </span>
               <span className="text-sm font-semibold text-[var(--text-primary)]">
-                {formatSolDisplay(table.minBuyIn)} -{" "}
-                {formatSolDisplay(table.maxBuyIn)}{" "}
-                <span className="text-[var(--text-muted)] font-normal">
-                  SOL
-                </span>
+                ${fmt(table.minBuyIn)} -{" "}
+                ${fmt(table.maxBuyIn)}
               </span>
             </div>
           </div>

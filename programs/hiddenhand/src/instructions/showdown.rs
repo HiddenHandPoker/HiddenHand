@@ -120,14 +120,6 @@ pub struct Showdown<'info> {
         bump = hand_state.bump
     )]
     pub hand_state: Account<'info, HandState>,
-
-    /// Vault holding player chips
-    #[account(
-        mut,
-        seeds = [VAULT_SEED, table.key().as_ref()],
-        bump
-    )]
-    pub vault: SystemAccount<'info>,
 }
 
 pub fn handler(ctx: Context<Showdown>) -> Result<()> {

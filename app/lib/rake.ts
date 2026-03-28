@@ -1,4 +1,4 @@
-import { solToLamports } from "./utils";
+import { displayToBaseUnits, formatTokenAmount, getDefaultToken, type TokenInfo } from "./tokens";
 
 /**
  * Platform rake schedule — automatically applied based on blind level.
@@ -7,47 +7,51 @@ import { solToLamports } from "./utils";
  * Structure mirrors industry standard:
  * - Lower stakes = higher % but lower cap
  * - Higher stakes = lower % but higher cap
+ *
+ * All amounts are in USDC base units (6 decimals, 1 USDC = 1_000_000).
  */
 interface RakeTier {
-  /** Maximum big blind (in lamports) for this tier. Infinity for the last tier. */
+  /** Maximum big blind (in base units) for this tier. Infinity for the last tier. */
   maxBigBlind: number;
   /** Rake in basis points (e.g., 500 = 5%) */
   rakeBps: number;
-  /** Maximum rake per hand in lamports (0 = no cap) */
+  /** Maximum rake per hand in base units (0 = no cap) */
   rakeCap: number;
   /** Human-readable label */
   label: string;
 }
 
+const USDC = getDefaultToken();
+
 const RAKE_SCHEDULE: RakeTier[] = [
   {
-    maxBigBlind: solToLamports(0.05),   // Micro stakes: up to 0.025/0.05 SOL
-    rakeBps: 500,                        // 5%
-    rakeCap: solToLamports(0.5),         // Capped at 0.5 SOL
+    maxBigBlind: displayToBaseUnits(0.10, USDC),   // Micro stakes: up to $0.05/$0.10
+    rakeBps: 500,                                    // 5%
+    rakeCap: displayToBaseUnits(1, USDC),            // Capped at $1
     label: "Micro",
   },
   {
-    maxBigBlind: solToLamports(0.5),    // Low stakes: up to 0.25/0.5 SOL
-    rakeBps: 450,                        // 4.5%
-    rakeCap: solToLamports(1),           // Capped at 1 SOL
+    maxBigBlind: displayToBaseUnits(1, USDC),       // Low stakes: up to $0.50/$1
+    rakeBps: 450,                                    // 4.5%
+    rakeCap: displayToBaseUnits(2, USDC),            // Capped at $2
     label: "Low",
   },
   {
-    maxBigBlind: solToLamports(2),      // Medium stakes: up to 1/2 SOL
-    rakeBps: 400,                        // 4%
-    rakeCap: solToLamports(2),           // Capped at 2 SOL
+    maxBigBlind: displayToBaseUnits(5, USDC),       // Medium stakes: up to $2.50/$5
+    rakeBps: 400,                                    // 4%
+    rakeCap: displayToBaseUnits(5, USDC),            // Capped at $5
     label: "Medium",
   },
   {
-    maxBigBlind: solToLamports(10),     // High stakes: up to 5/10 SOL
-    rakeBps: 300,                        // 3%
-    rakeCap: solToLamports(5),           // Capped at 5 SOL
+    maxBigBlind: displayToBaseUnits(25, USDC),      // High stakes: up to $12.50/$25
+    rakeBps: 300,                                    // 3%
+    rakeCap: displayToBaseUnits(15, USDC),           // Capped at $15
     label: "High",
   },
   {
-    maxBigBlind: Infinity,              // Nosebleed: 10+ SOL
-    rakeBps: 250,                        // 2.5%
-    rakeCap: solToLamports(10),          // Capped at 10 SOL
+    maxBigBlind: Infinity,                           // Nosebleed: $25+
+    rakeBps: 250,                                    // 2.5%
+    rakeCap: displayToBaseUnits(25, USDC),           // Capped at $25
     label: "Nosebleed",
   },
 ];
@@ -55,9 +59,9 @@ const RAKE_SCHEDULE: RakeTier[] = [
 /**
  * Get the rake tier for a given big blind amount.
  */
-export function getRakeTier(bigBlindLamports: number): RakeTier {
+export function getRakeTier(bigBlindBaseUnits: number): RakeTier {
   for (const tier of RAKE_SCHEDULE) {
-    if (bigBlindLamports <= tier.maxBigBlind) {
+    if (bigBlindBaseUnits <= tier.maxBigBlind) {
       return tier;
     }
   }
@@ -69,11 +73,11 @@ export function getRakeTier(bigBlindLamports: number): RakeTier {
  * Used when creating a table — the frontend automatically
  * sets the rake based on stake level.
  */
-export function getRakeForBlinds(bigBlindLamports: number): {
+export function getRakeForBlinds(bigBlindBaseUnits: number): {
   rakeBps: number;
   rakeCap: number;
 } {
-  const tier = getRakeTier(bigBlindLamports);
+  const tier = getRakeTier(bigBlindBaseUnits);
   return {
     rakeBps: tier.rakeBps,
     rakeCap: tier.rakeCap,
@@ -83,13 +87,13 @@ export function getRakeForBlinds(bigBlindLamports: number): {
 /**
  * Format rake info for display.
  */
-export function formatRakeInfo(rakeBps: number, rakeCapLamports: number): string {
+export function formatRakeInfo(rakeBps: number, rakeCapBaseUnits: number, token?: TokenInfo): string {
+  const t = token ?? USDC;
   const pct = (rakeBps / 100).toFixed(1).replace(/\.0$/, "");
-  if (rakeCapLamports === 0) {
+  if (rakeCapBaseUnits === 0) {
     return `${pct}%`;
   }
-  const cap = (rakeCapLamports / 1_000_000_000).toFixed(2).replace(/\.?0+$/, "");
-  return `${pct}% (${cap} SOL cap)`;
+  return `${pct}% (${formatTokenAmount(rakeCapBaseUnits, t)} cap)`;
 }
 
 /**

@@ -1,4 +1,5 @@
 use anchor_lang::prelude::*;
+use anchor_spl::token_interface::{Mint, TokenAccount, TokenInterface};
 
 use crate::constants::*;
 use crate::error::HiddenHandError;
@@ -19,14 +20,22 @@ pub struct CreateTable<'info> {
     )]
     pub table: Account<'info, Table>,
 
-    /// Vault to hold player buy-ins
+    /// SPL token mint for this table (e.g. USDC)
+    pub mint: InterfaceAccount<'info, Mint>,
+
+    /// Token vault to hold player buy-ins — PDA owned by the table
     #[account(
+        init,
+        payer = authority,
+        token::mint = mint,
+        token::authority = table,
+        token::token_program = token_program,
         seeds = [VAULT_SEED, table.key().as_ref()],
         bump
     )]
-    /// CHECK: This is a PDA used as a vault, validated by seeds
-    pub vault: UncheckedAccount<'info>,
+    pub vault: InterfaceAccount<'info, TokenAccount>,
 
+    pub token_program: Interface<'info, TokenInterface>,
     pub system_program: Program<'info, System>,
 }
 
@@ -68,6 +77,7 @@ pub fn handler(
 
     let table = &mut ctx.accounts.table;
     let clock = Clock::get()?;
+    let mint = &ctx.accounts.mint;
 
     table.authority = ctx.accounts.authority.key();
     table.table_id = table_id;
@@ -85,9 +95,14 @@ pub fn handler(
     table.rake_bps = rake_bps;
     table.rake_cap = rake_cap;
     table.accumulated_rake = 0;
+    table.token_mint = mint.key();
+    table.token_decimals = mint.decimals;
     table.bump = ctx.bumps.table;
 
-    msg!("Table created: {:?} (rake: {} bps, cap: {})", table_id, rake_bps, rake_cap);
+    msg!(
+        "Table created: {:?} (mint: {}, decimals: {}, rake: {} bps, cap: {})",
+        table_id, mint.key(), mint.decimals, rake_bps, rake_cap
+    );
 
     Ok(())
 }

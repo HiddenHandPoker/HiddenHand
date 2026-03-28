@@ -5,6 +5,7 @@ import { PlayerSeat } from "./PlayerSeat";
 import { CardHand } from "./Card";
 import { ProvablyFairBadge } from "./ProvablyFairBadge";
 import { ChipAnimationLayer } from "./ChipAnimation";
+import { type TokenInfo, getDefaultToken, baseUnitsToDisplay } from "@/lib/tokens";
 
 interface Player {
   seatIndex: number;
@@ -37,6 +38,8 @@ interface PokerTableProps {
   // Win celebration
   showWinCelebration?: boolean;
   winAmount?: number;
+  // Token info for display
+  token?: TokenInfo;
 }
 
 // Seat positions around the table (for 6-max)
@@ -68,7 +71,9 @@ export const PokerTable: FC<PokerTableProps> = ({
   chipWinTrigger = null,
   showWinCelebration = false,
   winAmount,
+  token = getDefaultToken(),
 }) => {
+  const fmt = (baseUnits: number) => baseUnitsToDisplay(baseUnits, token).toFixed(2);
   // Calculate SB and BB positions
   const occupiedSeats = players
     .filter((p) => p.status !== "empty")
@@ -180,9 +185,9 @@ export const PokerTable: FC<PokerTableProps> = ({
                 Pot
               </span>
               <span className="text-gold-gradient font-display text-3xl font-bold">
-                {(pot / 1e9).toFixed(2)}
+                {fmt(pot)}
               </span>
-              <span className="text-[var(--gold-light)] text-lg font-semibold">SOL</span>
+              <span className="text-[var(--gold-light)] text-lg font-semibold">{token.symbol}</span>
             </div>
           </div>
 
@@ -250,7 +255,7 @@ export const PokerTable: FC<PokerTableProps> = ({
           <div className="mt-3 glass-dark inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-xs">
             <span className="uppercase tracking-wider text-[var(--text-secondary)]">Blinds</span>
             <span className="text-[var(--text-primary)] font-medium">
-              {(smallBlind / 1e9).toFixed(2)} / {(bigBlind / 1e9).toFixed(2)} SOL
+              ${fmt(smallBlind)} / ${fmt(bigBlind)}
             </span>
           </div>
         </div>
@@ -283,6 +288,7 @@ export const PokerTable: FC<PokerTableProps> = ({
               status={player?.status ?? "empty"}
               isCurrentPlayer={isCurrentPlayer}
               isShowdownPhase={isShowdownPhase}
+              token={token}
             />
           </div>
         );
@@ -353,9 +359,9 @@ export const PokerTable: FC<PokerTableProps> = ({
               {winAmount && winAmount > 0 && (
                 <div className="flex items-center justify-center gap-2 text-[var(--text-primary)]">
                   <span className="text-xl font-bold text-[var(--gold-light)]">
-                    +{(winAmount / 1e9).toFixed(2)}
+                    +{fmt(winAmount)}
                   </span>
-                  <span className="text-sm text-[var(--text-secondary)]">SOL</span>
+                  <span className="text-sm text-[var(--text-secondary)]">{token.symbol}</span>
                 </div>
               )}
             </div>

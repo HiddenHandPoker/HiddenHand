@@ -1,21 +1,25 @@
 "use client";
 
 import { FC, useState, useEffect, useCallback, useRef, useMemo } from "react";
-import { solToLamports } from "@/lib/utils";
+import { displayToBaseUnits } from "@/lib/tokens";
+import { getDefaultToken } from "@/lib/tokens";
 import { getRakeForBlinds, formatRakeInfo } from "@/lib/rake";
+
+const DEFAULT_TOKEN = getDefaultToken();
 
 interface CreateTableModalProps {
   isOpen: boolean;
   onClose: () => void;
   onCreateTable: (config: {
     tableId: string;
-    smallBlind: number; // lamports
-    bigBlind: number; // lamports
-    minBuyIn: number; // lamports
-    maxBuyIn: number; // lamports
+    smallBlind: number; // base units
+    bigBlind: number; // base units
+    minBuyIn: number; // base units
+    maxBuyIn: number; // base units
     maxPlayers: number;
     rakeBps: number;
-    rakeCap: number; // lamports
+    rakeCap: number; // base units
+    tokenMint?: string;
   }) => Promise<void>;
   loading?: boolean;
 }
@@ -35,17 +39,17 @@ export const CreateTableModal: FC<CreateTableModalProps> = ({
 }) => {
   const dialogRef = useRef<HTMLDivElement>(null);
 
-  // Form state (SOL values)
+  // Form state (display values in whole tokens, e.g. USDC dollars)
   const [tableName, setTableName] = useState("");
-  const [smallBlind, setSmallBlind] = useState(0.01);
-  const [bigBlind, setBigBlind] = useState(0.02);
-  const [minBuyIn, setMinBuyIn] = useState(0.5);
-  const [maxBuyIn, setMaxBuyIn] = useState(5);
+  const [smallBlind, setSmallBlind] = useState(0.25);
+  const [bigBlind, setBigBlind] = useState(0.50);
+  const [minBuyIn, setMinBuyIn] = useState(10);
+  const [maxBuyIn, setMaxBuyIn] = useState(100);
   const [maxPlayers, setMaxPlayers] = useState(6);
 
   // Auto-calculated rake based on blind level
   const rake = useMemo(
-    () => getRakeForBlinds(solToLamports(bigBlind)),
+    () => getRakeForBlinds(displayToBaseUnits(bigBlind, DEFAULT_TOKEN)),
     [bigBlind]
   );
 
@@ -84,9 +88,9 @@ export const CreateTableModal: FC<CreateTableModalProps> = ({
       errs.buyIn = "Min buy-in must be <= max buy-in";
     }
     if (minBuyIn < 10 * bigBlind) {
-      errs.minBuyInFloor = `Min buy-in must be >= ${(10 * bigBlind).toFixed(
-        4
-      ).replace(/\.?0+$/, "")} SOL (10x big blind)`;
+      errs.minBuyInFloor = `Min buy-in must be >= $${(10 * bigBlind).toFixed(
+        2
+      ).replace(/\.?0+$/, "")} (10x big blind)`;
     }
 
     return errs;
@@ -99,13 +103,14 @@ export const CreateTableModal: FC<CreateTableModalProps> = ({
 
     await onCreateTable({
       tableId: tableName.trim(),
-      smallBlind: solToLamports(smallBlind),
-      bigBlind: solToLamports(bigBlind),
-      minBuyIn: solToLamports(minBuyIn),
-      maxBuyIn: solToLamports(maxBuyIn),
+      smallBlind: displayToBaseUnits(smallBlind, DEFAULT_TOKEN),
+      bigBlind: displayToBaseUnits(bigBlind, DEFAULT_TOKEN),
+      minBuyIn: displayToBaseUnits(minBuyIn, DEFAULT_TOKEN),
+      maxBuyIn: displayToBaseUnits(maxBuyIn, DEFAULT_TOKEN),
       maxPlayers,
       rakeBps: rake.rakeBps,
       rakeCap: rake.rakeCap,
+      tokenMint: DEFAULT_TOKEN.mint.toBase58(),
     });
   };
 
@@ -155,6 +160,17 @@ export const CreateTableModal: FC<CreateTableModalProps> = ({
           </div>
 
           <div className="space-y-5">
+            {/* Token indicator */}
+            <div className="bg-[var(--bg-dark)] rounded-xl border border-white/5 p-4 flex items-center gap-3">
+              <div className="w-8 h-8 rounded-full bg-[#2775CA] flex items-center justify-center text-white text-xs font-bold">
+                $
+              </div>
+              <div>
+                <span className="text-[var(--text-primary)] font-semibold">USDC</span>
+                <span className="text-[var(--text-muted)] text-sm ml-2">USD Coin</span>
+              </div>
+            </div>
+
             {/* Table Name */}
             <div>
               <label className="block text-[var(--text-muted)] text-sm uppercase tracking-wider mb-2">
@@ -181,17 +197,17 @@ export const CreateTableModal: FC<CreateTableModalProps> = ({
                   Small Blind
                 </label>
                 <div className="relative">
+                  <span className="absolute left-4 top-1/2 -translate-y-1/2 text-[var(--text-muted)] text-sm">
+                    $
+                  </span>
                   <input
                     type="number"
                     value={smallBlind}
                     onChange={(e) => setSmallBlind(Number(e.target.value))}
-                    step={0.001}
-                    min={0.001}
-                    className={inputClass}
+                    step={0.01}
+                    min={0.01}
+                    className={`${inputClass} pl-8`}
                   />
-                  <span className="absolute right-4 top-1/2 -translate-y-1/2 text-[var(--text-muted)] text-sm">
-                    SOL
-                  </span>
                 </div>
               </div>
               <div>
@@ -199,17 +215,17 @@ export const CreateTableModal: FC<CreateTableModalProps> = ({
                   Big Blind
                 </label>
                 <div className="relative">
+                  <span className="absolute left-4 top-1/2 -translate-y-1/2 text-[var(--text-muted)] text-sm">
+                    $
+                  </span>
                   <input
                     type="number"
                     value={bigBlind}
                     onChange={(e) => setBigBlind(Number(e.target.value))}
-                    step={0.001}
-                    min={0.001}
-                    className={inputClass}
+                    step={0.01}
+                    min={0.01}
+                    className={`${inputClass} pl-8`}
                   />
-                  <span className="absolute right-4 top-1/2 -translate-y-1/2 text-[var(--text-muted)] text-sm">
-                    SOL
-                  </span>
                 </div>
               </div>
             </div>
@@ -226,17 +242,17 @@ export const CreateTableModal: FC<CreateTableModalProps> = ({
                   Min Buy-in
                 </label>
                 <div className="relative">
+                  <span className="absolute left-4 top-1/2 -translate-y-1/2 text-[var(--text-muted)] text-sm">
+                    $
+                  </span>
                   <input
                     type="number"
                     value={minBuyIn}
                     onChange={(e) => setMinBuyIn(Number(e.target.value))}
-                    step={0.1}
-                    min={0.1}
-                    className={inputClass}
+                    step={1}
+                    min={1}
+                    className={`${inputClass} pl-8`}
                   />
-                  <span className="absolute right-4 top-1/2 -translate-y-1/2 text-[var(--text-muted)] text-sm">
-                    SOL
-                  </span>
                 </div>
               </div>
               <div>
@@ -244,17 +260,17 @@ export const CreateTableModal: FC<CreateTableModalProps> = ({
                   Max Buy-in
                 </label>
                 <div className="relative">
+                  <span className="absolute left-4 top-1/2 -translate-y-1/2 text-[var(--text-muted)] text-sm">
+                    $
+                  </span>
                   <input
                     type="number"
                     value={maxBuyIn}
                     onChange={(e) => setMaxBuyIn(Number(e.target.value))}
-                    step={0.1}
-                    min={0.1}
-                    className={inputClass}
+                    step={1}
+                    min={1}
+                    className={`${inputClass} pl-8`}
                   />
-                  <span className="absolute right-4 top-1/2 -translate-y-1/2 text-[var(--text-muted)] text-sm">
-                    SOL
-                  </span>
                 </div>
               </div>
             </div>

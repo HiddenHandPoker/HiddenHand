@@ -1,5 +1,5 @@
 use anchor_lang::prelude::*;
-use anchor_lang::system_program;
+use anchor_spl::token_interface::{self, Mint, TokenAccount, TokenInterface, TransferChecked};
 
 use crate::constants::*;
 use crate::error::HiddenHandError;
@@ -27,14 +27,33 @@ pub struct JoinTable<'info> {
     )]
     pub player_seat: Account<'info, PlayerSeat>,
 
-    /// Vault to receive buy-in (SystemAccount validates System Program ownership)
+    /// Player's token account (source of buy-in funds)
     #[account(
         mut,
+        token::mint = mint,
+        token::authority = player,
+        token::token_program = token_program,
+    )]
+    pub player_token_account: InterfaceAccount<'info, TokenAccount>,
+
+    /// Table's token vault (destination for buy-in)
+    #[account(
+        mut,
+        token::mint = mint,
+        token::authority = table,
+        token::token_program = token_program,
         seeds = [VAULT_SEED, table.key().as_ref()],
         bump
     )]
-    pub vault: SystemAccount<'info>,
+    pub vault: InterfaceAccount<'info, TokenAccount>,
 
+    /// Token mint — must match the table's configured mint
+    #[account(
+        constraint = mint.key() == table.token_mint @ HiddenHandError::InvalidTokenMint
+    )]
+    pub mint: InterfaceAccount<'info, Mint>,
+
+    pub token_program: Interface<'info, TokenInterface>,
     pub system_program: Program<'info, System>,
 }
 
@@ -68,16 +87,19 @@ pub fn handler(ctx: Context<JoinTable>, seat_index: u8, buy_in: u64) -> Result<(
         HiddenHandError::InvalidBuyIn
     );
 
-    // Transfer buy-in to vault
-    system_program::transfer(
+    // Transfer buy-in tokens to vault
+    token_interface::transfer_checked(
         CpiContext::new(
-            ctx.accounts.system_program.to_account_info(),
-            system_program::Transfer {
-                from: ctx.accounts.player.to_account_info(),
+            ctx.accounts.token_program.to_account_info(),
+            TransferChecked {
+                from: ctx.accounts.player_token_account.to_account_info(),
+                mint: ctx.accounts.mint.to_account_info(),
                 to: ctx.accounts.vault.to_account_info(),
+                authority: ctx.accounts.player.to_account_info(),
             },
         ),
         buy_in,
+        ctx.accounts.mint.decimals,
     )?;
 
     // Update table
@@ -98,7 +120,7 @@ pub fn handler(ctx: Context<JoinTable>, seat_index: u8, buy_in: u64) -> Result<(
     player_seat.bump = ctx.bumps.player_seat;
 
     msg!(
-        "Player {} joined table at seat {} with {} chips",
+        "Player {} joined table at seat {} with {} tokens",
         ctx.accounts.player.key(),
         seat_index,
         buy_in
