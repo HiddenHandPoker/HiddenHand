@@ -24,7 +24,7 @@ This project was started for the **Solana Privacy Hack** hackathon (Jan 12-30, 2
 ### What's Built
 - Full poker game state machine (7 phases)
 - Table creation with configurable blinds
-- Player join/leave with SOL buy-in
+- Player join/leave with USDC buy-in (SPL token support)
 - Betting logic (Fold/Check/Call/Raise/AllIn)
 - Pot management and action rotation
 - Card encoding (0-51) with Inco FHE encryption
@@ -37,6 +37,10 @@ This project was started for the **Solana Privacy Hack** hackathon (Jan 12-30, 2
 - **Complete Next.js Frontend** - Playable poker UI with wallet integration
 - **Client-side Decryption** - Players decrypt their own cards via Inco SDK
 - **Authority AFK Recovery** - Non-authority players can continue game after 60s timeout
+- **Spectator Mode** - Read-only table view without wallet connection
+- **Upgraded Lobby** - Grid/list toggle, stake/size filters, Quick Play
+- **Rake System** - Tiered percentage with cap, auto-calculated from blind level
+- **USDC Denomination** - Tables use SPL tokens (default: USDC on devnet)
 
 ### Game Liveness (AFK Recovery)
 
@@ -52,13 +56,44 @@ The game includes robust timeout mechanisms to prevent games from getting stuck 
 - 60-second timeout constant: `ALLOWANCE_TIMEOUT_SECONDS` in `constants.rs`
 - Frontend uses `getBlockTime()` RPC call for accurate timeout validation
 
+### Spectator Mode Architecture
+
+The spectator system lets anyone watch live tables without connecting a wallet.
+
+**Privacy invariant (CRITICAL):** Encrypted u128 Inco FHE card handles must NEVER be passed to spectator-rendered components. The `useTableState` hook enforces this at the data layer — all player hole cards are returned as `[null, null]`. Only revealed showdown cards (public on-chain data) are shown. This is not just a UI concern; it's the core privacy guarantee.
+
+**Read-only Anchor provider pattern:** Both `useTableState` and `useLobby` create their own Anchor `Program` instance using a dummy wallet when no real wallet is connected. This allows on-chain reads without wallet connection:
+```ts
+const dummyWallet = {
+  publicKey: PublicKey.default,
+  signTransaction: async (tx) => tx,
+  signAllTransactions: async (txs) => txs,
+};
+const provider = new AnchorProvider(connection, wallet ?? dummyWallet, opts);
+```
+
+**dataSize filter (GOTCHA):** `useLobby` filters `table.all()` with `dataSize: 177` to skip old devnet table accounts that predate the USDC migration (they're 33 bytes shorter and cause deserialization errors). **If the Table struct changes, this constant MUST be updated to match `Table::SIZE` in `table.rs`.**
+
+### Rake System
+
+Rake is a percentage of each pot, capped per hand, tiered by blind level. Set at table creation via `getRakeForBlinds()` in `app/lib/rake.ts`. Collected on-chain during `showdown` into `table.accumulated_rake`. Authority withdraws via `collect_rake` instruction.
+
+| Tier | Max BB | Rake | Cap |
+|------|--------|------|-----|
+| Micro | $0.10 | 5% | $1 |
+| Low | $1 | 4.5% | $2 |
+| Medium | $5 | 4% | $5 |
+| High | $25 | 3% | $15 |
+| Nosebleed | $25+ | 2.5% | $25 |
+
 ### What's Next
 1. ~~Write tests for current poker logic~~ Done
 2. ~~Integrate MagicBlock VRF for shuffling~~ Done
 3. ~~Integrate Inco FHE for card encryption~~ Done
 4. ~~Build Next.js frontend with game UI~~ Done
 5. ~~Ed25519 signature verification for secure reveals~~ Done
-6. Record demo video and submit
+6. ~~Spectator mode and lobby upgrade~~ Done
+7. Record demo video and submit
 
 ---
 
@@ -114,7 +149,7 @@ Dealing → PreFlop → Flop → Turn → River → Showdown → Settled
 - **Deck State**: `["deck", table_pubkey, hand_number]`
 - **Vault**: `["vault", table_pubkey]`
 
-## Current Instructions (19 total)
+## Current Instructions (20 total)
 
 ### Core Game Instructions
 
@@ -147,10 +182,11 @@ Dealing → PreFlop → Flop → Turn → River → Showdown → Settled
 | `reveal_cards` | Reveal hole cards at showdown (Ed25519 verified) | Done |
 | `reveal_community` | Reveal community cards (Ed25519 verified) | Done |
 
-### Timeout & Recovery Instructions
+### Rake & Table Management Instructions
 
 | Instruction | Description | Status |
 |-------------|-------------|--------|
+| `collect_rake` | Authority withdraws accumulated rake from vault | Done |
 | `timeout_player` | Force fold inactive player | Done |
 | `timeout_reveal` | Force reveal timeout at showdown | Done |
 | `close_inactive_table` | Close abandoned table, return funds | Done |
@@ -191,13 +227,32 @@ hiddenhand/
 │           ├── grant_own_allowance.rs  # Player grants decryption access
 │           └── grant_community_allowances.rs  # Community card access for AFK recovery
 ├── app/                          # Next.js frontend (complete)
-│   ├── app/page.tsx             # Main game UI
-│   ├── components/              # UI components
+│   ├── app/
+│   │   ├── page.tsx             # Landing page
+│   │   ├── lobby/page.tsx       # Table lobby (filters, Quick Play, view toggle)
+│   │   └── table/[tableId]/page.tsx  # Table page (player + spectator modes)
+│   ├── components/
+│   │   ├── PokerTable.tsx       # Table visualization
+│   │   ├── PlayerSeat.tsx       # Player seat UI
+│   │   ├── ActionPanel.tsx      # Betting controls
+│   │   ├── Card.tsx             # Card rendering with flip animation
+│   │   ├── SpectatorView.tsx    # Read-only spectator view (privacy-safe)
+│   │   └── lobby/
+│   │       ├── TableList.tsx    # Grid/list view container
+│   │       ├── TableCard.tsx    # Grid view card
+│   │       ├── TableRow.tsx     # List view row
+│   │       ├── CreateTableModal.tsx  # Table creation with stake presets
+│   │       └── QuickPlayModal.tsx    # Quick Play instant seating
 │   ├── hooks/
-│   │   ├── usePokerGame.ts      # Game logic hook
-│   │   └── usePokerProgram.ts   # Anchor program hook
+│   │   ├── usePokerGame.ts      # Full game logic (wallet required)
+│   │   ├── usePokerProgram.ts   # Anchor program hook (wallet required)
+│   │   ├── useTableState.ts     # Read-only table state (no wallet needed)
+│   │   ├── useLobby.ts          # Lobby data + filters (no wallet needed)
+│   │   └── useHandHistory.ts    # On-chain event parsing
 │   └── lib/
 │       ├── inco.ts              # Inco SDK integration
+│       ├── tokens.ts            # SPL token definitions (USDC)
+│       ├── rake.ts              # Rake schedule and calculation
 │       └── idl/                 # Program IDL
 ├── tests/
 │   └── hiddenhand.ts            # Integration tests
