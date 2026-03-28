@@ -3,23 +3,24 @@
 import { FC } from "react";
 import { type LobbyTable } from "@/hooks/useLobby";
 import { TableCard } from "./TableCard";
+import { TableRow } from "./TableRow";
+
+export type ViewMode = "grid" | "list";
 
 interface TableListProps {
   tables: LobbyTable[];
   loading: boolean;
   currentWallet?: string;
+  viewMode?: ViewMode;
 }
 
 /** Skeleton card shown during loading state. */
 const SkeletonCard: FC = () => (
   <div className="glass rounded-2xl p-5 animate-pulse">
-    {/* Title skeleton */}
     <div className="flex items-start justify-between mb-4">
       <div className="h-5 w-32 rounded bg-[var(--bg-elevated)]" />
       <div className="h-4 w-16 rounded bg-[var(--bg-elevated)]" />
     </div>
-
-    {/* Players bar skeleton */}
     <div className="mb-4">
       <div className="flex justify-between mb-1.5">
         <div className="h-3 w-12 rounded bg-[var(--bg-elevated)]" />
@@ -29,8 +30,6 @@ const SkeletonCard: FC = () => (
         <div className="h-full w-1/3 rounded-full bg-[var(--bg-elevated)]" />
       </div>
     </div>
-
-    {/* Stakes + buy-in skeleton */}
     <div className="grid grid-cols-2 gap-3 mb-4">
       <div>
         <div className="h-2.5 w-10 rounded bg-[var(--bg-elevated)] mb-1" />
@@ -41,8 +40,6 @@ const SkeletonCard: FC = () => (
         <div className="h-4 w-24 rounded bg-[var(--bg-elevated)]" />
       </div>
     </div>
-
-    {/* Footer skeleton */}
     <div className="flex items-center justify-between">
       <div className="h-3 w-20 rounded bg-[var(--bg-elevated)]" />
       <div className="h-7 w-16 rounded-lg bg-[var(--bg-elevated)]" />
@@ -50,13 +47,33 @@ const SkeletonCard: FC = () => (
   </div>
 );
 
+/** Skeleton row for list view loading. */
+const SkeletonRow: FC = () => (
+  <div className="flex items-center gap-4 px-5 py-3.5 animate-pulse border-b border-white/5">
+    <div className="h-4 w-32 rounded bg-[var(--bg-elevated)]" />
+    <div className="h-4 w-20 rounded bg-[var(--bg-elevated)]" />
+    <div className="h-4 w-12 rounded bg-[var(--bg-elevated)]" />
+    <div className="h-4 w-16 rounded bg-[var(--bg-elevated)] ml-auto" />
+  </div>
+);
+
 export const TableList: FC<TableListProps> = ({
   tables,
   loading,
   currentWallet,
+  viewMode = "grid",
 }) => {
   // ------- Loading state -------
   if (loading) {
+    if (viewMode === "list") {
+      return (
+        <div className="glass rounded-2xl overflow-hidden">
+          <SkeletonRow />
+          <SkeletonRow />
+          <SkeletonRow />
+        </div>
+      );
+    }
     return (
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
         <SkeletonCard />
@@ -70,7 +87,6 @@ export const TableList: FC<TableListProps> = ({
   if (tables.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-20 text-center">
-        {/* Empty table icon */}
         <div className="w-20 h-20 rounded-full bg-[var(--bg-elevated)] flex items-center justify-center mb-5">
           <svg
             xmlns="http://www.w3.org/2000/svg"
@@ -91,13 +107,52 @@ export const TableList: FC<TableListProps> = ({
           No tables found
         </h3>
         <p className="text-[var(--text-secondary)] text-sm max-w-xs">
-          There are no active tables right now. Create the first table!
+          There are no active tables matching your filters. Create the first table or try Quick Play!
         </p>
       </div>
     );
   }
 
-  // ------- Table grid -------
+  // ------- List view -------
+  if (viewMode === "list") {
+    return (
+      <div className="glass rounded-2xl overflow-hidden">
+        {/* Header */}
+        <div className="grid grid-cols-[1fr_auto_auto_auto_auto_auto] md:grid-cols-[2fr_1fr_1fr_1fr_80px_90px] gap-4 px-5 py-3 border-b border-white/10">
+          <span className="text-[10px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">
+            Table
+          </span>
+          <span className="text-[10px] font-semibold uppercase tracking-wider text-[var(--text-muted)] hidden md:block">
+            Stakes
+          </span>
+          <span className="text-[10px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">
+            Players
+          </span>
+          <span className="text-[10px] font-semibold uppercase tracking-wider text-[var(--text-muted)] hidden md:block">
+            Buy-in
+          </span>
+          <span className="text-[10px] font-semibold uppercase tracking-wider text-[var(--text-muted)] text-center hidden md:block">
+            Hands
+          </span>
+          <span className="text-[10px] font-semibold uppercase tracking-wider text-[var(--text-muted)] text-right">
+            Action
+          </span>
+        </div>
+        {/* Rows */}
+        {tables.map((table) => (
+          <TableRow
+            key={table.publicKey.toString()}
+            table={table}
+            isOwnTable={
+              !!currentWallet && table.authority.toString() === currentWallet
+            }
+          />
+        ))}
+      </div>
+    );
+  }
+
+  // ------- Grid view (default) -------
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
       {tables.map((table) => (

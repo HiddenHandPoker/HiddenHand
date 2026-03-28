@@ -542,7 +542,7 @@ export default function TablePage({ params }: { params: Promise<{ tableId: strin
     ).length;
   }, [gameState.players]);
 
-  // If wallet not connected, show connect message
+  // If wallet not connected, show spectator view (read-only, no wallet needed)
   if (!connected) {
     return (
       <main className="min-h-screen relative">
@@ -578,26 +578,13 @@ export default function TablePage({ params }: { params: Promise<{ tableId: strin
         </header>
 
         <div className="container mx-auto px-4 py-8 pb-32">
-          <div className="flex flex-col items-center justify-center py-20">
-            <div className="glass inline-block px-8 py-6 rounded-2xl mb-6 text-center">
-              <h2 className="font-display text-2xl font-bold text-[var(--text-primary)] mb-3">
-                Connect Your Wallet
-              </h2>
-              <p className="text-[var(--text-secondary)] text-lg mb-6">
-                Connect a Solana wallet to join table <span className="text-[var(--text-primary)] font-medium">&quot;{decodedTableId}&quot;</span>
-              </p>
-              <WalletButton className="btn-gold !text-base !px-10 !py-3 !rounded-xl !font-bold" />
-            </div>
-            <Link
-              href="/lobby"
-              className="text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors text-sm flex items-center gap-2"
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
-              </svg>
-              Back to Lobby
-            </Link>
-          </div>
+          <SpectatorView
+            tableId={decodedTableId}
+            isConnected={false}
+            walletButton={
+              <WalletButton className="btn-gold !text-sm !px-6 !py-2.5 !rounded-xl !font-semibold" />
+            }
+          />
         </div>
 
         {/* Footer */}
@@ -673,6 +660,44 @@ export default function TablePage({ params }: { params: Promise<{ tableId: strin
       <div className="container mx-auto px-4 py-8 pb-32">
         {/* Game Interface */}
         <div className="space-y-6">
+          {/* Spectator Banner — shown when connected but not seated */}
+          {!currentPlayer && gameState.table && (
+            <div
+              className="glass rounded-2xl overflow-hidden"
+              style={{
+                borderImage: "linear-gradient(90deg, rgba(212,160,18,0.3), rgba(212,160,18,0.05)) 1",
+                borderWidth: "1px",
+                borderStyle: "solid",
+              }}
+            >
+              <div className="px-5 py-4 flex items-center justify-between flex-wrap gap-3">
+                <div className="flex items-center gap-4">
+                  <div
+                    className="w-10 h-10 rounded-xl flex items-center justify-center"
+                    style={{
+                      background: "linear-gradient(135deg, rgba(212,160,18,0.2) 0%, rgba(212,160,18,0.05) 100%)",
+                      border: "1px solid rgba(212,160,18,0.3)",
+                    }}
+                  >
+                    <svg className="w-5 h-5 text-[var(--gold-light)]" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                    </svg>
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-[var(--gold-light)] font-semibold text-sm">Spectating</span>
+                      <span className="text-[var(--text-muted)] text-xs">&mdash; Select a seat below to join</span>
+                    </div>
+                    <p className="text-[var(--text-muted)] text-xs mt-0.5">
+                      Hole cards are FHE encrypted &mdash; only seated players can see their hands
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Table Controls */}
           <div className="glass rounded-2xl p-5">
             <div className="flex flex-wrap items-center gap-4">

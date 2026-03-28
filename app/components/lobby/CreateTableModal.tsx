@@ -171,6 +171,49 @@ export const CreateTableModal: FC<CreateTableModalProps> = ({
               </div>
             </div>
 
+            {/* Stake presets */}
+            <div>
+              <label className="block text-[var(--text-muted)] text-sm uppercase tracking-wider mb-2">
+                Stake Presets
+              </label>
+              <div className="grid grid-cols-4 gap-2">
+                {[
+                  { label: "Micro", sb: 0.005, bb: 0.01, min: 0.2, max: 1 },
+                  { label: "Low", sb: 0.01, bb: 0.02, min: 0.4, max: 2 },
+                  { label: "Medium", sb: 0.05, bb: 0.10, min: 2, max: 10 },
+                  { label: "High", sb: 0.50, bb: 1.00, min: 20, max: 100 },
+                ].map((preset) => {
+                  const isActive = smallBlind === preset.sb && bigBlind === preset.bb;
+                  return (
+                    <button
+                      key={preset.label}
+                      type="button"
+                      onClick={() => {
+                        setSmallBlind(preset.sb);
+                        setBigBlind(preset.bb);
+                        setMinBuyIn(preset.min);
+                        setMaxBuyIn(preset.max);
+                      }}
+                      className={`
+                        p-2.5 rounded-xl text-center transition-all border
+                        ${isActive
+                          ? "bg-[var(--gold-main)]/15 border-[var(--gold-main)]/50 shadow-[0_0_12px_rgba(212,160,18,0.15)]"
+                          : "bg-[var(--bg-dark)] border-white/5 hover:border-white/10"
+                        }
+                      `}
+                    >
+                      <span className="block text-xs font-semibold text-[var(--text-primary)]">
+                        ${preset.sb}/{preset.bb}
+                      </span>
+                      <span className="block text-[10px] text-[var(--text-muted)] mt-0.5">
+                        {preset.label}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
             {/* Table Name */}
             <div>
               <label className="block text-[var(--text-muted)] text-sm uppercase tracking-wider mb-2">

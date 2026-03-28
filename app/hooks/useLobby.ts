@@ -2,7 +2,9 @@
 
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { PublicKey } from "@solana/web3.js";
-import { usePokerProgram } from "./usePokerProgram";
+import { Program, AnchorProvider, Idl } from "@coral-xyz/anchor";
+import { useConnection, useAnchorWallet } from "@solana/wallet-adapter-react";
+import idl from "@/lib/idl/hiddenhand.json";
 import { tableIdToString } from "@/lib/program";
 import { mapTableStatus } from "@/lib/utils";
 
@@ -33,6 +35,8 @@ export interface LobbyTable {
 
 export type LobbyFilter = "all" | "waiting" | "playing";
 export type LobbySort = "players" | "stakes" | "newest" | "active";
+export type StakeTier = "all" | "micro" | "low" | "mid" | "high";
+export type TableSize = "all" | "headsup" | "6max";
 
 export interface UseLobbyResult {
   tables: LobbyTable[];
@@ -43,6 +47,10 @@ export interface UseLobbyResult {
   setFilter: (f: LobbyFilter) => void;
   sort: LobbySort;
   setSort: (s: LobbySort) => void;
+  stakeTier: StakeTier;
+  setStakeTier: (s: StakeTier) => void;
+  tableSize: TableSize;
+  setTableSize: (s: TableSize) => void;
   refresh: () => Promise<void>;
   tableCount: { all: number; waiting: number; playing: number };
 }
@@ -71,14 +79,35 @@ function popcount(n: number): number {
 // Hook
 // ---------------------------------------------------------------------------
 
+// Dummy wallet for read-only Anchor provider (no signing capability)
+const DUMMY_PUBKEY = new PublicKey("11111111111111111111111111111111");
+const dummyWallet = {
+  publicKey: DUMMY_PUBKEY,
+  signTransaction: async <T,>(tx: T): Promise<T> => tx,
+  signAllTransactions: async <T,>(txs: T[]): Promise<T[]> => txs,
+};
+
 export function useLobby(): UseLobbyResult {
-  const { program } = usePokerProgram();
+  const { connection } = useConnection();
+  const wallet = useAnchorWallet();
+
+  // Read-only Anchor program — works with or without a connected wallet
+  const program = useMemo(() => {
+    const provider = new AnchorProvider(
+      connection,
+      wallet ?? dummyWallet,
+      { commitment: "confirmed", preflightCommitment: "confirmed" },
+    );
+    return new Program(idl as Idl, provider);
+  }, [connection, wallet]);
 
   const [tables, setTables] = useState<LobbyTable[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<LobbyFilter>("all");
   const [sort, setSort] = useState<LobbySort>("players");
+  const [stakeTier, setStakeTier] = useState<StakeTier>("all");
+  const [tableSize, setTableSize] = useState<TableSize>("all");
 
   // Keep a ref to the latest program so the interval callback always sees it.
   const programRef = useRef(program);
@@ -174,7 +203,33 @@ export function useLobby(): UseLobbyResult {
       result = result.filter((t) => t.status === "Playing");
     }
 
-    // 2. Apply sort
+    // 2. Apply stake tier filter (based on big blind in base units)
+    // Thresholds use the table's token decimals for comparison
+    if (stakeTier !== "all") {
+      result = result.filter((t) => {
+        // Normalize to "display units" for tier comparison
+        const factor = Math.pow(10, t.tokenDecimals || 6);
+        const bbDisplay = t.bigBlind / factor;
+        switch (stakeTier) {
+          case "micro": return bbDisplay < 0.05;
+          case "low":   return bbDisplay >= 0.05 && bbDisplay < 0.5;
+          case "mid":   return bbDisplay >= 0.5 && bbDisplay < 5;
+          case "high":  return bbDisplay >= 5;
+          default:      return true;
+        }
+      });
+    }
+
+    // 3. Apply table size filter
+    if (tableSize !== "all") {
+      result = result.filter((t) => {
+        if (tableSize === "headsup") return t.maxPlayers === 2;
+        if (tableSize === "6max") return t.maxPlayers >= 3;
+        return true;
+      });
+    }
+
+    // 4. Apply sort
     result = [...result].sort((a, b) => {
       switch (sort) {
         case "players":
@@ -182,7 +237,6 @@ export function useLobby(): UseLobbyResult {
         case "stakes":
           return b.bigBlind - a.bigBlind;
         case "newest":
-          // Higher lastReadyTime = more recently created/active
           return b.lastReadyTime - a.lastReadyTime;
         case "active":
           return b.handNumber - a.handNumber;
@@ -192,7 +246,7 @@ export function useLobby(): UseLobbyResult {
     });
 
     return result;
-  }, [tables, filter, sort]);
+  }, [tables, filter, sort, stakeTier, tableSize]);
 
   // ------------------------------------------------------------------
   // Derived: counts per status (for filter badges)
@@ -224,6 +278,10 @@ export function useLobby(): UseLobbyResult {
     setFilter,
     sort,
     setSort,
+    stakeTier,
+    setStakeTier,
+    tableSize,
+    setTableSize,
     refresh,
     tableCount,
   };
