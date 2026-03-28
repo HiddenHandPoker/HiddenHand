@@ -1,10 +1,10 @@
 "use client";
 
-import { FC, useMemo } from "react";
+import { FC, useMemo, useEffect, useRef, useState } from "react";
 import { PokerTable } from "./PokerTable";
+import { useChipAnimations } from "./ChipAnimation";
 import { useTableState, type SpectatorPlayer } from "@/hooks/useTableState";
 import { getTokenByMint, getDefaultToken, baseUnitsToDisplay, type TokenInfo } from "@/lib/tokens";
-import { PublicKey } from "@solana/web3.js";
 
 /**
  * SpectatorView — Read-only view of an active poker table.
@@ -26,6 +26,11 @@ interface SpectatorViewProps {
   onSitDown?: () => void;
 }
 
+interface WinnerInfo {
+  seatIndex: number;
+  winnings: number;
+}
+
 export const SpectatorView: FC<SpectatorViewProps> = ({
   tableId,
   walletButton,
@@ -43,6 +48,112 @@ export const SpectatorView: FC<SpectatorViewProps> = ({
   }, [state.tokenMint]);
 
   const fmt = (baseUnits: number) => baseUnitsToDisplay(baseUnits, token).toFixed(2);
+
+  // -----------------------------------------------------------------------
+  // Chip animations — same pattern as the player view in page.tsx
+  // -----------------------------------------------------------------------
+  const { betTrigger, winTrigger, triggerBetAnimation, triggerWinAnimation } =
+    useChipAnimations();
+
+  // Track previous bets to detect increases and trigger chip-to-pot animations
+  const prevBetsRef = useRef<Map<number, number>>(new Map());
+
+  useEffect(() => {
+    if (
+      state.phase === "Dealing" ||
+      state.phase === "Settled" ||
+      state.phase === "Showdown"
+    ) {
+      if (state.phase === "Dealing" || state.phase === "Settled") {
+        prevBetsRef.current = new Map();
+      }
+      return;
+    }
+
+    state.players.forEach((player) => {
+      if (player.status === "empty" || player.status === "folded") return;
+      const prevBet = prevBetsRef.current.get(player.seatIndex) ?? 0;
+      if (player.currentBet > prevBet) {
+        triggerBetAnimation(player.seatIndex, player.currentBet - prevBet);
+      }
+    });
+
+    const newBets = new Map<number, number>();
+    state.players.forEach((p) => {
+      if (p.status !== "empty") {
+        newBets.set(p.seatIndex, p.currentBet);
+      }
+    });
+    prevBetsRef.current = newBets;
+  }, [state.players, state.phase, triggerBetAnimation]);
+
+  // -----------------------------------------------------------------------
+  // Winner detection — snapshot chips at Showdown, compare at Settled
+  // -----------------------------------------------------------------------
+  const chipsBeforeShowdownRef = useRef<Map<number, number>>(new Map());
+  const [winners, setWinners] = useState<WinnerInfo[]>([]);
+  const prevPhaseRef = useRef(state.phase);
+
+  useEffect(() => {
+    // Snapshot chips when entering Showdown
+    if (state.phase === "Showdown" && prevPhaseRef.current !== "Showdown") {
+      const chipMap = new Map<number, number>();
+      state.players.forEach((p) => {
+        if (p.status !== "empty") {
+          chipMap.set(p.seatIndex, p.chips);
+        }
+      });
+      chipsBeforeShowdownRef.current = chipMap;
+      setWinners([]);
+    }
+
+    // Detect winners when settling
+    if (
+      state.phase === "Settled" &&
+      prevPhaseRef.current !== "Settled" &&
+      chipsBeforeShowdownRef.current.size > 0
+    ) {
+      const detected: WinnerInfo[] = [];
+
+      state.players.forEach((p) => {
+        if (p.status !== "empty") {
+          const chipsBefore =
+            chipsBeforeShowdownRef.current.get(p.seatIndex) ?? 0;
+          if (p.chips > chipsBefore) {
+            detected.push({
+              seatIndex: p.seatIndex,
+              winnings: p.chips - chipsBefore,
+            });
+          }
+        }
+      });
+
+      // Trigger win animations (staggered)
+      detected.forEach((w, idx) => {
+        setTimeout(() => {
+          triggerWinAnimation(w.seatIndex);
+        }, idx * 200);
+      });
+
+      setWinners(detected);
+      chipsBeforeShowdownRef.current = new Map();
+    }
+
+    // Clear winners when a new hand starts
+    if (state.phase === "Dealing" && prevPhaseRef.current !== "Dealing") {
+      setWinners([]);
+    }
+
+    prevPhaseRef.current = state.phase;
+  }, [state.phase, state.players, triggerWinAnimation]);
+
+  // Auto-dismiss winner banner after 5 seconds
+  useEffect(() => {
+    if (winners.length > 0) {
+      const timeout = setTimeout(() => setWinners([]), 5000);
+      return () => clearTimeout(timeout);
+    }
+  }, [winners]);
 
   // Map players to PokerTable format — PRIVACY: all hole cards are [null, null]
   const playersForTable = useMemo(() => {
@@ -213,7 +324,7 @@ export const SpectatorView: FC<SpectatorViewProps> = ({
         </div>
       )}
 
-      {/* Poker Table */}
+      {/* Poker Table — now with chip animations */}
       {state.tablePDA && (
         <PokerTable
           tableId={state.tableId}
@@ -233,12 +344,69 @@ export const SpectatorView: FC<SpectatorViewProps> = ({
           bigBlind={state.bigBlind}
           isShowdownPhase={isShowdownPhase}
           isVrfVerified={state.isDeckShuffled}
+          chipBetTrigger={betTrigger}
+          chipWinTrigger={winTrigger}
           token={token}
         />
       )}
 
+      {/* Winner banner — spectator version ("Seat X won Y") */}
+      {winners.length > 0 && (
+        <div className="max-w-lg mx-auto">
+          <div
+            className="glass border border-[var(--gold-main)]/40 rounded-2xl p-5 text-center"
+            style={{
+              boxShadow: "0 0 30px rgba(212, 160, 18, 0.15)",
+            }}
+          >
+            {/* Trophy icon */}
+            <div className="flex justify-center mb-3">
+              <svg
+                className="w-8 h-8 text-[var(--gold-light)]"
+                fill="currentColor"
+                viewBox="0 0 24 24"
+                style={{
+                  filter: "drop-shadow(0 0 8px rgba(244, 196, 48, 0.5))",
+                }}
+              >
+                <path d="M12 2C13.1 2 14 2.9 14 4V5H16C16.55 5 17 5.45 17 6V8C17 9.66 15.66 11 14 11H13.82C13.4 12.84 11.85 14.22 10 14.83V17H14V19H6V17H10V14.83C8.15 14.22 6.6 12.84 6.18 11H6C4.34 11 3 9.66 3 8V6C3 5.45 3.45 5 4 5H6V4C6 2.9 6.9 2 8 2H12ZM14 7H16V8C16 8.55 15.55 9 15 9H14V7ZM6 7V9H5C4.45 9 4 8.55 4 8V7H6ZM8 4V9C8 10.66 9.34 12 11 12C12.66 12 14 10.66 14 9V4H8ZM10 20V22H14V20H10Z" />
+              </svg>
+            </div>
+
+            {/* Winner details */}
+            <div className="space-y-1.5">
+              {winners.map((w) => (
+                <div
+                  key={w.seatIndex}
+                  className="flex items-center justify-center gap-2"
+                >
+                  <span
+                    className="font-display text-lg font-bold"
+                    style={{
+                      background: "linear-gradient(135deg, #f4c430 0%, #d4a012 50%, #f4c430 100%)",
+                      backgroundSize: "200% 200%",
+                      WebkitBackgroundClip: "text",
+                      WebkitTextFillColor: "transparent",
+                      backgroundClip: "text",
+                    }}
+                  >
+                    Seat {w.seatIndex + 1} won
+                  </span>
+                  <span className="text-[var(--gold-light)] font-bold text-lg">
+                    +{fmt(w.winnings)}
+                  </span>
+                  <span className="text-[var(--text-muted)] text-sm">
+                    {token.symbol}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Showdown Results for spectators */}
-      {isShowdownPhase && state.players.some((p) => p.cardsRevealed) && (
+      {isShowdownPhase && winners.length === 0 && state.players.some((p) => p.cardsRevealed) && (
         <div className="max-w-lg mx-auto glass border border-amber-500/30 rounded-2xl p-5 text-center">
           <div className="flex items-center justify-center gap-3 mb-2">
             <svg className="w-6 h-6 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
