@@ -6,6 +6,7 @@ import { CardHand } from "./Card";
 import { ProvablyFairBadge } from "./ProvablyFairBadge";
 import { ChipAnimationLayer } from "./ChipAnimation";
 import { type TokenInfo, getDefaultToken, baseUnitsToDisplay } from "@/lib/tokens";
+import { type PlayerStats } from "@/hooks/usePlayerStats";
 
 interface Player {
   seatIndex: number;
@@ -40,6 +41,8 @@ interface PokerTableProps {
   winAmount?: number;
   // Token info for display
   token?: TokenInfo;
+  // Player stats for HUD tooltips
+  playerStatsMap?: Map<string, PlayerStats>;
 }
 
 // Seat positions around the table (for 6-max)
@@ -72,6 +75,7 @@ export const PokerTable: FC<PokerTableProps> = ({
   showWinCelebration = false,
   winAmount,
   token = getDefaultToken(),
+  playerStatsMap,
 }) => {
   const fmt = (baseUnits: number) => baseUnitsToDisplay(baseUnits, token).toFixed(2);
   // Calculate SB and BB positions
@@ -289,6 +293,7 @@ export const PokerTable: FC<PokerTableProps> = ({
               isCurrentPlayer={isCurrentPlayer}
               isShowdownPhase={isShowdownPhase}
               token={token}
+              playerStats={player?.player && playerStatsMap ? playerStatsMap.get(player.player) : undefined}
             />
           </div>
         );

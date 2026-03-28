@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
@@ -15,8 +15,9 @@ import { QuickPlayModal } from "@/components/lobby/QuickPlayModal";
 import { generateTableId, getTablePDA, getVaultPDA } from "@/lib/program";
 import { SystemProgram } from "@solana/web3.js";
 import { BN } from "@coral-xyz/anchor";
-import { getDefaultToken, TOKEN_PROGRAM_ID } from "@/lib/tokens";
+import { getDefaultToken, baseUnitsToDisplay, TOKEN_PROGRAM_ID } from "@/lib/tokens";
 import { getRakeForBlinds } from "@/lib/rake";
+import { usePlayerStats } from "@/hooks/usePlayerStats";
 
 export default function LobbyPage() {
   const { connected, publicKey } = useWallet();
@@ -45,6 +46,16 @@ export default function LobbyPage() {
   const [creating, setCreating] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [viewMode, setViewMode] = useState<ViewMode>("grid");
+
+  // Player stats (for mini-stats line)
+  const { fetchStats, getPlayerStats } = usePlayerStats();
+  const token = getDefaultToken();
+
+  useEffect(() => {
+    fetchStats();
+  }, [fetchStats]);
+
+  const myStats = publicKey ? getPlayerStats(publicKey.toString()) : null;
 
   // Total players across all visible tables
   const totalPlayers = filteredTables.reduce(
@@ -294,7 +305,7 @@ export default function LobbyPage() {
         </div>
 
         {/* Stats bar */}
-        <div className="flex items-center gap-6 mb-6 text-sm">
+        <div className="flex flex-wrap items-center gap-6 mb-6 text-sm">
           <span className="text-[var(--text-secondary)]">
             <span className="text-[var(--text-primary)] font-semibold">
               {tableCount.all}
@@ -308,6 +319,33 @@ export default function LobbyPage() {
             </span>{" "}
             {totalPlayers === 1 ? "player" : "players"} seated
           </span>
+          {myStats && myStats.handsPlayed > 0 && (
+            <>
+              <span className="text-white/10">|</span>
+              <Link
+                href={`/player/${publicKey!.toString()}`}
+                className="text-[var(--text-secondary)] hover:text-[var(--gold-light)] transition-colors inline-flex items-center gap-1.5"
+              >
+                You: {myStats.handsPlayed} hands,{" "}
+                <span className={myStats.totalProfit >= 0 ? "text-[var(--status-active)]" : "text-[var(--status-danger)]"}>
+                  {myStats.totalProfit >= 0 ? "+" : ""}{baseUnitsToDisplay(myStats.totalProfit, token).toFixed(2)} {token.symbol}
+                </span>
+                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                </svg>
+              </Link>
+            </>
+          )}
+          <span className="text-white/10">|</span>
+          <Link
+            href="/leaderboard"
+            className="text-[var(--text-muted)] hover:text-[var(--gold-light)] transition-colors inline-flex items-center gap-1"
+          >
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+            </svg>
+            Leaderboard
+          </Link>
         </div>
 
         {/* Filter row 1: Status + Sort + View toggle */}
@@ -483,35 +521,21 @@ export default function LobbyPage() {
 
       {/* Footer */}
       <footer className="fixed bottom-0 w-full glass-dark py-4 text-center border-t border-white/5">
-        <p className="text-[var(--text-muted)] text-sm">
-          Built for{" "}
-          <a
-            href="https://solana.com/privacyhack"
-            className="text-[var(--felt-highlight)] hover:text-[var(--felt-light)] transition-colors"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Solana Privacy Hack
-          </a>
-          {" "}with{" "}
-          <a
-            href="https://magicblock.gg"
-            className="text-purple-400 hover:text-purple-300 transition-colors"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            MagicBlock VRF
-          </a>
-          {" "}&{" "}
-          <a
-            href="https://inco.org"
-            className="text-cyan-400 hover:text-cyan-300 transition-colors"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Inco FHE
-          </a>
-        </p>
+        <div className="flex items-center justify-center gap-4">
+          <span className="text-[var(--gold-light)] text-sm font-medium">Lobby</span>
+          <span className="text-white/10">|</span>
+          <Link href="/leaderboard" className="text-[var(--text-muted)] hover:text-[var(--text-primary)] text-sm transition-colors">
+            Leaderboard
+          </Link>
+          {connected && publicKey && (
+            <>
+              <span className="text-white/10">|</span>
+              <Link href={`/player/${publicKey.toString()}`} className="text-[var(--text-muted)] hover:text-[var(--text-primary)] text-sm transition-colors">
+                My Profile
+              </Link>
+            </>
+          )}
+        </div>
       </footer>
     </main>
   );

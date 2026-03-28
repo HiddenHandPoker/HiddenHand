@@ -41,6 +41,30 @@ This project was started for the **Solana Privacy Hack** hackathon (Jan 12-30, 2
 - **Upgraded Lobby** - Grid/list toggle, stake/size filters, Quick Play
 - **Rake System** - Tiered percentage with cap, auto-calculated from blind level
 - **USDC Denomination** - Tables use SPL tokens (default: USDC on devnet)
+- **On-Chain Hand Replay** - 5 program events create full action-by-action audit trail, frontend reconstructs timelines from past transactions
+
+### On-Chain Events & Hand Replay
+
+5 events in `events.rs` create a complete audit trail for every hand:
+
+| Event | Emitted in | When |
+|-------|-----------|------|
+| `HandStarted` | `callback_shuffle.rs` | VRF shuffle complete, blinds posted |
+| `ActionTaken` | `player_action.rs`, `timeout_player.rs`, `timeout_reveal.rs` | Every player action or timeout |
+| `CommunityCardsRevealed` | `reveal_community.rs` | Flop/turn/river revealed |
+| `ShowdownReveal` | `reveal_cards.rs` | Player reveals hole cards |
+| `HandCompleted` | `showdown.rs` | Hand finishes, pot distributed |
+
+**Phase encoding**: `GamePhase as u8` cast (Dealing=0, PreFlop=1, Flop=2, Turn=3, River=4, Showdown=5, Settled=6). This relies on enum variant ordering in `hand.rs` — **do not reorder GamePhase variants**.
+
+**ActionTaken.action_type encoding**: 0=Fold, 1=Check, 2=Call, 3=Raise, 4=AllIn, 5=TimeoutFold, 6=TimeoutCheck.
+
+**Frontend sync gotcha (IMPORTANT)**: `useHandHistory.ts` has hardcoded SHA-256 discriminators (`EVENT_DISCRIMINATORS`) and hand-written binary parsers for each event. If you rename an event struct, add/remove/reorder its fields, or change field types, you **must**:
+1. Regenerate the discriminator: `echo -n "event:<EventName>" | sha256sum` (first 8 bytes)
+2. Update the corresponding `parse*FromBuffer` function to match the new layout
+3. Run `anchor build` and copy the updated IDL to `app/lib/idl/`
+
+**Historical reconstruction**: `useHandHistory` calls `getSignaturesForAddress(tablePDA)` on mount to fetch past transactions, parses all `"Program data:"` log lines by discriminator, and rebuilds both `history` (HandCompleted) and `handTimelines` (all other events). This works because the table PDA appears in every instruction's account list.
 
 ### Game Liveness (AFK Recovery)
 
@@ -110,7 +134,7 @@ HiddenHand is a fully on-chain Texas Hold'em poker game with cryptographic priva
 - **Location**: `/programs/hiddenhand/`
 - **Framework**: Anchor 0.32.1
 - **Network**: Solana Devnet
-- **Program ID**: `HS3GdhRBU3jMT4G6ogKVktKaibqsMhPRhDhNsmgzeB8Q`
+- **Program ID**: `5fcckjDn8wzRSodJbQVpHeuWZ8x4B3htKv1WEMx36XJe`
 
 ### MagicBlock VRF Integration
 - **VRF SDK**: `ephemeral-vrf-sdk = "0.2.1"` - Verifiable random function
@@ -147,7 +171,23 @@ Dealing → PreFlop → Flop → Turn → River → Showdown → Settled
 - **Player Seat**: `["seat", table_pubkey, seat_index]`
 - **Hand State**: `["hand", table_pubkey, hand_number]`
 - **Deck State**: `["deck", table_pubkey, hand_number]`
-- **Vault**: `["vault", table_pubkey]`
+- **Vault**: `["vault", table_pubkey]` — SPL TokenAccount, authority = table PDA
+
+### Token Architecture (USDC / SPL)
+
+Each table is denominated in a single SPL token (stored as `token_mint: Pubkey` on Table).
+
+**Vault pattern**: The vault is an SPL `TokenAccount` PDA at `["vault", table_key]` with `token::authority = table PDA`. The **table PDA signs transfers** using `TABLE_SEED` signer seeds — not the vault's own seeds.
+
+**Internal chip ledger**: `PlayerSeat.chips`, `HandState.pot`, and `Table.accumulated_rake` are abstract u64 values manipulated in-memory. **Real token transfers only happen at 4 entry/exit points**: `join_table` (deposit), `leave_table` (withdraw), `collect_rake` (authority), `close_inactive_table` (emergency refund). The 15+ gameplay instructions (betting, dealing, showdown, etc.) never touch tokens.
+
+**USDC mint addresses**:
+- Devnet: `4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU` (6 decimals)
+- Mainnet: `EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v` (6 decimals)
+
+**Anchor types**: Uses `InterfaceAccount<'info, TokenAccount>` and `Interface<'info, TokenInterface>` for forward-compatibility with both SPL Token and Token-2022.
+
+**Native SOL is not supported** — was removed when switching from SystemAccount vaults to TokenAccount vaults. SOL tables would require wrapped SOL (wSOL) with auto-wrap/unwrap in the frontend.
 
 ## Current Instructions (20 total)
 
@@ -156,8 +196,8 @@ Dealing → PreFlop → Flop → Turn → River → Showdown → Settled
 | Instruction | Description | Status |
 |-------------|-------------|--------|
 | `create_table` | Create poker table with blinds config | Done |
-| `join_table` | Join table with SOL buy-in | Done |
-| `leave_table` | Cash out and leave | Done |
+| `join_table` | Join table with SPL token buy-in | Done |
+| `leave_table` | Cash out and leave (SPL transfer) | Done |
 | `start_hand` | Begin new hand, init deck | Done |
 | `player_action` | Fold/Check/Call/Raise/AllIn | Done |
 | `showdown` | Evaluate hands, determine winner, distribute pot | Done |

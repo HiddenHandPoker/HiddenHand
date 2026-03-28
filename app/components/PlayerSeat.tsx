@@ -1,7 +1,9 @@
 "use client";
 
-import { FC } from "react";
+import { FC, useState } from "react";
 import { CardHand } from "./Card";
+import { PlayerHUD } from "./stats/PlayerHUD";
+import { type PlayerStats } from "@/hooks/usePlayerStats";
 import { type TokenInfo, getDefaultToken, baseUnitsToDisplay } from "@/lib/tokens";
 
 interface PlayerSeatProps {
@@ -21,6 +23,7 @@ interface PlayerSeatProps {
   isShowdownPhase?: boolean; // True during Showdown or Settled phase
   cardsRevealed?: boolean; // Whether this player has revealed their cards
   token?: TokenInfo;
+  playerStats?: PlayerStats | null; // On-chain stats for HUD tooltip
 }
 
 export const PlayerSeat: FC<PlayerSeatProps> = ({
@@ -40,7 +43,9 @@ export const PlayerSeat: FC<PlayerSeatProps> = ({
   isShowdownPhase = false,
   cardsRevealed = false,
   token = getDefaultToken(),
+  playerStats,
 }) => {
+  const [showHUD, setShowHUD] = useState(false);
   const fmt = (baseUnits: number) => baseUnitsToDisplay(baseUnits, token).toFixed(2);
   const isEmpty = status === "empty";
   const isFolded = status === "folded";
@@ -104,7 +109,16 @@ export const PlayerSeat: FC<PlayerSeatProps> = ({
         ${isFolded ? "opacity-40" : ""}
         ${isCurrentPlayer && !isEmpty ? "ring-2 ring-[var(--felt-highlight)] ring-opacity-60" : ""}
       `}
+      onMouseEnter={() => !isEmpty && !isCurrentPlayer && player && setShowHUD(true)}
+      onMouseLeave={() => setShowHUD(false)}
     >
+      {/* HUD tooltip */}
+      {showHUD && player && (
+        <div className="absolute z-50 bottom-full left-1/2 -translate-x-1/2 mb-2 pointer-events-none">
+          <PlayerHUD wallet={player} stats={playerStats ?? null} token={token} />
+        </div>
+      )}
+
       {/* Turn indicator glow */}
       {isTurn && (
         <div

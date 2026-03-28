@@ -32,6 +32,7 @@ import {
   REVEAL_TIMEOUT_SECONDS,
   TABLE_INACTIVE_TIMEOUT_SECONDS,
 } from "@/lib/constants";
+import { usePlayerStats } from "@/hooks/usePlayerStats";
 
 export default function TablePage({ params }: { params: Promise<{ tableId: string }> }) {
   const { tableId } = React.use(params);
@@ -79,6 +80,12 @@ export default function TablePage({ params }: { params: Promise<{ tableId: strin
 
   // On-chain hand history from events
   const { history: onChainHistory, handTimelines, isListening: isHistoryListening, loadingHistory } = useHandHistory(program, gameState.tablePDA);
+
+  // Player stats for HUD tooltips
+  const { fetchStats: fetchPlayerStats, allStats: playerStatsMap } = usePlayerStats();
+  useEffect(() => {
+    fetchPlayerStats();
+  }, [fetchPlayerStats]);
 
   // Expose hook functions to window for console testing (development only)
   useEffect(() => {
@@ -1253,6 +1260,7 @@ export default function TablePage({ params }: { params: Promise<{ tableId: strin
               showWinCelebration={showCelebration}
               winAmount={celebrationWinAmount}
               token={tableToken}
+              playerStatsMap={playerStatsMap}
             />
           )}
 

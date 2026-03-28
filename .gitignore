@@ -22,5 +22,11 @@ test-ledger/
 .env
 .env.local
 
+# Claude Code (may contain API keys in settings)
+.claude/
+
 # Local assessment (not for git)
 _local_assessment/
+
+# Marketing materials (private)
+marketing/
