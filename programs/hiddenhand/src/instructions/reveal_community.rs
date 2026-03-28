@@ -23,6 +23,7 @@ use sha2::{Digest, Sha256};
 
 use crate::constants::*;
 use crate::error::HiddenHandError;
+use crate::events::CommunityCardsRevealed;
 use crate::state::{DeckState, GamePhase, HandState, Table, TableStatus};
 
 /// Ed25519 program ID for signature verification
@@ -297,6 +298,22 @@ pub fn handler(ctx: Context<RevealCommunity>, cards: Vec<u8>) -> Result<()> {
     // Clear the awaiting flag
     hand_state.awaiting_community_reveal = false;
     hand_state.last_action_time = clock.unix_timestamp;
+
+    let new_phase_num = hand_state.phase as u8;
+    let action_on_val = if hand_state.phase == GamePhase::Showdown {
+        255u8
+    } else {
+        hand_state.action_on
+    };
+
+    emit!(CommunityCardsRevealed {
+        table_id: table.table_id,
+        hand_number: hand_state.hand_number,
+        new_phase: new_phase_num,
+        cards,
+        timestamp: clock.unix_timestamp,
+        action_on: action_on_val,
+    });
 
     Ok(())
 }

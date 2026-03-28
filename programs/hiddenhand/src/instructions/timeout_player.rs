@@ -2,6 +2,7 @@ use anchor_lang::prelude::*;
 
 use crate::constants::*;
 use crate::error::HiddenHandError;
+use crate::events::ActionTaken;
 use crate::state::{DeckState, GamePhase, HandState, PlayerSeat, PlayerStatus, Table, TableStatus};
 
 /// Timeout a player who hasn't acted within the time limit
@@ -48,6 +49,7 @@ pub fn handler(ctx: Context<TimeoutPlayer>) -> Result<()> {
     let deck_state = &ctx.accounts.deck_state;
     let player_seat = &mut ctx.accounts.player_seat;
     let clock = Clock::get()?;
+    let phase_num = hand_state.phase as u8;
 
     // Validate game is in progress
     require!(
@@ -121,11 +123,25 @@ pub fn handler(ctx: Context<TimeoutPlayer>) -> Result<()> {
 
     // Update timestamp for next action
     hand_state.last_action_time = current_time;
+    let action_type_num: u8 = if can_check { 6 } else { 5 };
 
     // Check if only one player remains (winner by default)
     if hand_state.active_count == 1 {
         hand_state.phase = GamePhase::Showdown;
         msg!("Only one player remains - advancing to showdown");
+
+        emit!(ActionTaken {
+            table_id: table.table_id,
+            hand_number: hand_state.hand_number,
+            seat_index: player_seat.seat_index,
+            action_type: action_type_num,
+            amount: 0,
+            pot_after: hand_state.pot,
+            phase: phase_num,
+            timestamp: current_time,
+            next_action_on: 255,
+        });
+
         return Ok(());
     }
 
@@ -167,6 +183,26 @@ pub fn handler(ctx: Context<TimeoutPlayer>) -> Result<()> {
         hand_state.action_on,
         hand_state.phase
     );
+
+    let next_action_on = if matches!(hand_state.phase, GamePhase::Settled | GamePhase::Showdown)
+        || hand_state.awaiting_community_reveal
+    {
+        255u8
+    } else {
+        hand_state.action_on
+    };
+
+    emit!(ActionTaken {
+        table_id: table.table_id,
+        hand_number: hand_state.hand_number,
+        seat_index: player_seat.seat_index,
+        action_type: action_type_num,
+        amount: 0,
+        pot_after: hand_state.pot,
+        phase: phase_num,
+        timestamp: current_time,
+        next_action_on,
+    });
 
     Ok(())
 }

@@ -3,6 +3,7 @@ use std::collections::BTreeSet;
 
 use crate::constants::*;
 use crate::error::HiddenHandError;
+use crate::events::HandStarted;
 use crate::inco_cpi::{self, INCO_PROGRAM_ID};
 use crate::state::{DeckState, GamePhase, HandState, PlayerSeat, PlayerStatus, Table, TableStatus};
 
@@ -66,6 +67,7 @@ pub fn handler(ctx: Context<CallbackShuffle>, randomness: [u8; 32]) -> Result<()
     let table_status = ctx.accounts.table.status;
     let current_players = ctx.accounts.table.current_players;
     let occupied_seats = ctx.accounts.table.occupied_seats;
+    let table_id = ctx.accounts.table.table_id;
 
     let deck_bump = ctx.accounts.deck_state.bump;
     let deck_is_shuffled = ctx.accounts.deck_state.is_shuffled;
@@ -382,6 +384,19 @@ pub fn handler(ctx: Context<CallbackShuffle>, randomness: [u8; 32]) -> Result<()
     msg!("SECURITY: Community cards are ENCRYPTED - cannot be read until reveal!");
     msg!("IMPORTANT: Call grant_card_allowance for each player to enable hole card decryption");
     msg!("IMPORTANT: Authority must call reveal_community to show flop/turn/river");
+
+    emit!(HandStarted {
+        table_id,
+        hand_number,
+        timestamp: clock.unix_timestamp,
+        dealer_position: dealer_pos,
+        small_blind_seat: sb_pos,
+        big_blind_seat: bb_pos,
+        small_blind_amount: small_blind,
+        big_blind_amount: big_blind,
+        active_players: hand_state.active_players,
+        player_count: active_count,
+    });
 
     Ok(())
 }

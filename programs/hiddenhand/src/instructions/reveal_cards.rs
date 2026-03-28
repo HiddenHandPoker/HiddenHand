@@ -15,6 +15,7 @@ pub const ED25519_PROGRAM_ID: Pubkey = Pubkey::new_from_array([
 
 use crate::constants::*;
 use crate::error::HiddenHandError;
+use crate::events::ShowdownReveal;
 use crate::state::{GamePhase, HandState, PlayerSeat, PlayerStatus, Table};
 
 /// Inco covalidator public key for signature verification
@@ -260,6 +261,16 @@ pub fn handler(ctx: Context<RevealCards>, card1: u8, card2: u8) -> Result<()> {
         card1,
         card2
     );
+
+    let clock = Clock::get()?;
+    emit!(ShowdownReveal {
+        table_id: ctx.accounts.table.table_id,
+        hand_number: hand_state.hand_number,
+        seat_index: player_seat.seat_index,
+        card_1: card1,
+        card_2: card2,
+        timestamp: clock.unix_timestamp,
+    });
 
     Ok(())
 }

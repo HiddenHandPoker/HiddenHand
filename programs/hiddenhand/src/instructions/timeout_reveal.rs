@@ -11,6 +11,7 @@ use anchor_lang::prelude::*;
 
 use crate::constants::*;
 use crate::error::HiddenHandError;
+use crate::events::ActionTaken;
 use crate::state::{GamePhase, HandState, PlayerSeat, PlayerStatus, Table, TableStatus};
 
 #[derive(Accounts)]
@@ -106,6 +107,18 @@ pub fn handler(ctx: Context<TimeoutReveal>, target_seat: u8) -> Result<()> {
 
     // Update last action time
     hand_state.last_action_time = clock.unix_timestamp;
+
+    emit!(ActionTaken {
+        table_id: table.table_id,
+        hand_number: hand_state.hand_number,
+        seat_index: target_seat,
+        action_type: 5, // TimeoutFold (mucked at showdown)
+        amount: 0,
+        pot_after: hand_state.pot,
+        phase: hand_state.phase as u8,
+        timestamp: clock.unix_timestamp,
+        next_action_on: 255, // Showdown phase, no more betting
+    });
 
     Ok(())
 }

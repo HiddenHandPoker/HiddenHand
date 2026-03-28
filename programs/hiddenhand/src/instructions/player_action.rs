@@ -2,6 +2,7 @@ use anchor_lang::prelude::*;
 
 use crate::constants::*;
 use crate::error::HiddenHandError;
+use crate::events::ActionTaken;
 use crate::state::{DeckState, GamePhase, HandState, PlayerSeat, Table, TableStatus};
 
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, PartialEq, Eq, Debug)]
@@ -83,6 +84,10 @@ pub fn handler(ctx: Context<PlayerAction>, action: Action) -> Result<()> {
         player_seat.can_act(),
         HiddenHandError::PlayerFolded
     );
+
+    // Capture phase and bet state before action for event emission
+    let phase_num = hand_state.phase as u8;
+    let bet_before = player_seat.total_bet_this_hand;
 
     // Calculate amount to call
     let to_call = hand_state
@@ -207,6 +212,35 @@ pub fn handler(ctx: Context<PlayerAction>, action: Action) -> Result<()> {
             run_out_to_showdown(hand_state, deck_state)?;
         }
     }
+
+    // Emit ActionTaken event
+    let action_type_num: u8 = match action {
+        Action::Fold => 0,
+        Action::Check => 1,
+        Action::Call => 2,
+        Action::Raise { .. } => 3,
+        Action::AllIn => 4,
+    };
+    let action_amount = player_seat.total_bet_this_hand.saturating_sub(bet_before);
+    let next_action_on = if matches!(hand_state.phase, GamePhase::Settled | GamePhase::Showdown)
+        || hand_state.awaiting_community_reveal
+    {
+        255u8
+    } else {
+        hand_state.action_on
+    };
+
+    emit!(ActionTaken {
+        table_id: table.table_id,
+        hand_number: hand_state.hand_number,
+        seat_index: player_seat.seat_index,
+        action_type: action_type_num,
+        amount: action_amount,
+        pot_after: hand_state.pot,
+        phase: phase_num,
+        timestamp: clock.unix_timestamp,
+        next_action_on,
+    });
 
     Ok(())
 }

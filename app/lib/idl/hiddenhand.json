@@ -2222,6 +2222,32 @@
   ],
   "events": [
     {
+      "name": "ActionTaken",
+      "discriminator": [
+        128,
+        186,
+        77,
+        12,
+        99,
+        195,
+        48,
+        60
+      ]
+    },
+    {
+      "name": "CommunityCardsRevealed",
+      "discriminator": [
+        194,
+        255,
+        78,
+        4,
+        116,
+        95,
+        22,
+        180
+      ]
+    },
+    {
       "name": "HandCompleted",
       "discriminator": [
         84,
@@ -2232,6 +2258,32 @@
         74,
         200,
         229
+      ]
+    },
+    {
+      "name": "HandStarted",
+      "discriminator": [
+        92,
+        115,
+        135,
+        103,
+        133,
+        169,
+        143,
+        43
+      ]
+    },
+    {
+      "name": "ShowdownReveal",
+      "discriminator": [
+        87,
+        131,
+        37,
+        141,
+        199,
+        192,
+        92,
+        178
       ]
     }
   ],
@@ -2518,6 +2570,143 @@
       }
     },
     {
+      "name": "ActionTaken",
+      "docs": [
+        "Emitted when a player acts or is timed out"
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "table_id",
+            "docs": [
+              "Table identifier"
+            ],
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "hand_number",
+            "docs": [
+              "Sequential hand number"
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "seat_index",
+            "docs": [
+              "Seat index of the player who acted"
+            ],
+            "type": "u8"
+          },
+          {
+            "name": "action_type",
+            "docs": [
+              "0=Fold, 1=Check, 2=Call, 3=Raise, 4=AllIn, 5=TimeoutFold, 6=TimeoutCheck"
+            ],
+            "type": "u8"
+          },
+          {
+            "name": "amount",
+            "docs": [
+              "Amount bet in this action (0 for fold/check)"
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "pot_after",
+            "docs": [
+              "Total pot after this action"
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "phase",
+            "docs": [
+              "Game phase (0=Dealing, 1=PreFlop, 2=Flop, 3=Turn, 4=River, 5=Showdown, 6=Settled)"
+            ],
+            "type": "u8"
+          },
+          {
+            "name": "timestamp",
+            "docs": [
+              "Unix timestamp"
+            ],
+            "type": "i64"
+          },
+          {
+            "name": "next_action_on",
+            "docs": [
+              "Next player to act (255 if round/hand ended)"
+            ],
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "CommunityCardsRevealed",
+      "docs": [
+        "Emitted when community cards are revealed (flop/turn/river)"
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "table_id",
+            "docs": [
+              "Table identifier"
+            ],
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "hand_number",
+            "docs": [
+              "Sequential hand number"
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "new_phase",
+            "docs": [
+              "The phase entering (Flop=2, Turn=3, River=4, Showdown=5 for all-in runout)"
+            ],
+            "type": "u8"
+          },
+          {
+            "name": "cards",
+            "docs": [
+              "Card values revealed in this step (3 for flop, 1 for turn, 1 for river)"
+            ],
+            "type": "bytes"
+          },
+          {
+            "name": "timestamp",
+            "docs": [
+              "Unix timestamp"
+            ],
+            "type": "i64"
+          },
+          {
+            "name": "action_on",
+            "docs": [
+              "Next player to act in new betting round (255 if showdown)"
+            ],
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
       "name": "DeckState",
       "docs": [
         "Encrypted deck state for a hand",
@@ -2700,6 +2889,92 @@
             "name": "results_count",
             "docs": [
               "How many results are valid (rest are zeroed)"
+            ],
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "HandStarted",
+      "docs": [
+        "Emitted when a new hand starts (VRF shuffle complete, blinds posted, phase set to PreFlop)"
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "table_id",
+            "docs": [
+              "Table identifier"
+            ],
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "hand_number",
+            "docs": [
+              "Sequential hand number"
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "timestamp",
+            "docs": [
+              "Unix timestamp"
+            ],
+            "type": "i64"
+          },
+          {
+            "name": "dealer_position",
+            "docs": [
+              "Dealer button seat index"
+            ],
+            "type": "u8"
+          },
+          {
+            "name": "small_blind_seat",
+            "docs": [
+              "Small blind seat index"
+            ],
+            "type": "u8"
+          },
+          {
+            "name": "big_blind_seat",
+            "docs": [
+              "Big blind seat index"
+            ],
+            "type": "u8"
+          },
+          {
+            "name": "small_blind_amount",
+            "docs": [
+              "Small blind amount posted"
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "big_blind_amount",
+            "docs": [
+              "Big blind amount posted"
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "active_players",
+            "docs": [
+              "Bitmap of players dealt into this hand"
+            ],
+            "type": "u8"
+          },
+          {
+            "name": "player_count",
+            "docs": [
+              "Number of active players"
             ],
             "type": "u8"
           }
@@ -3043,6 +3318,64 @@
           },
           {
             "name": "AllIn"
+          }
+        ]
+      }
+    },
+    {
+      "name": "ShowdownReveal",
+      "docs": [
+        "Emitted when a player reveals their hole cards at showdown"
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "table_id",
+            "docs": [
+              "Table identifier"
+            ],
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "hand_number",
+            "docs": [
+              "Sequential hand number"
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "seat_index",
+            "docs": [
+              "Seat index of the revealing player"
+            ],
+            "type": "u8"
+          },
+          {
+            "name": "card_1",
+            "docs": [
+              "First hole card (0-51)"
+            ],
+            "type": "u8"
+          },
+          {
+            "name": "card_2",
+            "docs": [
+              "Second hole card (0-51)"
+            ],
+            "type": "u8"
+          },
+          {
+            "name": "timestamp",
+            "docs": [
+              "Unix timestamp"
+            ],
+            "type": "i64"
           }
         ]
       }

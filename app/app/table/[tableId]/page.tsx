@@ -78,7 +78,7 @@ export default function TablePage({ params }: { params: Promise<{ tableId: strin
   }, [decodedTableId, setTableId]);
 
   // On-chain hand history from events
-  const { history: onChainHistory, isListening: isHistoryListening } = useHandHistory(program);
+  const { history: onChainHistory, handTimelines, isListening: isHistoryListening, loadingHistory } = useHandHistory(program, gameState.tablePDA);
 
   // Expose hook functions to window for console testing (development only)
   useEffect(() => {
@@ -1509,8 +1509,10 @@ export default function TablePage({ params }: { params: Promise<{ tableId: strin
             <div className="max-w-lg mx-auto mt-4">
               <OnChainHandHistory
                 history={onChainHistory}
+                handTimelines={handTimelines}
                 currentPlayerPubkey={publicKey?.toString()}
                 isListening={isHistoryListening}
+                loadingHistory={loadingHistory}
               />
             </div>
           )}
