@@ -145,10 +145,19 @@ export default function Home() {
             </p>
 
             <div
-              className="animate-fade-in-up"
+              className="animate-fade-in-up flex flex-col items-center gap-3"
               style={{ animationDelay: '0.6s', opacity: 0, animationFillMode: 'forwards' }}
             >
               <WalletButton className="btn-gold !text-base !px-10 !py-3 !rounded-xl !font-bold" />
+              <a
+                href="/lobby"
+                className="text-[var(--text-muted)] hover:text-[var(--gold-light)] text-sm transition-colors flex items-center gap-1.5"
+              >
+                Browse tables without a wallet
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                </svg>
+              </a>
             </div>
           </div>
 
