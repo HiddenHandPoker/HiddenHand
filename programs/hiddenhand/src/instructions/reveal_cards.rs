@@ -51,7 +51,7 @@ pub struct RevealCards<'info> {
 
     #[account(
         mut,
-        seeds = [SEAT_SEED, table.key().as_ref(), &player_seat.seat_index.to_le_bytes()],
+        seeds = [SEAT_SEED, table.key().as_ref(), &[player_seat.seat_index]],
         bump = player_seat.bump,
         constraint = player_seat.player == player.key() @ HiddenHandError::PlayerNotAtTable
     )]
@@ -189,6 +189,12 @@ pub fn handler(ctx: Context<RevealCards>, card1: u8, card2: u8) -> Result<()> {
     // Validate card values
     require!(
         card1 <= 51 && card2 <= 51,
+        HiddenHandError::InvalidCard
+    );
+
+    // No player can hold two copies of the same card
+    require!(
+        card1 != card2,
         HiddenHandError::InvalidCard
     );
 

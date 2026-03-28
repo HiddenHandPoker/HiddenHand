@@ -20,6 +20,28 @@ use crate::constants::*;
 use crate::error::HiddenHandError;
 use crate::state::{PlayerSeat, Table, TableStatus};
 
+/// Deserialize and validate a player's token account from remaining_accounts
+fn validate_player_token_account(
+    account_info: &AccountInfo,
+    expected_owner: &Pubkey,
+    expected_mint: &Pubkey,
+) -> Result<()> {
+    let ta = TokenAccount::try_deserialize(
+        &mut &account_info.try_borrow_data()?[..],
+    ).map_err(|_| HiddenHandError::InvalidRemainingAccounts)?;
+
+    require!(
+        ta.owner == *expected_owner,
+        HiddenHandError::PlayerNotAtTable
+    );
+    require!(
+        ta.mint == *expected_mint,
+        HiddenHandError::InvalidTokenMint
+    );
+
+    Ok(())
+}
+
 #[derive(Accounts)]
 pub struct CloseInactiveTable<'info> {
     /// Anyone can call this after timeout
@@ -147,6 +169,9 @@ pub fn handler<'info>(
 
         // Return chips to player via token transfer
         if transfer_amount > 0 {
+            // Security: Verify token account belongs to the player and matches table mint
+            validate_player_token_account(player_token_info, &player_key, &ctx.accounts.mint.key())?;
+
             token_interface::transfer_checked(
                 CpiContext::new_with_signer(
                     ctx.accounts.token_program.to_account_info(),

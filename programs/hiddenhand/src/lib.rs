@@ -65,21 +65,6 @@ pub mod hiddenhand {
         instructions::showdown::handler(ctx)
     }
 
-    /// DEPRECATED: Plaintext dealing for local testing ONLY.
-    /// Cards are stored unencrypted on-chain — DO NOT use in production.
-    /// For production, use request_shuffle + callback_shuffle (VRF + Inco FHE).
-    pub fn deal_cards(ctx: Context<DealAllCards>) -> Result<()> {
-        msg!("WARNING: deal_cards stores plaintext cards on-chain. Use request_shuffle for production.");
-        instructions::deal_cards::handler(ctx)
-    }
-
-    /// Deal cards with ATOMIC Inco encryption (RECOMMENDED for privacy)
-    /// Cards are encrypted immediately during dealing - NEVER stored as plaintext
-    /// After calling this, use grant_card_allowance for each player to enable decryption
-    pub fn deal_cards_encrypted(ctx: Context<DealCardsEncrypted>) -> Result<()> {
-        instructions::deal_cards_encrypted::handler(ctx)
-    }
-
     // ============================================================
     // MagicBlock VRF Instructions (Provably Fair Shuffling)
     // Modified Option B: Atomic shuffle + encrypt in callback

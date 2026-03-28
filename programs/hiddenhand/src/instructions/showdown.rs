@@ -200,17 +200,13 @@ pub fn handler(ctx: Context<Showdown>) -> Result<()> {
             // Collect event data for ALL seats
             let hole_1 = if seat.cards_revealed {
                 seat.revealed_card_1
-            } else if seat.status == PlayerStatus::Folded {
-                255
             } else {
-                (seat.hole_card_1 & 0xFF) as u8
+                255
             };
             let hole_2 = if seat.cards_revealed {
                 seat.revealed_card_2
-            } else if seat.status == PlayerStatus::Folded {
-                255
             } else {
-                (seat.hole_card_2 & 0xFF) as u8
+                255
             };
 
             let hand_rank = if hole_1 != 255 && hole_2 != 255 && community_cards.len() == 5 {
@@ -348,12 +344,12 @@ pub fn handler(ctx: Context<Showdown>) -> Result<()> {
                             let hole_card_1 = if seat.cards_revealed {
                                 seat.revealed_card_1
                             } else {
-                                (seat.hole_card_1 & 0xFF) as u8
+                                255
                             };
                             let hole_card_2 = if seat.cards_revealed {
                                 seat.revealed_card_2
                             } else {
-                                (seat.hole_card_2 & 0xFF) as u8
+                                255
                             };
 
                             let seven_cards: [u8; 7] = [
@@ -397,22 +393,16 @@ pub fn handler(ctx: Context<Showdown>) -> Result<()> {
                             seat.try_serialize(&mut *data)?;
                             chips_awarded.push((*seat_idx, winnings));
 
-                            let hole_1 = if seat.cards_revealed {
-                                seat.revealed_card_1
+                            if seat.cards_revealed {
+                                let hand_eval = evaluate_hand(&[
+                                    seat.revealed_card_1, seat.revealed_card_2,
+                                    community_cards[0], community_cards[1], community_cards[2],
+                                    community_cards[3], community_cards[4],
+                                ]);
+                                msg!("Seat {} wins {} with {:?}", seat_idx, winnings, hand_eval.rank);
                             } else {
-                                (seat.hole_card_1 & 0xFF) as u8
-                            };
-                            let hole_2 = if seat.cards_revealed {
-                                seat.revealed_card_2
-                            } else {
-                                (seat.hole_card_2 & 0xFF) as u8
-                            };
-                            let hand_eval = evaluate_hand(&[
-                                hole_1, hole_2,
-                                community_cards[0], community_cards[1], community_cards[2],
-                                community_cards[3], community_cards[4],
-                            ]);
-                            msg!("Seat {} wins {} with {:?}", seat_idx, winnings, hand_eval.rank);
+                                msg!("Seat {} wins {}", seat_idx, winnings);
+                            }
                         }
                         break;
                     }

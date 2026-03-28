@@ -88,11 +88,9 @@ pub fn handler(ctx: Context<EncryptHoleCards>, _seat_index: u8) -> Result<()> {
     }
 
     msg!(
-        "Encrypting cards for seat {} (player {}): card1={}, card2={}",
+        "Encrypting cards for seat {} (player {})",
         player_seat.seat_index,
         player_seat.player,
-        card1,
-        card2
     );
 
     // Get account infos for CPI
@@ -109,11 +107,9 @@ pub fn handler(ctx: Context<EncryptHoleCards>, _seat_index: u8) -> Result<()> {
     player_seat.hole_card_2 = encrypted2.unwrap();
 
     msg!(
-        "Encrypted cards for seat {}: {} -> handle {}, {} -> handle {}",
+        "Encrypted cards for seat {}: handle {}, handle {}",
         player_seat.seat_index,
-        card1,
         player_seat.hole_card_1,
-        card2,
         player_seat.hole_card_2
     );
 

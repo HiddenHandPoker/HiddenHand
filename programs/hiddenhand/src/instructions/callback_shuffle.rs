@@ -352,6 +352,12 @@ pub fn handler(ctx: Context<CallbackShuffle>, randomness: [u8; 32]) -> Result<()
         HiddenHandError::NotEnoughPlayers
     );
 
+    // Security: Verify all seated players received cards (prevents selective exclusion)
+    require!(
+        active_count == current_players,
+        HiddenHandError::InvalidRemainingAccounts
+    );
+
     // Find first player to act
     // In heads-up: SB (dealer) acts first preflop
     // In 3+ players: UTG (after BB) acts first

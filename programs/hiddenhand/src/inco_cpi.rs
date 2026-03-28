@@ -85,8 +85,11 @@ pub fn encrypt_card<'info>(
     invoke(&ix, &[signer.clone()])?;
 
     // Get the return data (encrypted handle)
-    let (_program_id, return_data) = anchor_lang::solana_program::program::get_return_data()
+    let (return_program_id, return_data) = anchor_lang::solana_program::program::get_return_data()
         .ok_or(ProgramError::InvalidAccountData)?;
+    if return_program_id != INCO_PROGRAM_ID {
+        return Err(ProgramError::InvalidAccountData.into());
+    }
 
     // Parse as u128 (Euint128 is just a wrapper around u128)
     let handle = u128::from_le_bytes(
@@ -95,7 +98,7 @@ pub fn encrypt_card<'info>(
             .map_err(|_| ProgramError::InvalidAccountData)?,
     );
 
-    msg!("Card encrypted: {} -> handle {}", card_value, handle);
+    msg!("Card encrypted: handle {}", handle);
     Ok(EncryptedCard(handle))
 }
 
@@ -218,8 +221,11 @@ pub fn encrypt_card_with_pda<'info>(
     invoke_signed(&ix, &[pda_account.clone()], &[pda_seeds])?;
 
     // Get the return data (encrypted handle)
-    let (_program_id, return_data) = anchor_lang::solana_program::program::get_return_data()
+    let (return_program_id, return_data) = anchor_lang::solana_program::program::get_return_data()
         .ok_or(ProgramError::InvalidAccountData)?;
+    if return_program_id != INCO_PROGRAM_ID {
+        return Err(ProgramError::InvalidAccountData.into());
+    }
 
     // Parse as u128 (Euint128 is just a wrapper around u128)
     let handle = u128::from_le_bytes(
@@ -228,7 +234,7 @@ pub fn encrypt_card_with_pda<'info>(
             .map_err(|_| ProgramError::InvalidAccountData)?,
     );
 
-    msg!("Card encrypted (PDA): {} -> handle {}", card_value, handle);
+    msg!("Card encrypted (PDA): handle {}", handle);
     Ok(EncryptedCard(handle))
 }
 
