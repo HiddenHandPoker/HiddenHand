@@ -148,7 +148,7 @@ export default function LeaderboardPage() {
         )}
 
         {/* Leaderboard table */}
-        {!loading && leaderboard.length === 0 ? (
+        {loading ? null : leaderboard.length === 0 ? (
           <div className="glass-dark rounded-xl p-8 text-center">
             <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-[var(--bg-elevated)] flex items-center justify-center">
               <svg className="w-8 h-8 text-[var(--text-muted)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
