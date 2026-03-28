@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import React, { useState } from "react";
 import {
   HandHistoryEntry,
   TimelineEvent,
@@ -53,20 +53,7 @@ export function OnChainHandHistory({
   if (history.length === 0) {
     return (
       <div className="glass-dark rounded-xl p-4">
-        <div className="flex items-center justify-between mb-3">
-          <Tooltip
-            title="Blockchain Audit Trail"
-            content="Every hand is permanently recorded on Solana with a full action-by-action timeline. Click any hand to expand the action log."
-          >
-            <h3 className="text-sm font-semibold text-[var(--text-primary)] flex items-center cursor-help">
-              On-Chain Hand History
-              <InfoIcon />
-            </h3>
-          </Tooltip>
-          <span className={`text-xs px-2 py-1 rounded-full ${isListening ? "bg-green-500/20 text-green-400" : "bg-gray-500/20 text-gray-400"}`}>
-            {isListening ? "Live" : "Offline"}
-          </span>
-        </div>
+        <HeaderBar isListening={isListening} loadingHistory={loadingHistory} />
         {loadingHistory ? (
           <p className="text-sm text-[var(--text-secondary)]">
             Loading hand history from chain...
@@ -82,33 +69,24 @@ export function OnChainHandHistory({
 
   return (
     <div className="glass-dark rounded-xl p-4">
-      <div className="flex items-center justify-between mb-3">
-        <Tooltip
-          title="Blockchain Audit Trail"
-          content="Every hand is permanently recorded on Solana with a full action-by-action timeline. Click any hand to expand the action log."
-        >
-          <h3 className="text-sm font-semibold text-[var(--text-primary)] flex items-center cursor-help">
-            On-Chain Hand History
-            <InfoIcon />
-          </h3>
-        </Tooltip>
-        <span className={`text-xs px-2 py-1 rounded-full ${isListening ? "bg-green-500/20 text-green-400" : "bg-gray-500/20 text-gray-400"}`}>
-          {isListening ? "Live" : "Offline"}
-        </span>
-      </div>
+      <HeaderBar isListening={isListening} loadingHistory={loadingHistory} />
 
       <div className="space-y-3 max-h-96 overflow-y-auto">
         {history.map((hand, idx) => {
           const timeline = handTimelines.get(hand.handNumber) || [];
           const isExpanded = expandedHands.has(hand.handNumber);
+          const hasTimeline = timeline.length > 0;
 
           return (
             <div
               key={`${hand.handNumber}-${idx}`}
               className="bg-black/20 rounded-lg p-3 border border-white/5"
             >
-              {/* Header */}
-              <div className="flex items-center justify-between mb-2">
+              {/* Header — clickable when timeline exists */}
+              <div
+                className={`flex items-center justify-between mb-2 ${hasTimeline ? "cursor-pointer select-none" : ""}`}
+                onClick={hasTimeline ? () => toggleTimeline(hand.handNumber) : undefined}
+              >
                 <div className="flex items-center gap-2">
                   <span className="text-sm font-medium text-[var(--text-primary)]">
                     Hand #{hand.handNumber}
@@ -121,13 +99,10 @@ export function OnChainHandHistory({
                   <span className="text-xs text-[var(--text-secondary)]">
                     {formatTimeAgo(hand.timestamp)}
                   </span>
-                  {timeline.length > 0 && (
-                    <button
-                      onClick={() => toggleTimeline(hand.handNumber)}
-                      className="text-[10px] px-1.5 py-0.5 rounded bg-white/5 hover:bg-white/10 text-blue-400 hover:text-blue-300 transition-colors"
-                    >
-                      {isExpanded ? "Hide" : "Show"} Log
-                    </button>
+                  {hasTimeline && (
+                    <span className={`text-xs text-[var(--text-muted)] transition-transform duration-200 ${isExpanded ? "rotate-90" : ""}`}>
+                      {"\u25B8"}
+                    </span>
                   )}
                 </div>
               </div>
@@ -138,22 +113,25 @@ export function OnChainHandHistory({
               </div>
 
               {/* Timeline (expanded) */}
-              {isExpanded && timeline.length > 0 && (
-                <div className="mb-2 pl-1 border-l-2 border-white/10 space-y-0.5">
+              <div
+                className={`overflow-hidden transition-all duration-200 ${isExpanded && hasTimeline ? "max-h-[800px] opacity-100 mb-2" : "max-h-0 opacity-0"}`}
+              >
+                <div className="pl-1 space-y-0.5 pt-1">
                   {timeline.map((event, i) => (
-                    <TimelineEventRow key={i} event={event} token={token} isLast={i === timeline.length - 1} />
+                    <TimelineEventRow key={i} event={event} token={token} />
                   ))}
-                  {/* Hand completed summary with actual winnings */}
+                  {/* Winner summary with actual winnings */}
                   {(() => {
                     const winners = hand.players.filter(p => p.chipsWon > 0);
                     if (winners.length === 0) return null;
                     return (
-                      <div className="flex items-start gap-1.5 pl-2 py-0.5">
-                        <span className="text-[10px] text-green-400 font-mono leading-relaxed">
-                          {"\u2514\u2500"} {winners.map((p, i) => (
+                      <div className="flex items-center gap-2 pl-1 py-0.5">
+                        <div className="w-1.5 h-1.5 rounded-full bg-[var(--status-active)] flex-shrink-0" />
+                        <span className="text-xs text-green-400">
+                          {winners.map((p, i) => (
                             <span key={p.seatIndex}>
                               {i > 0 && ", "}
-                              Seat {p.seatIndex} wins {baseUnitsToDisplay(p.chipsWon, token).toFixed(2)} {token.symbol}
+                              Seat {p.seatIndex + 1} wins {baseUnitsToDisplay(p.chipsWon, token).toFixed(2)} {token.symbol}
                             </span>
                           ))}
                         </span>
@@ -161,7 +139,7 @@ export function OnChainHandHistory({
                     );
                   })()}
                 </div>
-              )}
+              </div>
 
               {/* Community Cards */}
               <div className="mb-2">
@@ -248,18 +226,59 @@ export function OnChainHandHistory({
   );
 }
 
-function TimelineEventRow({ event, token, isLast }: { event: TimelineEvent; token: TokenInfo; isLast: boolean }) {
-  const connector = isLast ? "\u2514\u2500" : "\u251c\u2500";
+// --- Sub-components ---
 
+function HeaderBar({ isListening, loadingHistory }: { isListening: boolean; loadingHistory: boolean }) {
+  return (
+    <div className="flex items-center justify-between mb-3">
+      <Tooltip
+        title="Blockchain Audit Trail"
+        content="Every hand is permanently recorded on Solana with a full action-by-action timeline. Click any hand to expand the action log."
+      >
+        <h3 className="text-sm font-semibold text-[var(--text-primary)] flex items-center cursor-help">
+          On-Chain Hand History
+          <InfoIcon />
+        </h3>
+      </Tooltip>
+      <div className="flex items-center gap-1.5">
+        {loadingHistory && (
+          <span className="text-xs px-2 py-1 rounded-full bg-yellow-500/15 text-yellow-400 animate-pulse">
+            Loading...
+          </span>
+        )}
+        <span className={`text-xs px-2 py-1 rounded-full ${isListening ? "bg-green-500/20 text-green-400" : "bg-gray-500/20 text-gray-400"}`}>
+          {isListening ? "Live" : "Offline"}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+function TimelineEventRow({ event, token }: { event: TimelineEvent; token: TokenInfo }) {
+  const { dot, content } = getTimelineRowContent(event, token);
+
+  return (
+    <div className="flex items-center gap-2 pl-1 py-0.5">
+      <div className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${dot}`} />
+      <span className="text-xs leading-relaxed">{content}</span>
+    </div>
+  );
+}
+
+function getTimelineRowContent(event: TimelineEvent, token: TokenInfo): { dot: string; content: React.ReactNode } {
   switch (event.type) {
     case "hand_started":
-      return (
-        <div className="flex items-start gap-1.5 pl-2 py-0.5">
-          <span className="text-[10px] text-[var(--text-secondary)] font-mono leading-relaxed">
-            {connector} Hand started: Dealer seat {event.dealerPosition}, Blinds {baseUnitsToDisplay(event.smallBlindAmount, token).toFixed(2)}/{baseUnitsToDisplay(event.bigBlindAmount, token).toFixed(2)}
+      return {
+        dot: "bg-[var(--status-info)]",
+        content: (
+          <span className="text-[var(--text-secondary)]">
+            Hand started — Dealer seat {event.dealerPosition + 1}, Blinds{" "}
+            <span className="text-[var(--text-primary)]">
+              {baseUnitsToDisplay(event.smallBlindAmount, token).toFixed(2)}/{baseUnitsToDisplay(event.bigBlindAmount, token).toFixed(2)}
+            </span>
           </span>
-        </div>
-      );
+        ),
+      };
 
     case "action_taken": {
       const phaseName = PHASE_NAMES[event.phase] || "?";
@@ -268,28 +287,26 @@ function TimelineEventRow({ event, token, isLast }: { event: TimelineEvent; toke
         ? ` ${baseUnitsToDisplay(event.amount, token).toFixed(2)}`
         : "";
 
-      const actionColor = getActionColor(event.actionType);
-
-      return (
-        <div className="flex items-start gap-1.5 pl-2 py-0.5">
-          <span className="text-[10px] font-mono leading-relaxed">
-            <span className="text-[var(--text-muted)]">{connector}</span>{" "}
+      return {
+        dot: getActionDotColor(event.actionType),
+        content: (
+          <>
             <span className="text-[var(--text-muted)]">[{phaseName}]</span>{" "}
-            <span className="text-[var(--text-secondary)]">Seat {event.seatIndex}:</span>{" "}
-            <span className={actionColor}>{actionName}{amountStr}</span>
-          </span>
-        </div>
-      );
+            <span className="text-[var(--text-secondary)]">Seat {event.seatIndex + 1}:</span>{" "}
+            <span className={getActionTextColor(event.actionType)}>{actionName}{amountStr}</span>
+          </>
+        ),
+      };
     }
 
     case "community_cards": {
       const phaseName = PHASE_NAMES[event.newPhase] || "?";
-      return (
-        <div className="flex items-start gap-1.5 pl-2 py-0.5">
-          <span className="text-[10px] font-mono leading-relaxed">
-            <span className="text-[var(--text-muted)]">{connector}</span>{" "}
-            <span className="text-purple-400">Community: {phaseName}</span>{" "}
-            <span className="text-base font-semibold">
+      return {
+        dot: "bg-purple-400",
+        content: (
+          <>
+            <span className="text-purple-400">{phaseName}</span>{" "}
+            <span className="font-mono text-sm font-semibold">
               [{event.cards.map((c, i) => (
                 <span key={i}>
                   {i > 0 && ", "}
@@ -297,36 +314,49 @@ function TimelineEventRow({ event, token, isLast }: { event: TimelineEvent; toke
                 </span>
               ))}]
             </span>
-          </span>
-        </div>
-      );
+          </>
+        ),
+      };
     }
 
     case "showdown_reveal":
-      return (
-        <div className="flex items-start gap-1.5 pl-2 py-0.5">
-          <span className="text-[10px] font-mono leading-relaxed">
-            <span className="text-[var(--text-muted)]">{connector}</span>{" "}
-            <span className="text-cyan-400">Seat {event.seatIndex} reveals:</span>{" "}
-            <span className="text-base font-semibold">
+      return {
+        dot: "bg-cyan-400",
+        content: (
+          <>
+            <span className="text-cyan-400">Seat {event.seatIndex + 1} reveals</span>{" "}
+            <span className="font-mono text-sm font-semibold">
               <span className={getSuitColor(event.card1)}>{formatCard(event.card1)}</span>{" "}
               <span className={getSuitColor(event.card2)}>{formatCard(event.card2)}</span>
             </span>
-          </span>
-        </div>
-      );
+          </>
+        ),
+      };
   }
 }
 
-function getActionColor(actionType: number): string {
+function getActionDotColor(actionType: number): string {
   switch (actionType) {
-    case 0: return "text-red-400"; // Fold
-    case 1: return "text-[var(--text-secondary)]"; // Check
-    case 2: return "text-[var(--text-secondary)]"; // Call
-    case 3: return "text-[var(--gold-light)]"; // Raise
-    case 4: return "text-purple-400 font-semibold"; // All-In
-    case 5: return "text-red-400 italic"; // Timeout Fold
-    case 6: return "text-[var(--text-muted)] italic"; // Timeout Check
+    case 0: return "bg-[var(--status-danger)]";   // Fold
+    case 1: return "bg-[var(--text-muted)]";       // Check
+    case 2: return "bg-[var(--text-secondary)]";   // Call
+    case 3: return "bg-[var(--gold-main)]";        // Raise
+    case 4: return "bg-purple-400";                // All-In
+    case 5: return "bg-[var(--status-danger)]";    // Timeout Fold
+    case 6: return "bg-[var(--text-muted)]";       // Timeout Check
+    default: return "bg-[var(--text-muted)]";
+  }
+}
+
+function getActionTextColor(actionType: number): string {
+  switch (actionType) {
+    case 0: return "text-[var(--status-danger)]";          // Fold
+    case 1: return "text-[var(--text-secondary)]";         // Check
+    case 2: return "text-[var(--text-secondary)]";         // Call
+    case 3: return "text-[var(--gold-light)]";             // Raise
+    case 4: return "text-purple-400 font-semibold";        // All-In
+    case 5: return "text-[var(--status-danger)] italic";   // Timeout Fold
+    case 6: return "text-[var(--text-muted)] italic";      // Timeout Check
     default: return "text-[var(--text-secondary)]";
   }
 }
@@ -339,4 +369,3 @@ function formatTimeAgo(date: Date): string {
   if (seconds < SECONDS_PER_DAY) return `${Math.floor(seconds / SECONDS_PER_HOUR)}h ago`;
   return date.toLocaleDateString();
 }
-
