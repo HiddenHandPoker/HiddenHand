@@ -129,8 +129,8 @@ export function useLobby(): UseLobbyResult {
       // type doesn't expose them directly. Cast through `any` to call `.all()`.
       // Filter by dataSize to skip old table accounts created before the USDC
       // migration added token_mint (32B) and token_decimals (1B) fields.
-      // Current Table account size = 179 bytes (8 discriminator + 171 struct).
-      const TABLE_ACCOUNT_SIZE = 179;
+      // Current Table account size = 177 bytes (from Table::SIZE in table.rs).
+      const TABLE_ACCOUNT_SIZE = 177;
       const raw: { publicKey: PublicKey; account: any }[] =
         await (prog.account as any).table.all([
           { dataSize: TABLE_ACCOUNT_SIZE },
