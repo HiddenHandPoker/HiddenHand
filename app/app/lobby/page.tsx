@@ -16,6 +16,7 @@ import { generateTableId, getTablePDA, getVaultPDA } from "@/lib/program";
 import { SystemProgram } from "@solana/web3.js";
 import { BN } from "@coral-xyz/anchor";
 import { getDefaultToken, TOKEN_PROGRAM_ID } from "@/lib/tokens";
+import { getRakeForBlinds } from "@/lib/rake";
 
 export default function LobbyPage() {
   const { connected, publicKey } = useWallet();
@@ -134,12 +135,13 @@ export default function LobbyPage() {
       if (!program || !provider || !publicKey) return;
 
       const tableName = `Quick-${Date.now().toString(36)}`;
+      const rake = getRakeForBlinds(config.bigBlind);
       try {
         await handleCreateTable({
           tableId: tableName,
           ...config,
-          rakeBps: 0,
-          rakeCap: 0,
+          rakeBps: rake.rakeBps,
+          rakeCap: rake.rakeCap,
         });
       } catch (err) {
         console.error("Quick create failed:", err);
