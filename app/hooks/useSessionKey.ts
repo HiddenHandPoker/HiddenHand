@@ -105,6 +105,22 @@ function getSessionTokenPDA(
 
 // ─── Build instructions ──────────────────────────────────────────────
 
+function writeI64LE(value: number): Uint8Array {
+  const buf = new Uint8Array(8);
+  // Write as two 32-bit halves to avoid BigInt browser compatibility issues
+  const low = value & 0xffffffff;
+  const high = Math.floor(value / 0x100000000) & 0xffffffff;
+  buf[0] = low & 0xff;
+  buf[1] = (low >> 8) & 0xff;
+  buf[2] = (low >> 16) & 0xff;
+  buf[3] = (low >> 24) & 0xff;
+  buf[4] = high & 0xff;
+  buf[5] = (high >> 8) & 0xff;
+  buf[6] = (high >> 16) & 0xff;
+  buf[7] = (high >> 24) & 0xff;
+  return buf;
+}
+
 function buildCreateSessionInstruction(
   sessionSigner: PublicKey,
   authority: PublicKey,
@@ -113,27 +129,29 @@ function buildCreateSessionInstruction(
 ): TransactionInstruction {
   // Anchor serialization: discriminator + Option<bool> + Option<i64> + Option<u64>
   // Option<T> encoding: 0x01 + value (Some), or 0x00 (None)
-  const buf = Buffer.alloc(
-    8 +   // discriminator
-    1 + 1 +   // Option<bool> Some(true) -> [1, 1]
-    1 + 8 +   // Option<i64>  Some(validUntil) -> [1, 8-bytes LE]
-    1         // Option<u64>  None -> [0] (use default 0.01 SOL)
-  );
-  let offset = 0;
+  const parts: Uint8Array[] = [];
 
-  // discriminator
-  CREATE_SESSION_DISCRIMINATOR.copy(buf, offset); offset += 8;
+  // discriminator (8 bytes)
+  parts.push(new Uint8Array(CREATE_SESSION_DISCRIMINATOR));
 
   // top_up: Option<bool> = Some(true)
-  buf.writeUInt8(1, offset); offset += 1;  // Some
-  buf.writeUInt8(1, offset); offset += 1;  // true
+  parts.push(new Uint8Array([1, 1]));
 
   // valid_until: Option<i64> = Some(validUntil)
-  buf.writeUInt8(1, offset); offset += 1;  // Some
-  buf.writeBigInt64LE(BigInt(validUntil), offset); offset += 8;
+  parts.push(new Uint8Array([1]));
+  parts.push(writeI64LE(validUntil));
 
   // lamports: Option<u64> = None (use default 0.01 SOL)
-  buf.writeUInt8(0, offset); offset += 1;
+  parts.push(new Uint8Array([0]));
+
+  // Concatenate all parts
+  const totalLen = parts.reduce((sum, p) => sum + p.length, 0);
+  const data = Buffer.alloc(totalLen);
+  let offset = 0;
+  for (const part of parts) {
+    data.set(part, offset);
+    offset += part.length;
+  }
 
   return new TransactionInstruction({
     programId: SESSION_KEYS_PROGRAM_ID,
@@ -144,7 +162,7 @@ function buildCreateSessionInstruction(
       { pubkey: PROGRAM_ID, isSigner: false, isWritable: false }, // target_program
       { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
     ],
-    data: buf,
+    data,
   });
 }
 

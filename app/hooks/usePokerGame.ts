@@ -2097,18 +2097,23 @@ export function usePokerGame(sessionKey?: SessionKeyParam | null): UsePokerGameR
 
         let tx: string;
 
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const accounts: any = {
+          signer: sessionKey?.isActive ? sessionKey.signerPublicKey : publicKey,
+          table: gameState.tablePDA,
+          handState: handPDA,
+          deckState: deckPDA,
+          playerSeat: seatPDA,
+        };
+        if (sessionKey?.isActive) {
+          accounts.sessionToken = sessionKey.sessionTokenPDA;
+        }
+
         if (sessionKey?.isActive) {
           // Session key path — sign with ephemeral key, no wallet popup
           const txn = await program.methods
             .playerAction(actionArg)
-            .accountsPartial({
-              signer: sessionKey.signerPublicKey,
-              table: gameState.tablePDA,
-              handState: handPDA,
-              deckState: deckPDA,
-              playerSeat: seatPDA,
-              sessionToken: sessionKey.sessionTokenPDA,
-            })
+            .accountsPartial(accounts)
             .transaction();
 
           tx = await sessionKey.sendWithSession(txn);
@@ -2116,13 +2121,7 @@ export function usePokerGame(sessionKey?: SessionKeyParam | null): UsePokerGameR
           // Direct wallet path — standard .rpc() with wallet approval
           tx = await program.methods
             .playerAction(actionArg)
-            .accountsPartial({
-              signer: publicKey,
-              table: gameState.tablePDA,
-              handState: handPDA,
-              deckState: deckPDA,
-              playerSeat: seatPDA,
-            })
+            .accountsPartial(accounts)
             .rpc();
 
           await provider.connection.confirmTransaction(tx, "confirmed");
