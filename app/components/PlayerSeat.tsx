@@ -25,6 +25,7 @@ interface PlayerSeatProps {
   cardsRevealed?: boolean; // Whether this player has revealed their cards
   token?: TokenInfo;
   playerStats?: PlayerStats | null; // On-chain stats for HUD tooltip
+  compact?: boolean; // Mobile compact mode
 }
 
 export const PlayerSeat: FC<PlayerSeatProps> = ({
@@ -45,6 +46,7 @@ export const PlayerSeat: FC<PlayerSeatProps> = ({
   cardsRevealed = false,
   token = getDefaultToken(),
   playerStats,
+  compact = false,
 }) => {
   const [showHUD, setShowHUD] = useState(false);
   const [showNotes, setShowNotes] = useState(false);
@@ -147,7 +149,7 @@ export const PlayerSeat: FC<PlayerSeatProps> = ({
   return (
     <div
       className={`
-        relative p-3 rounded-2xl transition-all duration-300
+        relative ${compact ? "p-1.5" : "p-3"} rounded-2xl transition-all duration-300
         ${isEmpty
           ? "opacity-60 hover:opacity-100 border border-dashed border-white/20 hover:border-[var(--gold-main)]/50 bg-black/20 hover:bg-black/40"
           : "glass-dark"
@@ -174,7 +176,7 @@ export const PlayerSeat: FC<PlayerSeatProps> = ({
       {showNotes && player && (
         <div
           ref={notesRef}
-          className="absolute z-50 bottom-full left-1/2 -translate-x-1/2 mb-2 w-52"
+          className="absolute z-50 bottom-full left-1/2 -translate-x-1/2 mb-2 w-52 max-w-[calc(100vw-2rem)]"
         >
           <div className="glass-dark rounded-xl p-3 border border-[var(--gold-main)]/30 shadow-lg">
             <div className="flex items-center justify-between mb-2">
@@ -246,23 +248,23 @@ export const PlayerSeat: FC<PlayerSeatProps> = ({
 
       {/* Seat number chip */}
       <div
-        className="absolute -top-2 -left-2 w-6 h-6 rounded-full flex items-center justify-center z-10"
+        className={`absolute -top-2 -left-2 ${compact ? "w-4 h-4" : "w-6 h-6"} rounded-full flex items-center justify-center z-10`}
         style={{
           background: "linear-gradient(145deg, var(--bg-elevated) 0%, var(--bg-dark) 100%)",
           border: "2px dashed rgba(255,255,255,0.15)",
           boxShadow: "0 2px 4px rgba(0,0,0,0.3)",
         }}
       >
-        <span className="text-[10px] font-bold text-[var(--text-muted)]">
+        <span className={`${compact ? "text-[7px]" : "text-[10px]"} font-bold text-[var(--text-muted)]`}>
           {seatIndex + 1}
         </span>
       </div>
 
       {isEmpty ? (
-        <div className="text-center py-4 px-2 group">
-          <div className="w-8 h-8 mx-auto mb-2 rounded-full border border-dashed border-white/30 flex items-center justify-center">
+        <div className={`text-center ${compact ? "py-2 px-1" : "py-4 px-2"} group`}>
+          <div className={`${compact ? "w-5 h-5 mb-1" : "w-8 h-8 mb-2"} mx-auto rounded-full border border-dashed border-white/30 flex items-center justify-center`}>
             <svg
-              className="w-4 h-4 text-[var(--text-secondary)]"
+              className={`${compact ? "w-3 h-3" : "w-4 h-4"} text-[var(--text-secondary)]`}
               fill="none"
               stroke="currentColor"
               viewBox="0 0 24 24"
@@ -275,17 +277,17 @@ export const PlayerSeat: FC<PlayerSeatProps> = ({
               />
             </svg>
           </div>
-          <p className="text-[var(--text-secondary)] text-[10px] uppercase tracking-wider">Empty</p>
+          <p className={`text-[var(--text-secondary)] ${compact ? "text-[7px]" : "text-[10px]"} uppercase tracking-wider`}>Empty</p>
         </div>
       ) : (
-        <div className="flex flex-col items-center gap-2">
+        <div className={`flex flex-col items-center ${compact ? "gap-1" : "gap-2"}`}>
           {/* Player cards */}
           <div className={`relative ${isFolded ? "grayscale opacity-60" : ""}`}>
             <CardHand
               cards={displayCards}
               hidden={!showCards && status !== "folded" && !isEncrypted}
               encrypted={isEncrypted}
-              size="sm"
+              size={compact ? "xs" : "sm"}
               dealt
             />
             {/* Card glow for revealed cards at showdown */}
@@ -312,29 +314,29 @@ export const PlayerSeat: FC<PlayerSeatProps> = ({
 
           {/* Player info box */}
           <div
-            className="w-full rounded-lg px-2 py-1.5"
+            className={`w-full rounded-lg ${compact ? "px-1 py-0.5" : "px-2 py-1.5"}`}
             style={{
               background: isCurrentPlayer
                 ? "linear-gradient(135deg, rgba(46, 204, 113, 0.15) 0%, rgba(39, 174, 96, 0.05) 100%)"
                 : "rgba(0,0,0,0.2)",
             }}
           >
-            <p className="text-xs text-center truncate text-[var(--text-secondary)]">
+            <p className={`${compact ? "text-[8px]" : "text-xs"} text-center truncate text-[var(--text-secondary)]`}>
               {isCurrentPlayer ? (
                 <span className="text-[var(--status-active)]">You</span>
               ) : (
                 shortAddress
               )}
             </p>
-            <p className="font-display text-lg font-bold text-center text-gold-gradient">
+            <p className={`font-display ${compact ? "text-xs" : "text-lg"} font-bold text-center text-gold-gradient`}>
               {fmt(chips)}
-              <span className="text-[var(--text-muted)] text-xs ml-1">{token.symbol}</span>
+              {!compact && <span className="text-[var(--text-muted)] text-xs ml-1">{token.symbol}</span>}
             </p>
           </div>
 
           {/* Total bet this hand */}
           {currentBet > 0 && (
-            <div className="flex items-center gap-1.5 glass px-3 py-1 rounded-full">
+            <div className={`flex items-center gap-1 ${compact ? "glass px-1.5 py-0.5" : "glass px-3 py-1"} rounded-full`}>
               {/* Chip icon */}
               <div
                 className="chip-indicator"
@@ -344,17 +346,17 @@ export const PlayerSeat: FC<PlayerSeatProps> = ({
                     : "var(--chip-green)",
                 }}
               />
-              <span className="text-sm font-semibold text-[var(--text-primary)]">
+              <span className={`${compact ? "text-[10px]" : "text-sm"} font-semibold text-[var(--text-primary)]`}>
                 {fmt(currentBet)}
               </span>
-              <span className="text-[10px] text-[var(--text-muted)] uppercase">in pot</span>
+              {!compact && <span className="text-[10px] text-[var(--text-muted)] uppercase">in pot</span>}
             </div>
           )}
 
           {/* Status badges */}
           {isAllIn && (
             <div
-              className="px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider animate-pulse"
+              className={`${compact ? "px-1.5 py-0.5 text-[8px]" : "px-3 py-1 text-xs"} rounded-full font-bold uppercase tracking-wider animate-pulse`}
               style={{
                 background: "linear-gradient(135deg, var(--chip-red) 0%, #8b0000 100%)",
                 color: "white",
@@ -366,7 +368,7 @@ export const PlayerSeat: FC<PlayerSeatProps> = ({
           )}
           {isFolded && (
             <div
-              className="px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider"
+              className={`${compact ? "px-1.5 py-0.5 text-[8px]" : "px-3 py-1 text-xs"} rounded-full font-bold uppercase tracking-wider`}
               style={{
                 background: "var(--bg-elevated)",
                 color: "var(--text-muted)",

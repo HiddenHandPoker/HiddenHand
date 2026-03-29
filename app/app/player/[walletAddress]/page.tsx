@@ -80,7 +80,7 @@ export default function PlayerProfilePage({
   return (
     <main className="min-h-screen relative">
       {/* Header */}
-      <header className="glass-dark sticky top-0 z-50 px-6 py-4 flex justify-between items-center border-b border-white/5">
+      <header className="glass-dark sticky top-0 z-50 px-3 py-3 sm:px-6 sm:py-4 flex justify-between items-center border-b border-white/5">
         <div className="flex items-center gap-4">
           <Link
             href="/lobby"

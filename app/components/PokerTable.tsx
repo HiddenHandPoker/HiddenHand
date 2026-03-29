@@ -7,6 +7,7 @@ import { ProvablyFairBadge } from "./ProvablyFairBadge";
 import { ChipAnimationLayer } from "./ChipAnimation";
 import { type TokenInfo, getDefaultToken, baseUnitsToDisplay } from "@/lib/tokens";
 import { type PlayerStats } from "@/hooks/usePlayerStats";
+import { useIsMobileLandscape } from "@/hooks/useIsMobile";
 
 interface Player {
   seatIndex: number;
@@ -47,13 +48,23 @@ interface PokerTableProps {
 
 // Seat positions around the table (for 6-max)
 // Positions are percentages from center
-const SEAT_POSITIONS = [
+const SEAT_POSITIONS_DESKTOP = [
   { top: "88%", left: "50%", transform: "translate(-50%, -50%)" }, // Bottom center
   { top: "72%", left: "12%", transform: "translate(-50%, -50%)" }, // Bottom left
   { top: "28%", left: "12%", transform: "translate(-50%, -50%)" }, // Top left
   { top: "12%", left: "50%", transform: "translate(-50%, -50%)" }, // Top center
   { top: "28%", left: "88%", transform: "translate(-50%, -50%)" }, // Top right
   { top: "72%", left: "88%", transform: "translate(-50%, -50%)" }, // Bottom right
+];
+
+// Tighter positions for mobile landscape — seats pulled closer to table edge
+const SEAT_POSITIONS_MOBILE = [
+  { top: "90%", left: "50%", transform: "translate(-50%, -50%)" }, // Bottom center (hero)
+  { top: "72%", left: "6%", transform: "translate(-50%, -50%)" },  // Bottom left
+  { top: "28%", left: "6%", transform: "translate(-50%, -50%)" },  // Top left
+  { top: "10%", left: "50%", transform: "translate(-50%, -50%)" }, // Top center
+  { top: "28%", left: "94%", transform: "translate(-50%, -50%)" }, // Top right
+  { top: "72%", left: "94%", transform: "translate(-50%, -50%)" }, // Bottom right
 ];
 
 export const PokerTable: FC<PokerTableProps> = ({
@@ -77,6 +88,9 @@ export const PokerTable: FC<PokerTableProps> = ({
   token = getDefaultToken(),
   playerStatsMap,
 }) => {
+  const isMobile = useIsMobileLandscape();
+  const SEAT_POSITIONS = isMobile ? SEAT_POSITIONS_MOBILE : SEAT_POSITIONS_DESKTOP;
+
   const fmt = (baseUnits: number) => baseUnitsToDisplay(baseUnits, token).toFixed(2);
 
   // Phase transition animation
@@ -139,7 +153,7 @@ export const PokerTable: FC<PokerTableProps> = ({
   }, [revealedCards.length]);
 
   return (
-    <div className="relative w-full max-w-5xl aspect-[16/10] mx-auto">
+    <div className="relative w-full max-w-5xl aspect-[16/10] mx-auto poker-table-container">
       {/* Ambient glow behind table */}
       <div
         className="absolute inset-0 rounded-[50%]"
@@ -151,7 +165,7 @@ export const PokerTable: FC<PokerTableProps> = ({
 
       {/* Outer rail (wood grain) */}
       <div
-        className="absolute inset-4 rounded-[45%] shadow-2xl"
+        className="absolute inset-2 sm:inset-4 rounded-[45%] shadow-2xl"
         style={{
           background: `
             linear-gradient(135deg, #3d2914 0%, #5c3d1e 20%, #7a4f24 40%, #5c3d1e 60%, #3d2914 80%, #2a1c0e 100%)
@@ -183,7 +197,7 @@ export const PokerTable: FC<PokerTableProps> = ({
 
       {/* Felt surface */}
       <div
-        className="absolute inset-10 rounded-[42%] overflow-hidden"
+        className="absolute inset-5 sm:inset-10 rounded-[42%] overflow-hidden"
         style={{
           backgroundImage: "url('/hiddenhand-table-bg.webp')",
           backgroundSize: "cover",
@@ -214,7 +228,7 @@ export const PokerTable: FC<PokerTableProps> = ({
         <div className="absolute inset-0 flex flex-col items-center justify-center">
           {/* Pot display */}
           <div
-            className={`glass rounded-2xl px-8 py-4 mb-6 relative ${pot > 0 ? 'animate-pulse-gold' : ''}`}
+            className={`glass rounded-2xl px-4 py-2 sm:px-8 sm:py-4 mb-3 sm:mb-6 relative ${pot > 0 ? 'animate-pulse-gold' : ''}`}
             style={{
               boxShadow: pot > 0
                 ? '0 0 30px rgba(212, 160, 18, 0.3), inset 0 0 20px rgba(212, 160, 18, 0.1)'
@@ -227,19 +241,19 @@ export const PokerTable: FC<PokerTableProps> = ({
                 background: "linear-gradient(135deg, rgba(212, 160, 18, 0.15) 0%, transparent 50%)",
               }}
             />
-            <div className="relative flex items-center justify-center gap-2">
-              <span className="text-[var(--text-muted)] text-xs uppercase tracking-wider">
+            <div className="relative flex items-center justify-center gap-1 sm:gap-2">
+              <span className="text-[var(--text-muted)] text-[10px] sm:text-xs uppercase tracking-wider">
                 Pot
               </span>
-              <span className="text-gold-gradient font-display text-3xl font-bold">
+              <span className="text-gold-gradient font-display text-lg sm:text-3xl font-bold">
                 {fmt(pot)}
               </span>
-              <span className="text-[var(--gold-light)] text-lg font-semibold">{token.symbol}</span>
+              <span className="text-[var(--gold-light)] text-sm sm:text-lg font-semibold">{token.symbol}</span>
             </div>
           </div>
 
           {/* Community cards area */}
-          <div className="relative px-4 py-3">
+          <div className="relative px-2 py-1.5 sm:px-4 sm:py-3">
             {/* Card area background */}
             <div
               className="absolute inset-0 rounded-xl"
@@ -250,7 +264,7 @@ export const PokerTable: FC<PokerTableProps> = ({
             />
 
             {/* Cards */}
-            <div className="relative flex gap-3">
+            <div className="relative flex gap-1.5 sm:gap-3">
               {[0, 1, 2, 3, 4].map((idx) => {
                 const card = revealedCards[idx];
                 // Determine which phase section this card belongs to
@@ -264,17 +278,17 @@ export const PokerTable: FC<PokerTableProps> = ({
                     className={`relative ${newCardIndices.has(idx) ? "animate-deal" : ""}`}
                   >
                     {card !== undefined ? (
-                      <CardHand cards={[card]} size="md" dealt />
+                      <CardHand cards={[card]} size={isMobile ? "xs" : "md"} dealt />
                     ) : (
                       /* Empty card slot */
                       <div
-                        className="w-16 h-[5.6rem] rounded-lg border border-dashed flex items-center justify-center transition-all duration-300"
+                        className="w-9 h-[3.15rem] sm:w-16 sm:h-[5.6rem] rounded-lg border border-dashed flex items-center justify-center transition-all duration-300"
                         style={{
                           borderColor: "rgba(255,255,255,0.1)",
                           background: "rgba(0,0,0,0.1)",
                         }}
                       >
-                        <span className="text-[var(--text-muted)] text-xs opacity-50">
+                        <span className="text-[var(--text-muted)] text-[8px] sm:text-xs opacity-50">
                           {isFlop ? (idx === 1 ? "FLOP" : "") : isTurn ? "TURN" : "RIVER"}
                         </span>
                       </div>
@@ -286,10 +300,10 @@ export const PokerTable: FC<PokerTableProps> = ({
           </div>
 
           {/* Phase indicator */}
-          <div className="mt-5 flex items-center gap-3">
+          <div className="mt-2 sm:mt-5 flex items-center gap-2 sm:gap-3">
             <div
               className={`
-                px-5 py-2 rounded-full uppercase tracking-widest text-sm font-semibold
+                px-3 py-1 sm:px-5 sm:py-2 rounded-full uppercase tracking-widest text-[10px] sm:text-sm font-semibold
                 transition-all duration-200 ease-in-out ${phaseAnimClass}
                 ${displayPhase === "Showdown" || displayPhase === "Settled"
                   ? "bg-[var(--gold-main)] text-black"
@@ -303,7 +317,7 @@ export const PokerTable: FC<PokerTableProps> = ({
           </div>
 
           {/* Blinds info */}
-          <div className="mt-3 glass-dark inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-xs">
+          <div className="mt-1.5 sm:mt-3 glass-dark inline-flex items-center gap-1.5 sm:gap-2 px-2.5 py-1 sm:px-4 sm:py-1.5 rounded-full text-[10px] sm:text-xs">
             <span className="uppercase tracking-wider text-[var(--text-secondary)]">Blinds</span>
             <span className="text-[var(--text-primary)] font-medium">
               ${fmt(smallBlind)} / ${fmt(bigBlind)}
@@ -320,7 +334,7 @@ export const PokerTable: FC<PokerTableProps> = ({
         return (
           <div
             key={idx}
-            className="absolute w-36"
+            className="absolute w-[5.5rem] sm:w-36"
             style={pos}
           >
             <PlayerSeat
@@ -341,6 +355,7 @@ export const PokerTable: FC<PokerTableProps> = ({
               isShowdownPhase={isShowdownPhase}
               token={token}
               playerStats={player?.player && playerStatsMap ? playerStatsMap.get(player.player) : undefined}
+              compact={isMobile}
             />
           </div>
         );
@@ -355,7 +370,7 @@ export const PokerTable: FC<PokerTableProps> = ({
 
       {/* Win celebration - centered on felt area using explicit transform centering */}
       {showWinCelebration && (
-        <div className="absolute inset-10 z-40 pointer-events-none">
+        <div className="absolute inset-5 sm:inset-10 z-40 pointer-events-none">
           <div
             className="absolute left-1/2 top-1/2"
             style={{
@@ -374,7 +389,7 @@ export const PokerTable: FC<PokerTableProps> = ({
 
             {/* Banner content */}
             <div
-              className="relative glass rounded-2xl px-10 py-5 text-center"
+              className="relative glass rounded-2xl px-5 py-3 sm:px-10 sm:py-5 text-center"
               style={{
                 border: "2px solid rgba(212, 160, 18, 0.5)",
                 boxShadow: "0 0 40px rgba(212, 160, 18, 0.3), inset 0 0 30px rgba(212, 160, 18, 0.1)",

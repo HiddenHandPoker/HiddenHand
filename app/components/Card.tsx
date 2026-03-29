@@ -6,7 +6,7 @@ interface CardProps {
   card: number | null; // 0-51 or null for hidden
   hidden?: boolean;
   encrypted?: boolean; // Show encrypted state with shimmer effect
-  size?: "sm" | "md" | "lg";
+  size?: "xs" | "sm" | "md" | "lg";
   dealt?: boolean; // Enable deal animation
   delay?: number; // Animation delay in ms
 }
@@ -27,6 +27,13 @@ const SUIT_NAMES: Record<string, string> = {
 const RANKS = ["2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K", "A"];
 
 const sizeConfig = {
+  xs: {
+    card: "w-9 h-[3.15rem]",
+    cornerText: "text-[8px]",
+    centerSymbol: "text-sm",
+    cornerGap: "gap-0",
+    padding: "p-0.5",
+  },
   sm: {
     card: "w-12 h-[4.2rem]",
     cornerText: "text-[10px]",
@@ -120,7 +127,7 @@ const CardBack: FC<{ config: typeof sizeConfig.md; encrypted?: boolean; size: st
           className={`font-display font-bold tracking-wider ${
             encrypted ? "text-cyan-400" : "text-gold-main"
           }`}
-          style={{ fontSize: size === "lg" ? "14px" : size === "md" ? "10px" : "8px" }}
+          style={{ fontSize: size === "lg" ? "14px" : size === "md" ? "10px" : size === "sm" ? "8px" : "6px" }}
         >
           {encrypted ? "🔐" : "HH"}
         </div>
@@ -128,7 +135,7 @@ const CardBack: FC<{ config: typeof sizeConfig.md; encrypted?: boolean; size: st
           className={encrypted ? "text-cyan-400/60" : "text-gold-dark/60"}
           style={{ fontSize: size === "lg" ? "8px" : "6px" }}
         >
-          {size !== "sm" && (encrypted ? "ENCRYPTED" : "\u2660 \u2665 \u2666 \u2663")}
+          {(size === "xs" || size === "sm") ? null : (encrypted ? "ENCRYPTED" : "\u2660 \u2665 \u2666 \u2663")}
         </div>
       </div>
     </div>
@@ -140,7 +147,7 @@ const CardBack: FC<{ config: typeof sizeConfig.md; encrypted?: boolean; size: st
     <div className={`absolute bottom-1 right-1 w-1.5 h-1.5 border-r border-b ${encrypted ? "border-cyan-400/40" : "border-gold-dark/40"} rounded-br`} />
 
     {/* Lock badge for encrypted cards */}
-    {encrypted && size !== "sm" && (
+    {encrypted && size !== "sm" && size !== "xs" && (
       <div
         className="absolute -top-1 -right-1 w-4 h-4 rounded-full flex items-center justify-center z-20"
         style={{
@@ -420,7 +427,7 @@ interface CardHandProps {
   cards: (number | null)[];
   hidden?: boolean;
   encrypted?: boolean; // Show encrypted state for all cards
-  size?: "sm" | "md" | "lg";
+  size?: "xs" | "sm" | "md" | "lg";
   dealt?: boolean;
   staggerDelay?: number; // Delay between each card in ms
 }

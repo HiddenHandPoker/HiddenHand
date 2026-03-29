@@ -185,18 +185,18 @@ export const SpectatorView: FC<SpectatorViewProps> = ({
           borderStyle: "solid",
         }}
       >
-        <div className="px-5 py-4 flex items-center justify-between flex-wrap gap-3">
-          <div className="flex items-center gap-4">
+        <div className="px-3 py-3 sm:px-5 sm:py-4 flex items-center justify-between flex-wrap gap-2 sm:gap-3">
+          <div className="flex items-center gap-2 sm:gap-4">
             {/* Eye icon */}
             <div
-              className="w-10 h-10 rounded-xl flex items-center justify-center"
+              className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center flex-shrink-0"
               style={{
                 background: "linear-gradient(135deg, rgba(212,160,18,0.2) 0%, rgba(212,160,18,0.05) 100%)",
                 border: "1px solid rgba(212,160,18,0.3)",
               }}
             >
               <svg
-                className="w-5 h-5 text-[var(--gold-light)]"
+                className="w-4 h-4 sm:w-5 sm:h-5 text-[var(--gold-light)]"
                 fill="none"
                 viewBox="0 0 24 24"
                 strokeWidth={1.5}

@@ -149,7 +149,7 @@ export default function Home() {
               className="animate-fade-in-up flex flex-col items-center gap-3"
               style={{ animationDelay: '0.6s', opacity: 0, animationFillMode: 'forwards' }}
             >
-              <WalletButton className="btn-gold !text-base !px-10 !py-3 !rounded-xl !font-bold" />
+              <WalletButton className="btn-gold !text-base !px-10 !py-3 !rounded-xl !font-bold !w-full sm:!w-auto" />
               <a
                 href="/lobby"
                 className="text-[var(--text-muted)] hover:text-[var(--gold-light)] text-sm transition-colors flex items-center gap-1.5"

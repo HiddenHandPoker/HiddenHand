@@ -120,14 +120,14 @@ export const CreateTableModal: FC<CreateTableModalProps> = ({
     "w-full bg-[var(--bg-dark)] text-[var(--text-primary)] px-4 py-3 rounded-xl border border-white/5 focus:border-[var(--gold-main)] transition-colors";
 
   return (
-    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-end sm:items-center justify-center z-50 p-0 sm:p-4">
       {/* Backdrop click to close */}
       <div className="absolute inset-0" onClick={onClose} />
 
       <div
         ref={dialogRef}
         tabIndex={-1}
-        className="glass rounded-3xl p-8 max-w-md w-full relative overflow-hidden max-h-[90vh] overflow-y-auto"
+        className="glass rounded-t-3xl sm:rounded-3xl p-4 sm:p-8 max-w-md w-full relative overflow-hidden max-h-[95vh] sm:max-h-[90vh] overflow-y-auto safe-bottom"
       >
         {/* Modal glow */}
         <div

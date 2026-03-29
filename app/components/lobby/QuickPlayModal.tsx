@@ -108,7 +108,7 @@ export const QuickPlayModal: FC<QuickPlayModalProps> = ({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4"
       onClick={(e) => e.target === e.currentTarget && onClose()}
     >
       {/* Backdrop */}
@@ -116,7 +116,7 @@ export const QuickPlayModal: FC<QuickPlayModalProps> = ({
 
       {/* Modal */}
       <div
-        className="relative glass rounded-2xl w-full max-w-md overflow-hidden"
+        className="relative glass rounded-t-2xl sm:rounded-2xl w-full max-w-md overflow-hidden safe-bottom"
         style={{
           boxShadow: "0 0 60px rgba(212, 160, 18, 0.1), 0 25px 50px rgba(0,0,0,0.5)",
         }}

@@ -28,7 +28,7 @@ export const PlayerHUD: FC<PlayerHUDProps> = ({
 
   if (loading) {
     return (
-      <div className="glass-dark rounded-xl p-3 min-w-[180px] animate-pulse">
+      <div className="glass-dark rounded-xl p-3 min-w-[140px] sm:min-w-[180px] animate-pulse">
         <div className="h-3 bg-white/5 rounded w-20 mb-2" />
         <div className="h-3 bg-white/5 rounded w-28 mb-1" />
         <div className="h-3 bg-white/5 rounded w-24" />
@@ -38,7 +38,7 @@ export const PlayerHUD: FC<PlayerHUDProps> = ({
 
   if (!stats || stats.handsPlayed === 0) {
     return (
-      <div className="glass-dark rounded-xl p-3 min-w-[180px]">
+      <div className="glass-dark rounded-xl p-3 min-w-[140px] sm:min-w-[180px]">
         <p className="text-xs text-[var(--text-secondary)] font-medium mb-1">{shortAddress}</p>
         <p className="text-[10px] text-[var(--text-muted)]">No stats available</p>
         <Link
@@ -58,7 +58,7 @@ export const PlayerHUD: FC<PlayerHUDProps> = ({
   const sdWinRate = getShowdownWinRate(stats);
 
   return (
-    <div className="glass-dark rounded-xl p-3 min-w-[180px]">
+    <div className="glass-dark rounded-xl p-3 min-w-[140px] sm:min-w-[180px]">
       <p className="text-xs text-[var(--text-secondary)] font-medium mb-2">{shortAddress}</p>
 
       <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-[10px] mb-2">

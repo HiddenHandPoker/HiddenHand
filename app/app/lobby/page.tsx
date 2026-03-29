@@ -241,8 +241,8 @@ export default function LobbyPage() {
       )}
 
       {/* Header */}
-      <header className="glass-dark sticky top-0 z-50 px-6 py-4 flex justify-between items-center border-b border-white/5">
-        <div className="flex items-center gap-4">
+      <header className="glass-dark sticky top-0 z-50 px-3 py-3 sm:px-6 sm:py-4 flex justify-between items-center border-b border-white/5">
+        <div className="flex items-center gap-2 sm:gap-4">
           <Link href="/" className="text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors">
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
@@ -266,13 +266,13 @@ export default function LobbyPage() {
           </span>
         </div>
 
-        <div className="flex items-center gap-3">
-          {connected && <SessionTimer formattedTime={formatSessionTime()} />}
+        <div className="flex items-center gap-2 sm:gap-3">
+          {connected && <span className="hidden sm:block"><SessionTimer formattedTime={formatSessionTime()} /></span>}
           <SoundToggle />
           {connected && (
             <button
               onClick={() => setShowSwapModal(true)}
-              className="px-4 py-2.5 rounded-xl text-sm font-semibold flex items-center gap-2 bg-[var(--bg-dark)] border border-white/5 text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:border-white/10 transition-all"
+              className="hidden sm:flex px-4 py-2.5 rounded-xl text-sm font-semibold items-center gap-2 bg-[var(--bg-dark)] border border-white/5 text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:border-white/10 transition-all"
               title="Swap tokens to USDC"
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -281,12 +281,12 @@ export default function LobbyPage() {
               Swap
             </button>
           )}
-          <WalletButton className="btn-gold !text-sm !px-5 !py-2.5 !rounded-xl" />
+          <WalletButton className="btn-gold !text-sm !px-3 sm:!px-5 !py-2.5 !rounded-xl" />
         </div>
       </header>
 
       {/* Main content */}
-      <div className="container mx-auto px-4 py-8 pb-32">
+      <div className="container mx-auto px-3 sm:px-4 py-4 sm:py-8 pb-32">
         {/* Title area */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
           <div>
@@ -300,12 +300,12 @@ export default function LobbyPage() {
             )}
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 sm:gap-3 flex-wrap sm:flex-nowrap">
             {/* Refresh button */}
             <button
               onClick={handleRefresh}
               disabled={refreshing}
-              className="w-10 h-10 rounded-xl bg-[var(--bg-dark)] border border-white/5 flex items-center justify-center text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:border-white/10 transition-all disabled:opacity-50"
+              className="w-10 h-10 rounded-xl bg-[var(--bg-dark)] border border-white/5 flex items-center justify-center text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:border-white/10 transition-all disabled:opacity-50 touch-target"
               title="Refresh tables"
             >
               <svg
@@ -329,7 +329,7 @@ export default function LobbyPage() {
                 {/* Quick Play button */}
                 <button
                   onClick={() => setShowQuickPlay(true)}
-                  className="px-5 py-2.5 rounded-xl font-semibold text-sm flex items-center gap-2 bg-purple-600 hover:bg-purple-500 text-white transition-colors"
+                  className="flex-1 sm:flex-none px-4 sm:px-5 py-2.5 rounded-xl font-semibold text-sm flex items-center justify-center gap-2 bg-purple-600 hover:bg-purple-500 text-white transition-colors touch-target"
                 >
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
@@ -340,7 +340,7 @@ export default function LobbyPage() {
                 {/* Create table button */}
                 <button
                   onClick={() => setShowCreateModal(true)}
-                  className="btn-gold px-6 py-2.5 rounded-xl font-semibold text-sm flex items-center gap-2"
+                  className="flex-1 sm:flex-none btn-gold px-4 sm:px-6 py-2.5 rounded-xl font-semibold text-sm flex items-center justify-center gap-2 touch-target"
                 >
                   <svg
                     xmlns="http://www.w3.org/2000/svg"
@@ -363,15 +363,15 @@ export default function LobbyPage() {
           </div>
         </div>
 
-        {/* Stats bar */}
-        <div className="flex flex-wrap items-center gap-6 mb-6 text-sm">
+        {/* Stats bar — grid on mobile, inline on desktop */}
+        <div className="grid grid-cols-2 sm:flex sm:flex-wrap items-center gap-3 sm:gap-6 mb-6 text-sm">
           <span className="text-[var(--text-secondary)]">
             <span className="text-[var(--text-primary)] font-semibold">
               {tableCount.all}
             </span>{" "}
             {tableCount.all === 1 ? "table" : "tables"} active
           </span>
-          <span className="text-white/10">|</span>
+          <span className="text-white/10 hidden sm:inline">|</span>
           <span className="text-[var(--text-secondary)]">
             <span className="text-[var(--text-primary)] font-semibold">
               {totalPlayers}
@@ -380,7 +380,7 @@ export default function LobbyPage() {
           </span>
           {myStats && myStats.handsPlayed > 0 && (
             <>
-              <span className="text-white/10">|</span>
+              <span className="text-white/10 hidden sm:inline">|</span>
               <Link
                 href={`/player/${publicKey!.toString()}`}
                 className="text-[var(--text-secondary)] hover:text-[var(--gold-light)] transition-colors inline-flex items-center gap-1.5"
@@ -395,7 +395,7 @@ export default function LobbyPage() {
               </Link>
             </>
           )}
-          <span className="text-white/10">|</span>
+          <span className="text-white/10 hidden sm:inline">|</span>
           <Link
             href="/leaderboard"
             className="text-[var(--text-muted)] hover:text-[var(--gold-light)] transition-colors inline-flex items-center gap-1"
@@ -494,9 +494,9 @@ export default function LobbyPage() {
         </div>
 
         {/* Filter row 2: Stake tier + Table size */}
-        <div className="flex flex-wrap items-center gap-4 mb-6">
+        <div className="flex overflow-x-auto sm:flex-wrap items-center gap-4 mb-6 pb-1 -mx-2 px-2 scrollbar-hide">
           {/* Stake tier pills */}
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-shrink-0">
             <span className="text-[10px] text-[var(--text-muted)] uppercase tracking-wider mr-1">
               Stakes
             </span>
@@ -519,7 +519,7 @@ export default function LobbyPage() {
           </div>
 
           {/* Table size pills */}
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-shrink-0">
             <span className="text-[10px] text-[var(--text-muted)] uppercase tracking-wider mr-1">
               Size
             </span>

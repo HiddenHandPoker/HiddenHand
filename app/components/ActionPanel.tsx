@@ -4,6 +4,7 @@ import { FC, useState, useEffect, useRef, useCallback } from "react";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { type TokenInfo, getDefaultToken, baseUnitsToDisplay } from "@/lib/tokens";
 import { ACTION_TIMEOUT_SECONDS, TIMER_UPDATE_INTERVAL_MS } from "@/lib/constants";
+import { useIsTouch } from "@/hooks/useIsMobile";
 
 interface ActionPanelProps {
   isPlayerTurn: boolean;
@@ -19,6 +20,7 @@ interface ActionPanelProps {
   isLoading?: boolean;
   token?: TokenInfo;
   lastActionTime?: number | null;
+  mobile?: boolean; // Render as fixed bottom bar
 }
 
 export const ActionPanel: FC<ActionPanelProps> = ({
@@ -35,11 +37,14 @@ export const ActionPanel: FC<ActionPanelProps> = ({
   isLoading = false,
   token = getDefaultToken(),
   lastActionTime = null,
+  mobile = false,
 }) => {
+  const isTouch = useIsTouch();
   const fmt = (baseUnits: number) => baseUnitsToDisplay(baseUnits, token).toFixed(2);
   const minRaiseTotal = toCall + minRaise;
   const [raiseAmount, setRaiseAmount] = useState(minRaiseTotal);
   const [showAllInConfirm, setShowAllInConfirm] = useState(false);
+  const [showRaiseDrawer, setShowRaiseDrawer] = useState(false);
   const [timeLeft, setTimeLeft] = useState(ACTION_TIMEOUT_SECONDS);
 
   // Countdown timer
@@ -121,23 +126,25 @@ export const ActionPanel: FC<ActionPanelProps> = ({
 
   if (!isPlayerTurn) {
     return (
-      <div className="glass rounded-2xl p-6 text-center">
-        <div className="flex items-center justify-center gap-3">
-          <div className="flex gap-1">
-            <div
-              className="w-2 h-2 rounded-full bg-[var(--gold-main)] animate-bounce"
-              style={{ animationDelay: "0ms" }}
-            />
-            <div
-              className="w-2 h-2 rounded-full bg-[var(--gold-main)] animate-bounce"
-              style={{ animationDelay: "150ms" }}
-            />
-            <div
-              className="w-2 h-2 rounded-full bg-[var(--gold-main)] animate-bounce"
-              style={{ animationDelay: "300ms" }}
-            />
+      <div className={`${mobile ? "fixed bottom-0 left-0 right-0 z-40 safe-bottom safe-left safe-right" : ""}`}>
+        <div className={`glass ${mobile ? "rounded-t-2xl px-4 py-3" : "rounded-2xl p-6"} text-center`}>
+          <div className="flex items-center justify-center gap-3">
+            <div className="flex gap-1">
+              <div
+                className="w-2 h-2 rounded-full bg-[var(--gold-main)] animate-bounce"
+                style={{ animationDelay: "0ms" }}
+              />
+              <div
+                className="w-2 h-2 rounded-full bg-[var(--gold-main)] animate-bounce"
+                style={{ animationDelay: "150ms" }}
+              />
+              <div
+                className="w-2 h-2 rounded-full bg-[var(--gold-main)] animate-bounce"
+                style={{ animationDelay: "300ms" }}
+              />
+            </div>
+            <p className="text-[var(--text-secondary)] text-sm">Waiting for other players</p>
           </div>
-          <p className="text-[var(--text-secondary)]">Waiting for other players</p>
         </div>
       </div>
     );
@@ -151,6 +158,200 @@ export const ActionPanel: FC<ActionPanelProps> = ({
     timeLeft <= 10 ? "var(--status-danger)" : timeLeft <= 20 ? "var(--status-warning)" : "var(--status-active)";
   const timerPulse = timeLeft <= 10;
 
+  // Raise drawer content (shared between mobile and desktop)
+  const raiseControls = canRaise && (
+    <div className={`space-y-3 ${mobile ? "" : "pt-2 border-t border-white/5"}`}>
+      {/* Raise header */}
+      <div className="flex items-center justify-between">
+        <span className="text-[var(--text-secondary)] text-sm uppercase tracking-wider">
+          Raise Amount
+        </span>
+        <div className="glass-dark px-3 py-1.5 rounded-lg">
+          <span className="font-display font-bold text-[var(--gold-light)]">
+            {fmt(raiseAmount)}
+          </span>
+          <span className="text-[var(--text-muted)] text-sm ml-1">{token.symbol}</span>
+        </div>
+      </div>
+
+      {/* Quick bet buttons */}
+      <div className="grid grid-cols-4 gap-2">
+        {[
+          { label: "Min", value: minRaiseTotal },
+          { label: "2x", value: Math.min(minRaiseTotal * 2, playerChips) },
+          { label: "3x", value: Math.min(minRaiseTotal * 3, playerChips) },
+          { label: "Max", value: playerChips },
+        ].map((preset) => (
+          <button
+            key={preset.label}
+            onClick={() => setRaiseAmount(preset.value)}
+            className={`
+              py-2 rounded-lg text-sm font-semibold transition-all touch-target
+              ${raiseAmount === preset.value
+                ? "bg-[var(--gold-main)] text-black"
+                : "btn-action hover:border-[var(--gold-main)]"
+              }
+            `}
+          >
+            {preset.label}
+          </button>
+        ))}
+      </div>
+
+      {/* Custom slider with visual track */}
+      <div className="relative py-2">
+        {/* Track background */}
+        <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 h-2 bg-[var(--bg-dark)] rounded-full border border-white/5" />
+
+        {/* Filled track */}
+        <div
+          className="absolute top-1/2 -translate-y-1/2 left-0 h-2 rounded-full"
+          style={{
+            width: `${Math.max(0, Math.min(100, raisePercentage))}%`,
+            background: "linear-gradient(90deg, var(--gold-dark) 0%, var(--gold-main) 50%, var(--gold-light) 100%)",
+          }}
+        />
+
+        {/* Input range */}
+        <input
+          ref={raiseInputRef}
+          type="range"
+          min={minRaiseTotal}
+          max={playerChips}
+          value={raiseAmount}
+          onChange={(e) => setRaiseAmount(Number(e.target.value))}
+          className="relative z-10 w-full"
+        />
+      </div>
+
+      {/* Raise confirm/cancel buttons */}
+      <div className={`flex gap-2 ${mobile ? "" : ""}`}>
+        {mobile && (
+          <button
+            onClick={() => setShowRaiseDrawer(false)}
+            className="flex-1 py-3 rounded-xl font-bold uppercase tracking-wide btn-action transition-all"
+          >
+            Cancel
+          </button>
+        )}
+        <button
+          onClick={() => { onRaise(raiseAmount); setShowRaiseDrawer(false); }}
+          disabled={isLoading}
+          className={`${mobile ? "flex-1" : "w-full"} btn-success py-3 sm:py-4 rounded-xl font-bold uppercase tracking-wide disabled:opacity-50 disabled:cursor-not-allowed transition-all`}
+        >
+          Raise to {fmt(raiseAmount)} {token.symbol}
+          <span className="text-[10px] opacity-50 font-normal normal-case tracking-normal ml-2 kbd-hint">R / Enter</span>
+        </button>
+      </div>
+    </div>
+  );
+
+  // --- Mobile bottom bar layout ---
+  if (mobile) {
+    return (
+      <div className="fixed bottom-0 left-0 right-0 z-40 safe-bottom safe-left safe-right">
+        {/* Raise drawer — slides up from buttons */}
+        {showRaiseDrawer && canRaise && (
+          <div className="glass-dark border-t border-white/10 px-3 py-3 animate-slide-up">
+            {raiseControls}
+          </div>
+        )}
+
+        <div className="glass-dark border-t border-white/10 relative overflow-hidden">
+          {/* Countdown progress bar */}
+          {lastActionTime && (
+            <div className="absolute top-0 left-0 right-0 h-1 bg-white/5 overflow-hidden">
+              <div
+                className={`h-full rounded-full transition-all duration-1000 ease-linear ${timerPulse ? "animate-pulse" : ""}`}
+                style={{ width: `${timerPct}%`, background: timerColor }}
+              />
+            </div>
+          )}
+
+          {/* Button row */}
+          <div className="flex gap-2 px-3 py-2 pt-3">
+            {/* Fold — left side for thumb reach */}
+            <button
+              onClick={onFold}
+              disabled={isLoading}
+              className="flex-1 btn-danger py-3 rounded-xl font-bold uppercase text-sm tracking-wide disabled:opacity-50 transition-all touch-target"
+            >
+              Fold
+            </button>
+
+            {/* Check / Call */}
+            {canCheck ? (
+              <button
+                onClick={onCheck}
+                disabled={isLoading}
+                className="flex-1 btn-info py-3 rounded-xl font-bold uppercase text-sm tracking-wide disabled:opacity-50 transition-all touch-target"
+              >
+                Check
+              </button>
+            ) : (
+              <button
+                onClick={onCall}
+                disabled={isLoading}
+                className="flex-1 btn-info py-3 rounded-xl font-bold uppercase text-sm tracking-wide disabled:opacity-50 transition-all touch-target"
+              >
+                <span>{playerChips >= toCall ? "Call" : "All-In"}</span>
+                <span className="block text-[10px] opacity-80 font-normal">
+                  {fmt(Math.min(toCall, playerChips))}
+                </span>
+              </button>
+            )}
+
+            {/* Raise — toggles drawer */}
+            {canRaise && (
+              <button
+                onClick={() => setShowRaiseDrawer(!showRaiseDrawer)}
+                disabled={isLoading}
+                className={`flex-1 py-3 rounded-xl font-bold uppercase text-sm tracking-wide disabled:opacity-50 transition-all touch-target ${
+                  showRaiseDrawer ? "btn-success" : "btn-action border-[var(--gold-main)]/50"
+                }`}
+              >
+                Raise
+              </button>
+            )}
+
+            {/* All In — right side */}
+            <button
+              onClick={handleAllInClick}
+              disabled={isLoading}
+              className="flex-1 btn-gold py-3 rounded-xl font-bold uppercase text-sm tracking-wide disabled:opacity-50 transition-all animate-pulse-gold touch-target"
+            >
+              All In
+            </button>
+          </div>
+        </div>
+
+        {/* Loading overlay */}
+        {isLoading && (
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center gap-3 rounded-t-2xl">
+            <div className="relative">
+              <div className="w-8 h-8 rounded-full border-2 border-[var(--gold-main)]/30" />
+              <div className="absolute inset-0 w-8 h-8 rounded-full border-2 border-transparent border-t-[var(--gold-main)] animate-spin" />
+            </div>
+            <p className="text-[var(--text-secondary)] text-sm">Processing...</p>
+          </div>
+        )}
+
+        {/* All-In Confirmation Dialog */}
+        <ConfirmDialog
+          isOpen={showAllInConfirm}
+          title="Confirm All-In"
+          message={`You are about to go all-in with ${fmt(playerChips)} ${token.symbol}. This action cannot be undone. Are you sure?`}
+          confirmLabel="Go All-In"
+          cancelLabel="Cancel"
+          onConfirm={handleAllInConfirm}
+          onCancel={() => setShowAllInConfirm(false)}
+          variant="gold"
+        />
+      </div>
+    );
+  }
+
+  // --- Desktop layout (unchanged) ---
   return (
     <div className="glass rounded-2xl p-5 relative overflow-hidden">
       {/* Countdown progress bar */}
@@ -204,7 +405,7 @@ export const ActionPanel: FC<ActionPanelProps> = ({
             className="btn-danger py-4 rounded-xl font-bold uppercase tracking-wide disabled:opacity-50 disabled:cursor-not-allowed transition-all flex flex-col items-center gap-0.5"
           >
             <span>Fold</span>
-            <span className="text-[10px] opacity-50 font-normal normal-case tracking-normal">F</span>
+            <span className="text-[10px] opacity-50 font-normal normal-case tracking-normal kbd-hint">F</span>
           </button>
 
           {canCheck ? (
@@ -214,7 +415,7 @@ export const ActionPanel: FC<ActionPanelProps> = ({
               className="btn-info py-4 rounded-xl font-bold uppercase tracking-wide disabled:opacity-50 disabled:cursor-not-allowed transition-all flex flex-col items-center gap-0.5"
             >
               <span>Check</span>
-              <span className="text-[10px] opacity-50 font-normal normal-case tracking-normal">K</span>
+              <span className="text-[10px] opacity-50 font-normal normal-case tracking-normal kbd-hint">K</span>
             </button>
           ) : (
             <button
@@ -226,7 +427,7 @@ export const ActionPanel: FC<ActionPanelProps> = ({
               <span className="text-xs opacity-80">
                 {fmt(Math.min(toCall, playerChips))}
               </span>
-              <span className="text-[10px] opacity-50 font-normal normal-case tracking-normal">C</span>
+              <span className="text-[10px] opacity-50 font-normal normal-case tracking-normal kbd-hint">C</span>
             </button>
           )}
 
@@ -236,87 +437,12 @@ export const ActionPanel: FC<ActionPanelProps> = ({
             className="btn-gold py-4 rounded-xl font-bold uppercase tracking-wide disabled:opacity-50 disabled:cursor-not-allowed transition-all animate-pulse-gold flex flex-col items-center gap-0.5"
           >
             <span>All In</span>
-            <span className="text-[10px] opacity-50 font-normal normal-case tracking-normal">A</span>
+            <span className="text-[10px] opacity-50 font-normal normal-case tracking-normal kbd-hint">A</span>
           </button>
         </div>
 
         {/* Raise controls */}
-        {canRaise && (
-          <div className="space-y-4 pt-2 border-t border-white/5">
-            {/* Raise header */}
-            <div className="flex items-center justify-between">
-              <span className="text-[var(--text-secondary)] text-sm uppercase tracking-wider">
-                Raise Amount
-              </span>
-              <div className="glass-dark px-3 py-1.5 rounded-lg">
-                <span className="font-display font-bold text-[var(--gold-light)]">
-                  {fmt(raiseAmount)}
-                </span>
-                <span className="text-[var(--text-muted)] text-sm ml-1">{token.symbol}</span>
-              </div>
-            </div>
-
-            {/* Custom slider with visual track */}
-            <div className="relative py-2">
-              {/* Track background */}
-              <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 h-2 bg-[var(--bg-dark)] rounded-full border border-white/5" />
-
-              {/* Filled track */}
-              <div
-                className="absolute top-1/2 -translate-y-1/2 left-0 h-2 rounded-full"
-                style={{
-                  width: `${Math.max(0, Math.min(100, raisePercentage))}%`,
-                  background: "linear-gradient(90deg, var(--gold-dark) 0%, var(--gold-main) 50%, var(--gold-light) 100%)",
-                }}
-              />
-
-              {/* Input range */}
-              <input
-                ref={raiseInputRef}
-                type="range"
-                min={minRaiseTotal}
-                max={playerChips}
-                value={raiseAmount}
-                onChange={(e) => setRaiseAmount(Number(e.target.value))}
-                className="relative z-10 w-full"
-              />
-            </div>
-
-            {/* Quick bet buttons */}
-            <div className="grid grid-cols-4 gap-2">
-              {[
-                { label: "Min", value: minRaiseTotal },
-                { label: "2x", value: Math.min(minRaiseTotal * 2, playerChips) },
-                { label: "3x", value: Math.min(minRaiseTotal * 3, playerChips) },
-                { label: "Max", value: playerChips },
-              ].map((preset) => (
-                <button
-                  key={preset.label}
-                  onClick={() => setRaiseAmount(preset.value)}
-                  className={`
-                    py-2 rounded-lg text-sm font-semibold transition-all
-                    ${raiseAmount === preset.value
-                      ? "bg-[var(--gold-main)] text-black"
-                      : "btn-action hover:border-[var(--gold-main)]"
-                    }
-                  `}
-                >
-                  {preset.label}
-                </button>
-              ))}
-            </div>
-
-            {/* Raise button */}
-            <button
-              onClick={() => onRaise(raiseAmount)}
-              disabled={isLoading}
-              className="btn-success w-full py-4 rounded-xl font-bold uppercase tracking-wide disabled:opacity-50 disabled:cursor-not-allowed transition-all"
-            >
-              Raise to {fmt(raiseAmount)} {token.symbol}
-              <span className="text-[10px] opacity-50 font-normal normal-case tracking-normal ml-2">R / Enter</span>
-            </button>
-          </div>
-        )}
+        {raiseControls}
       </div>
 
       {/* Loading overlay */}

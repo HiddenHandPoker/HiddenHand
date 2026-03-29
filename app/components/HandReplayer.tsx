@@ -85,7 +85,7 @@ export const HandReplayer: FC<HandReplayerProps> = ({
   return (
     <div
       ref={backdropRef}
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-2 sm:p-4"
       onClick={handleBackdropClick}
     >
       <div
@@ -335,7 +335,7 @@ export const HandReplayer: FC<HandReplayerProps> = ({
               <button
                 onClick={togglePlay}
                 className={`
-                  w-10 h-10 rounded-full flex items-center justify-center transition-all duration-150
+                  w-12 h-12 sm:w-10 sm:h-10 rounded-full flex items-center justify-center transition-all duration-150 touch-target
                   ${isPlaying
                     ? "bg-[var(--gold-main)] text-black hover:bg-[var(--gold-light)]"
                     : "bg-white/10 text-[var(--text-primary)] hover:bg-white/20"
@@ -426,7 +426,7 @@ const TransportButton: FC<{
     disabled={disabled}
     title={title}
     className={`
-      w-8 h-8 rounded-lg flex items-center justify-center transition-all duration-150
+      w-10 h-10 sm:w-8 sm:h-8 rounded-lg flex items-center justify-center transition-all duration-150 touch-target
       ${disabled
         ? "text-[var(--text-muted)] opacity-40 cursor-not-allowed"
         : "text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-white/10"

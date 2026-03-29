@@ -39,6 +39,8 @@ import { useResponsibleGaming } from "@/hooks/useResponsibleGaming";
 import { SessionTimer } from "@/components/SessionTimer";
 import { BreakReminder } from "@/components/BreakReminder";
 import { SelfExclusionBanner } from "@/components/SelfExclusionBanner";
+import { RotateDeviceOverlay } from "@/components/RotateDeviceOverlay";
+import { useIsMobileLandscape, useIsMobile } from "@/hooks/useIsMobile";
 
 export default function TablePage({ params }: { params: Promise<{ tableId: string }> }) {
   const { tableId } = React.use(params);
@@ -94,6 +96,10 @@ export default function TablePage({ params }: { params: Promise<{ tableId: strin
     checkDepositAllowed,
     recordDeposit,
   } = useResponsibleGaming(publicKey?.toString() ?? null);
+
+  // Mobile detection
+  const isMobileLandscape = useIsMobileLandscape();
+  const isMobile = useIsMobile();
 
   // On-chain hand history from events
   const { history: onChainHistory, handTimelines, isListening: isHistoryListening, loadingHistory } = useHandHistory(program, gameState.tablePDA);
@@ -585,9 +591,10 @@ export default function TablePage({ params }: { params: Promise<{ tableId: strin
   // If wallet not connected, show spectator view (read-only, no wallet needed)
   if (!connected) {
     return (
-      <main className="min-h-screen relative">
+      <main className="min-h-screen relative no-overscroll">
+        <RotateDeviceOverlay />
         {/* Header */}
-        <header className="glass-dark sticky top-0 z-50 px-6 py-4 flex justify-between items-center border-b border-white/5">
+        <header className="glass-dark sticky top-0 z-50 px-3 py-2 sm:px-6 sm:py-4 flex justify-between items-center border-b border-white/5 safe-left safe-right">
           <div className="flex items-center gap-4">
             <Link href="/lobby" className="text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors">
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -687,7 +694,9 @@ export default function TablePage({ params }: { params: Promise<{ tableId: strin
   }
 
   return (
-    <main className="min-h-screen relative">
+    <main className={`min-h-screen relative no-overscroll ${isMobileLandscape ? "mobile-landscape-compact" : ""}`}>
+      <RotateDeviceOverlay />
+
       {/* Break reminder toast */}
       {showBreakReminder && (
         <BreakReminder
@@ -696,40 +705,42 @@ export default function TablePage({ params }: { params: Promise<{ tableId: strin
         />
       )}
 
-      {/* Header */}
-      <header className="glass-dark sticky top-0 z-50 px-6 py-4 flex justify-between items-center border-b border-white/5">
-        <div className="flex items-center gap-4">
+      {/* Header — compact on mobile landscape */}
+      <header className={`glass-dark sticky top-0 z-50 ${isMobileLandscape ? "px-3 py-1.5" : "px-6 py-4"} flex justify-between items-center border-b border-white/5 safe-left safe-right`}>
+        <div className="flex items-center gap-2 sm:gap-4">
           <Link href="/lobby" className="text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors">
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
             </svg>
           </Link>
-          <h1 className="font-display text-2xl font-bold tracking-wide">
+          <h1 className={`font-display ${isMobileLandscape ? "text-lg" : "text-2xl"} font-bold tracking-wide`}>
             <span className="text-[var(--text-primary)]">Hidden</span>
             <span className="text-gold-gradient">Hand</span>
           </h1>
-          <span
-            className={`
-              text-[10px] px-2.5 py-1 rounded-full uppercase tracking-wider font-semibold
-              ${NETWORK === "localnet"
-                ? "bg-purple-500/20 text-purple-400 border border-purple-500/30"
-                : "bg-[var(--gold-main)]/20 text-[var(--gold-light)] border border-[var(--gold-main)]/30"
-              }
-            `}
-          >
-            {NETWORK}
-          </span>
+          {!isMobileLandscape && (
+            <span
+              className={`
+                text-[10px] px-2.5 py-1 rounded-full uppercase tracking-wider font-semibold
+                ${NETWORK === "localnet"
+                  ? "bg-purple-500/20 text-purple-400 border border-purple-500/30"
+                  : "bg-[var(--gold-main)]/20 text-[var(--gold-light)] border border-[var(--gold-main)]/30"
+                }
+              `}
+            >
+              {NETWORK}
+            </span>
+          )}
         </div>
 
-        <div className="flex items-center gap-3">
-          <SessionTimer formattedTime={formatSessionTime()} />
+        <div className="flex items-center gap-2 sm:gap-3">
+          {!isMobileLandscape && <SessionTimer formattedTime={formatSessionTime()} />}
           <SoundToggle />
-          <WalletButton className="btn-gold !text-sm !px-5 !py-2.5 !rounded-xl" />
+          <WalletButton className={`btn-gold !text-sm ${isMobileLandscape ? "!px-3 !py-1.5" : "!px-5 !py-2.5"} !rounded-xl`} />
         </div>
       </header>
 
       {/* Main content */}
-      <div className="container mx-auto px-4 py-8 pb-32">
+      <div className={`container mx-auto ${isMobileLandscape ? "px-2 py-2 pb-20" : "px-4 py-8 pb-32"}`}>
         {/* Game Interface */}
         <div className="space-y-6">
           {/* Spectator Banner — shown when connected but not seated */}
@@ -771,8 +782,8 @@ export default function TablePage({ params }: { params: Promise<{ tableId: strin
           )}
 
           {/* Table Controls */}
-          <div className="glass rounded-2xl p-5">
-            <div className="flex flex-wrap items-center gap-4">
+          <div className={`glass rounded-2xl ${isMobileLandscape ? "p-2" : "p-5"}`}>
+            <div className={`flex flex-wrap items-center ${isMobileLandscape ? "gap-2" : "gap-4"}`}>
               {/* Table ID display */}
               <div className="flex items-center gap-3">
                 <label className="text-[var(--text-muted)] text-sm uppercase tracking-wider">
@@ -1597,6 +1608,7 @@ export default function TablePage({ params }: { params: Promise<{ tableId: strin
                 isLoading={loading}
                 token={tableToken}
                 lastActionTime={isPlayerTurn ? gameState.lastActionTime : null}
+                mobile={isMobileLandscape}
               />
 
             </div>
@@ -1696,9 +1708,9 @@ export default function TablePage({ params }: { params: Promise<{ tableId: strin
         </div>
       </div>
 
-      {/* Footer */}
-      <footer className="fixed bottom-0 w-full glass-dark py-4 text-center border-t border-white/5">
-        <p className="text-[var(--text-muted)] text-sm">
+      {/* Footer — hidden on mobile landscape when action panel is visible */}
+      <footer className={`${isMobileLandscape ? "hidden" : ""} fixed bottom-0 w-full glass-dark py-4 text-center border-t border-white/5 safe-bottom`}>
+        <p className="text-[var(--text-muted)] text-xs sm:text-sm">
           Built for{" "}
           <a
             href="https://solana.com/privacyhack"
