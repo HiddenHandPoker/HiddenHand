@@ -52,25 +52,34 @@ export default function TablePage({ params }: { params: Promise<{ tableId: strin
   const { connected, publicKey, disconnect } = useWallet();
   const { provider } = usePokerProgram();
 
-  // Session key for popup-free gameplay
+  // Session key for popup-free gameplay (auto-created on join)
   const {
     session: sessionState,
     createSession,
+    activateSession,
     revokeSession,
     sendWithSession,
     loading: sessionLoading,
-    error: sessionError,
   } = useSessionKey(provider, publicKey);
 
-  // Build session key param for usePokerGame (only when session is active)
+  // Build session key param for usePokerGame
+  // Always pass activateSession (needed by joinTable to set up the session).
+  // Only pass signing fields when session is active.
   const sessionKeyParam = sessionState.isActive && sessionState.keypair && sessionState.sessionTokenPDA
     ? {
         signerPublicKey: sessionState.keypair.publicKey,
         sessionTokenPDA: sessionState.sessionTokenPDA,
         sendWithSession,
+        activateSession,
         isActive: true as const,
       }
-    : null;
+    : {
+        signerPublicKey: publicKey!, // unused when !isActive
+        sessionTokenPDA: publicKey!, // unused when !isActive
+        sendWithSession,
+        activateSession,
+        isActive: false as const,
+      };
 
   const {
     gameState,
@@ -1619,14 +1628,12 @@ export default function TablePage({ params }: { params: Promise<{ tableId: strin
                 />
               )}
 
-              {/* Session key status — instant play indicator */}
+              {/* Session key status — passive indicator (session auto-created on join) */}
               {!isMobileLandscape && (
                 <SessionStatus
                   session={sessionState}
-                  onCreateSession={createSession}
-                  onRevokeSession={revokeSession}
+                  onRenewSession={createSession}
                   loading={sessionLoading}
-                  error={sessionError}
                 />
               )}
 

@@ -20,7 +20,7 @@ const SESSION_KEYS_PROGRAM_ID = new PublicKey(
 );
 
 /** Default session duration: 4 hours */
-const SESSION_DURATION_SECONDS = 4 * 60 * 60;
+export const SESSION_DURATION_SECONDS = 4 * 60 * 60;
 
 /** SOL to fund the ephemeral key for tx fees (~200 transactions) */
 const SESSION_TOPUP_LAMPORTS = 10_000_000; // 0.01 SOL
@@ -72,6 +72,11 @@ export interface UseSessionKeyResult {
   session: SessionKeyState;
   /** Create a new session (requires one wallet approval) */
   createSession: (durationSeconds?: number) => Promise<void>;
+  /**
+   * Activate a session that was created externally (e.g., bundled with joinTable).
+   * Sets the local state and persists to localStorage.
+   */
+  activateSession: (keypair: Keypair, sessionTokenPDA: PublicKey, validUntil: number) => void;
   /** Revoke the current session and clean up */
   revokeSession: () => Promise<void>;
   /**
@@ -87,7 +92,7 @@ export interface UseSessionKeyResult {
 
 // ─── PDA derivation ──────────────────────────────────────────────────
 
-function getSessionTokenPDA(
+export function getSessionTokenPDA(
   targetProgram: PublicKey,
   sessionSigner: PublicKey,
   authority: PublicKey
@@ -121,7 +126,7 @@ function writeI64LE(value: number): Uint8Array {
   return buf;
 }
 
-function buildCreateSessionInstruction(
+export function buildCreateSessionInstruction(
   sessionSigner: PublicKey,
   authority: PublicKey,
   sessionTokenPDA: PublicKey,
@@ -185,7 +190,7 @@ function buildRevokeSessionInstruction(
 
 // ─── Persistence helpers ─────────────────────────────────────────────
 
-function saveSession(
+export function saveSession(
   keypair: Keypair,
   sessionTokenPDA: PublicKey,
   validUntil: number,
@@ -403,6 +408,19 @@ export function useSessionKey(
     [provider, publicKey]
   );
 
+  // ── Activate session (created externally, e.g., bundled with joinTable) ──
+  const activateSession = useCallback(
+    (kp: Keypair, pda: PublicKey, expiry: number) => {
+      setKeypair(kp);
+      setSessionTokenPDA(pda);
+      setValidUntil(expiry);
+      if (publicKey) {
+        saveSession(kp, pda, expiry, publicKey);
+      }
+    },
+    [publicKey]
+  );
+
   // ── Revoke session ─────────────────────────────────────────────────
   const revokeSession = useCallback(async () => {
     if (!provider || !publicKey) return;
@@ -486,6 +504,7 @@ export function useSessionKey(
   return {
     session,
     createSession,
+    activateSession,
     revokeSession,
     sendWithSession,
     loading,

@@ -1,14 +1,12 @@
 "use client";
 
-import { FC, useState } from "react";
+import { FC } from "react";
 import type { SessionKeyState } from "@/hooks/useSessionKey";
 
 interface SessionStatusProps {
   session: SessionKeyState;
-  onCreateSession: () => Promise<void>;
-  onRevokeSession: () => Promise<void>;
+  onRenewSession: () => Promise<void>;
   loading: boolean;
-  error: string | null;
 }
 
 function formatDuration(seconds: number): string {
@@ -22,109 +20,45 @@ function formatDuration(seconds: number): string {
 
 export const SessionStatus: FC<SessionStatusProps> = ({
   session,
-  onCreateSession,
-  onRevokeSession,
+  onRenewSession,
   loading,
-  error,
 }) => {
-  const [showDetails, setShowDetails] = useState(false);
+  // No session — nothing to show (session is auto-created on join)
+  if (!session.isActive) return null;
 
-  // No session — show create button
-  if (!session.isActive) {
+  // Session expiring — show renew prompt
+  if (session.isExpiring) {
     return (
-      <div className="glass-dark rounded-xl px-3 py-2">
+      <div className="glass-dark rounded-xl px-3 py-2 border border-[var(--status-warning)]/30">
         <div className="flex items-center gap-2">
-          <div className="w-2 h-2 rounded-full bg-[var(--text-muted)]" />
-          <span className="text-[var(--text-muted)] text-xs uppercase tracking-wider">
-            No Session
+          <div className="w-2 h-2 rounded-full bg-[var(--status-warning)] animate-pulse" />
+          <span className="text-[var(--status-warning)] text-xs font-medium">
+            Session expiring in {formatDuration(session.remainingSeconds)}
           </span>
           <button
-            onClick={onCreateSession}
+            onClick={onRenewSession}
             disabled={loading}
             className="ml-auto text-xs font-semibold px-3 py-1 rounded-lg
               bg-[var(--gold-main)] text-black hover:bg-[var(--gold-light)]
               disabled:opacity-50 disabled:cursor-not-allowed transition-all"
           >
-            {loading ? "Creating..." : "Enable Instant Play"}
+            {loading ? "..." : "Renew"}
           </button>
         </div>
-        {error && (
-          <p className="text-[var(--status-danger)] text-xs mt-1">{error}</p>
-        )}
-        <p className="text-[var(--text-muted)] text-[10px] mt-1 opacity-70">
-          One wallet approval, then all actions are instant
-        </p>
       </div>
     );
   }
 
-  // Active session
+  // Active session — minimal passive indicator
   return (
-    <div
-      className={`glass-dark rounded-xl px-3 py-2 cursor-pointer transition-all ${
-        session.isExpiring ? "border border-[var(--status-warning)]/30" : ""
-      }`}
-      onClick={() => setShowDetails(!showDetails)}
-    >
-      <div className="flex items-center gap-2">
-        <div
-          className={`w-2 h-2 rounded-full ${
-            session.isExpiring
-              ? "bg-[var(--status-warning)] animate-pulse"
-              : "bg-[var(--status-active)]"
-          }`}
-        />
-        <span className="text-[var(--text-secondary)] text-xs uppercase tracking-wider">
-          Instant Play
-        </span>
-        <span
-          className={`text-xs font-mono font-bold ml-auto ${
-            session.isExpiring
-              ? "text-[var(--status-warning)]"
-              : "text-[var(--text-secondary)]"
-          }`}
-        >
-          {formatDuration(session.remainingSeconds)}
-        </span>
-      </div>
-
-      {/* Expanded details */}
-      {showDetails && (
-        <div className="mt-2 pt-2 border-t border-white/5 space-y-2">
-          <div className="flex items-center justify-between">
-            <span className="text-[var(--text-muted)] text-[10px]">
-              Actions signed instantly (no popups)
-            </span>
-          </div>
-          <div className="flex gap-2">
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                onCreateSession();
-              }}
-              disabled={loading}
-              className="flex-1 text-xs font-semibold px-2 py-1.5 rounded-lg
-                btn-action hover:border-[var(--gold-main)]
-                disabled:opacity-50 disabled:cursor-not-allowed transition-all"
-            >
-              {loading ? "..." : "Renew"}
-            </button>
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                onRevokeSession();
-              }}
-              disabled={loading}
-              className="flex-1 text-xs font-semibold px-2 py-1.5 rounded-lg
-                btn-action hover:border-[var(--status-danger)]
-                text-[var(--text-muted)] hover:text-[var(--status-danger)]
-                disabled:opacity-50 disabled:cursor-not-allowed transition-all"
-            >
-              End Session
-            </button>
-          </div>
-        </div>
-      )}
+    <div className="flex items-center gap-1.5 px-2 py-1 opacity-60">
+      <div className="w-1.5 h-1.5 rounded-full bg-[var(--status-active)]" />
+      <span className="text-[var(--text-muted)] text-[10px] uppercase tracking-wider">
+        Instant Play
+      </span>
+      <span className="text-[var(--text-muted)] text-[10px] font-mono">
+        {formatDuration(session.remainingSeconds)}
+      </span>
     </div>
   );
 };

@@ -25,9 +25,15 @@ import {
   parseAnchorError,
 } from "@/lib/utils";
 import { decryptCardsWithAttestation, getAllowancePDA, INCO_PROGRAM_ID } from "@/lib/inco";
-import { TransactionInstruction, Transaction } from "@solana/web3.js";
+import { TransactionInstruction, Transaction, Keypair } from "@solana/web3.js";
 import { getDefaultToken, getTokenByMint, TOKEN_PROGRAM_ID, type TokenInfo } from "@/lib/tokens";
 import { getAssociatedTokenAddressSync } from "@solana/spl-token";
+import {
+  getSessionTokenPDA,
+  buildCreateSessionInstruction,
+  SESSION_DURATION_SECONDS,
+  saveSession,
+} from "./useSessionKey";
 
 // Types matching the IDL
 export interface TableAccount {
@@ -270,6 +276,8 @@ export interface SessionKeyParam {
   sessionTokenPDA: PublicKey;
   /** Send a transaction signed by the session key (no wallet popup) */
   sendWithSession: (tx: Transaction) => Promise<string>;
+  /** Activate a session created externally (e.g., bundled with joinTable) */
+  activateSession: (keypair: Keypair, sessionTokenPDA: PublicKey, validUntil: number) => void;
   /** Whether the session is currently valid */
   isActive: boolean;
 }
@@ -726,7 +734,8 @@ export function usePokerGame(sessionKey?: SessionKeyParam | null): UsePokerGameR
     [program, provider, publicKey, setTableId, refreshState]
   );
 
-  // Join table (with optional auto-delegation for privacy)
+  // Join table — bundles session key creation in the same transaction
+  // so the player gets popup-free gameplay from the moment they sit down.
   const joinTable = useCallback(
     async (seatIndex: number, buyInLamports: number): Promise<string> => {
       if (!program || !provider || !publicKey || !gameState.tablePDA) {
@@ -744,8 +753,8 @@ export function usePokerGame(sessionKey?: SessionKeyParam | null): UsePokerGameR
         const tableMint = gameState.table!.tokenMint;
         const playerTokenAccount = getAssociatedTokenAddressSync(tableMint, publicKey);
 
-        // Step 1: Join the table on base layer
-        const tx = await program.methods
+        // Build join_table instruction
+        const joinIx = await program.methods
           .joinTable(seatIndex, new BN(buyInLamports))
           .accounts({
             player: publicKey,
@@ -757,14 +766,55 @@ export function usePokerGame(sessionKey?: SessionKeyParam | null): UsePokerGameR
             tokenProgram: TOKEN_PROGRAM_ID,
             systemProgram: SystemProgram.programId,
           })
-          .rpc();
+          .instruction();
 
-        await provider.connection.confirmTransaction(tx, "confirmed");
+        // Build session key creation instruction (bundled in same tx)
+        const ephemeral = Keypair.generate();
+        const now = Math.floor(Date.now() / 1000);
+        const expiry = now + SESSION_DURATION_SECONDS;
+        const [sessionPDA] = getSessionTokenPDA(PROGRAM_ID, ephemeral.publicKey, publicKey);
+
+        const sessionIx = buildCreateSessionInstruction(
+          ephemeral.publicKey,
+          publicKey,
+          sessionPDA,
+          expiry
+        );
+
+        // Bundle both instructions in one transaction — one wallet popup
+        const tx = new Transaction();
+        tx.add(joinIx);
+        tx.add(sessionIx);
+
+        const { blockhash, lastValidBlockHeight } =
+          await provider.connection.getLatestBlockhash();
+        tx.recentBlockhash = blockhash;
+        tx.feePayer = publicKey;
+
+        // Ephemeral key must co-sign (required by create_session)
+        tx.partialSign(ephemeral);
+
+        // Wallet signs everything (one popup for both join + session)
+        const signedTx = await provider.wallet.signTransaction(tx);
+        const signature = await provider.connection.sendRawTransaction(
+          signedTx.serialize()
+        );
+
+        await provider.connection.confirmTransaction(
+          { signature, blockhash, lastValidBlockHeight },
+          "confirmed"
+        );
+
+        // Activate the session in the hook state
+        if (sessionKey?.activateSession) {
+          sessionKey.activateSession(ephemeral, sessionPDA, expiry);
+        } else {
+          // Fallback: persist directly if hook not wired yet
+          saveSession(ephemeral, sessionPDA, expiry, publicKey);
+        }
+
         await refreshState();
-
-        // Privacy mode note: Seats are NOT delegated on join.
-        // Full privacy requires delegating ALL game accounts together AFTER startHand:
-        return tx;
+        return signature;
       } catch (e) {
         const message = parseAnchorError(e, {
           minBuyIn: gameState.table?.minBuyIn.toNumber(),
@@ -776,7 +826,7 @@ export function usePokerGame(sessionKey?: SessionKeyParam | null): UsePokerGameR
         setLoading(false);
       }
     },
-    [program, provider, publicKey, gameState.tablePDA, gameState.table, refreshState]
+    [program, provider, publicKey, gameState.tablePDA, gameState.table, refreshState, sessionKey]
   );
 
   // Leave table
