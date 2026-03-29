@@ -1,21 +1,22 @@
 use anchor_lang::prelude::*;
 
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, PartialEq, Eq, Debug, InitSpace)]
+#[repr(u8)]
 pub enum GamePhase {
     /// Cards being dealt
-    Dealing,
+    Dealing = 0,
     /// Pre-flop betting (after hole cards)
-    PreFlop,
+    PreFlop = 1,
     /// Flop betting (3 community cards)
-    Flop,
+    Flop = 2,
     /// Turn betting (4th community card)
-    Turn,
+    Turn = 3,
     /// River betting (5th community card)
-    River,
+    River = 4,
     /// Showdown - reveal hands
-    Showdown,
+    Showdown = 5,
     /// Hand complete, pot distributed
-    Settled,
+    Settled = 6,
 }
 
 impl Default for GamePhase {
