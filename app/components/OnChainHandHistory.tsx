@@ -55,9 +55,12 @@ export function OnChainHandHistory({
       <div className="glass-dark rounded-xl p-4">
         <HeaderBar isListening={isListening} loadingHistory={loadingHistory} />
         {loadingHistory ? (
-          <p className="text-sm text-[var(--text-secondary)]">
-            Loading hand history from chain...
-          </p>
+          <div className="flex items-center gap-3 py-2">
+            <div className="animate-spin w-4 h-4 border-2 border-[var(--gold-main)] border-t-transparent rounded-full flex-shrink-0" />
+            <p className="text-sm text-[var(--text-secondary)]">
+              Loading hand history from chain...
+            </p>
+          </div>
         ) : (
           <p className="text-sm text-[var(--text-secondary)]">
             No hands recorded yet. Hand history will appear here after showdowns.

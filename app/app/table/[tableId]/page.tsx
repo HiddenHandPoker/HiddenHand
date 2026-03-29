@@ -1550,6 +1550,56 @@ export default function TablePage({ params }: { params: Promise<{ tableId: strin
             </div>
           )}
 
+          {/* Skeleton poker table while loading */}
+          {!gameState.table && loading && (
+            <div className="relative w-full max-w-5xl aspect-[16/10] mx-auto">
+              {/* Skeleton oval felt */}
+              <div
+                className="absolute inset-10 rounded-[42%]"
+                style={{
+                  background: "linear-gradient(90deg, rgba(255,255,255,0.03) 25%, rgba(255,255,255,0.06) 50%, rgba(255,255,255,0.03) 75%)",
+                  backgroundSize: "200% 100%",
+                  animation: "shimmer 1.5s infinite",
+                  border: "2px solid rgba(255,255,255,0.05)",
+                }}
+              >
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <div
+                    className="rounded-2xl px-8 py-4"
+                    style={{
+                      background: "linear-gradient(90deg, rgba(255,255,255,0.02) 25%, rgba(255,255,255,0.05) 50%, rgba(255,255,255,0.02) 75%)",
+                      backgroundSize: "200% 100%",
+                      animation: "shimmer 1.5s infinite",
+                      width: 160, height: 48,
+                    }}
+                  />
+                </div>
+              </div>
+              {/* Skeleton seats */}
+              {[
+                { top: "88%", left: "50%" },
+                { top: "72%", left: "12%" },
+                { top: "28%", left: "12%" },
+                { top: "12%", left: "50%" },
+                { top: "28%", left: "88%" },
+                { top: "72%", left: "88%" },
+              ].map((pos, i) => (
+                <div
+                  key={i}
+                  className="absolute w-28 h-20 rounded-2xl"
+                  style={{
+                    top: pos.top, left: pos.left,
+                    transform: "translate(-50%, -50%)",
+                    background: "linear-gradient(90deg, rgba(255,255,255,0.03) 25%, rgba(255,255,255,0.06) 50%, rgba(255,255,255,0.03) 75%)",
+                    backgroundSize: "200% 100%",
+                    animation: "shimmer 1.5s infinite",
+                    border: "1px solid rgba(255,255,255,0.05)",
+                  }}
+                />
+              ))}
+            </div>
+          )}
+
           {/* No table message */}
           {!gameState.table && !loading && (
             <div className="text-center py-20">
