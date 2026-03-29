@@ -63,6 +63,7 @@ export const ActionPanel: FC<ActionPanelProps> = ({
   }, [minRaiseTotal]);
 
   const raiseInputRef = useRef<HTMLInputElement>(null);
+  const canRaise = playerChips > toCall;
 
   const handleAllInClick = () => {
     setShowAllInConfirm(true);
@@ -142,7 +143,6 @@ export const ActionPanel: FC<ActionPanelProps> = ({
     );
   }
 
-  const canRaise = playerChips > toCall;
   const raisePercentage = ((raiseAmount - minRaiseTotal) / (playerChips - minRaiseTotal)) * 100;
 
   // Timer bar color

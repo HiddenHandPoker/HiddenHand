@@ -164,6 +164,7 @@ export default function LeaderboardPage() {
             </p>
           </div>
         ) : (
+          <>
           {/* Desktop table layout */}
           <div className="hidden md:block glass-dark rounded-xl overflow-hidden">
             {/* Table header */}
@@ -200,6 +201,7 @@ export default function LeaderboardPage() {
               />
             ))}
           </div>
+          </>
         )}
 
         {/* On-chain badge at bottom */}
