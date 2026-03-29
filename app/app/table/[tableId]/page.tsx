@@ -33,6 +33,8 @@ import {
   TABLE_INACTIVE_TIMEOUT_SECONDS,
 } from "@/lib/constants";
 import { usePlayerStats } from "@/hooks/usePlayerStats";
+import { useTokenBalance } from "@/hooks/useTokenBalance";
+import { SwapModal } from "@/components/SwapModal";
 
 export default function TablePage({ params }: { params: Promise<{ tableId: string }> }) {
   const { tableId } = React.use(params);
@@ -173,6 +175,10 @@ export default function TablePage({ params }: { params: Promise<{ tableId: strin
   // UI state
   const [buyInSol, setBuyInSol] = useState(10); // Default buy-in in display units (e.g. $10 USDC)
   const [selectedSeat, setSelectedSeat] = useState<number | null>(null);
+  const [showSwapModal, setShowSwapModal] = useState(false);
+
+  // USDC balance check for join flow
+  const { balance: usdcBalance, refresh: refreshBalance } = useTokenBalance(tableToken.mint);
 
   // Win celebration state
   const [showCelebration, setShowCelebration] = useState(false);
@@ -796,10 +802,28 @@ export default function TablePage({ params }: { params: Promise<{ tableId: strin
                       >
                         Join
                       </button>
+                      {/* Get USDC button — shows when wallet balance is insufficient for buy-in */}
+                      {usdcBalance !== null && usdcBalance < displayToBaseUnits(buyInSol, tableToken) && (
+                        <button
+                          onClick={() => setShowSwapModal(true)}
+                          className="px-4 py-2.5 rounded-xl text-sm font-semibold flex items-center gap-2 bg-[#2775CA]/20 border border-[#2775CA]/40 text-[#5B9BD5] hover:bg-[#2775CA]/30 transition-colors"
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
+                          </svg>
+                          Get {tableToken.symbol}
+                        </button>
+                      )}
                       {/* Warning if buy-in out of range */}
                       {(buyInSol < baseUnitsToDisplay(gameState.table.minBuyIn.toNumber(), tableToken) || buyInSol > baseUnitsToDisplay(gameState.table.maxBuyIn.toNumber(), tableToken)) && (
                         <span className="text-[var(--status-warning)] text-xs">
                           Buy-in must be {fmt(gameState.table.minBuyIn.toNumber())} - {fmt(gameState.table.maxBuyIn.toNumber())} {tableToken.symbol}
+                        </span>
+                      )}
+                      {/* Balance indicator when insufficient */}
+                      {usdcBalance !== null && usdcBalance < displayToBaseUnits(buyInSol, tableToken) && (
+                        <span className="text-[var(--status-warning)] text-xs w-full">
+                          Balance: {baseUnitsToDisplay(usdcBalance, tableToken).toFixed(2)} {tableToken.symbol} (need {buyInSol.toFixed(2)})
                         </span>
                       )}
                     </div>
@@ -1500,6 +1524,7 @@ export default function TablePage({ params }: { params: Promise<{ tableId: strin
                 onAllIn={() => handleAction("allin")}
                 isLoading={loading}
                 token={tableToken}
+                lastActionTime={isPlayerTurn ? gameState.lastActionTime : null}
               />
 
             </div>
@@ -1587,6 +1612,14 @@ export default function TablePage({ params }: { params: Promise<{ tableId: strin
         transactions={transactions}
         onDismiss={dismissTransaction}
         cluster={NETWORK === "localnet" ? "localnet" : "devnet"}
+      />
+
+      {/* Swap Modal (Jupiter Plugin) — for getting USDC before joining */}
+      <SwapModal
+        isOpen={showSwapModal}
+        onClose={() => setShowSwapModal(false)}
+        onSuccess={refreshBalance}
+        outputMint={tableToken.mint.toBase58()}
       />
 
     </main>

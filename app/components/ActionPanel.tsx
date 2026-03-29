@@ -1,8 +1,9 @@
 "use client";
 
-import { FC, useState, useEffect } from "react";
+import { FC, useState, useEffect, useRef, useCallback } from "react";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { type TokenInfo, getDefaultToken, baseUnitsToDisplay } from "@/lib/tokens";
+import { ACTION_TIMEOUT_SECONDS, TIMER_UPDATE_INTERVAL_MS } from "@/lib/constants";
 
 interface ActionPanelProps {
   isPlayerTurn: boolean;
@@ -17,6 +18,7 @@ interface ActionPanelProps {
   onAllIn: () => void;
   isLoading?: boolean;
   token?: TokenInfo;
+  lastActionTime?: number | null;
 }
 
 export const ActionPanel: FC<ActionPanelProps> = ({
@@ -32,11 +34,28 @@ export const ActionPanel: FC<ActionPanelProps> = ({
   onAllIn,
   isLoading = false,
   token = getDefaultToken(),
+  lastActionTime = null,
 }) => {
   const fmt = (baseUnits: number) => baseUnitsToDisplay(baseUnits, token).toFixed(2);
   const minRaiseTotal = toCall + minRaise;
   const [raiseAmount, setRaiseAmount] = useState(minRaiseTotal);
   const [showAllInConfirm, setShowAllInConfirm] = useState(false);
+  const [timeLeft, setTimeLeft] = useState(ACTION_TIMEOUT_SECONDS);
+
+  // Countdown timer
+  useEffect(() => {
+    if (!isPlayerTurn || !lastActionTime) {
+      setTimeLeft(ACTION_TIMEOUT_SECONDS);
+      return;
+    }
+    const update = () => {
+      const now = Math.floor(Date.now() / 1000);
+      setTimeLeft(Math.max(0, ACTION_TIMEOUT_SECONDS - (now - lastActionTime)));
+    };
+    update();
+    const id = setInterval(update, TIMER_UPDATE_INTERVAL_MS);
+    return () => clearInterval(id);
+  }, [isPlayerTurn, lastActionTime]);
 
   // Update raise amount when minRaise changes
   useEffect(() => {
@@ -79,8 +98,32 @@ export const ActionPanel: FC<ActionPanelProps> = ({
   const canRaise = playerChips > toCall;
   const raisePercentage = ((raiseAmount - minRaiseTotal) / (playerChips - minRaiseTotal)) * 100;
 
+  // Timer bar color
+  const timerPct = (timeLeft / ACTION_TIMEOUT_SECONDS) * 100;
+  const timerColor =
+    timeLeft <= 10 ? "var(--status-danger)" : timeLeft <= 20 ? "var(--status-warning)" : "var(--status-active)";
+  const timerPulse = timeLeft <= 10;
+
   return (
     <div className="glass rounded-2xl p-5 relative overflow-hidden">
+      {/* Countdown progress bar */}
+      {lastActionTime && (
+        <div className="absolute top-0 left-0 right-0 flex items-center gap-2 px-4 py-1.5 bg-black/30">
+          <div className="flex-1 h-1.5 rounded-full bg-white/10 overflow-hidden">
+            <div
+              className={`h-full rounded-full transition-all duration-1000 ease-linear ${timerPulse ? "animate-pulse" : ""}`}
+              style={{ width: `${timerPct}%`, background: timerColor }}
+            />
+          </div>
+          <span
+            className="text-xs font-mono font-bold min-w-[2ch] text-right"
+            style={{ color: timerColor }}
+          >
+            {timeLeft}
+          </span>
+        </div>
+      )}
+
       {/* Subtle glow when it's player's turn */}
       <div
         className="absolute inset-0 pointer-events-none"
@@ -89,7 +132,7 @@ export const ActionPanel: FC<ActionPanelProps> = ({
         }}
       />
 
-      <div className="relative flex flex-col gap-5">
+      <div className={`relative flex flex-col gap-5 ${lastActionTime ? "pt-4" : ""}`}>
         {/* Header with call info */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
