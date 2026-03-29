@@ -1,8 +1,9 @@
 "use client";
 
-import { FC, useState } from "react";
+import { FC, useState, useRef, useEffect } from "react";
 import { CardHand } from "./Card";
 import { PlayerHUD } from "./stats/PlayerHUD";
+import { usePlayerNotes } from "@/hooks/usePlayerNotes";
 import { type PlayerStats } from "@/hooks/usePlayerStats";
 import { type TokenInfo, getDefaultToken, baseUnitsToDisplay } from "@/lib/tokens";
 
@@ -46,6 +47,11 @@ export const PlayerSeat: FC<PlayerSeatProps> = ({
   playerStats,
 }) => {
   const [showHUD, setShowHUD] = useState(false);
+  const [showNotes, setShowNotes] = useState(false);
+  const [noteText, setNoteText] = useState("");
+  const notesRef = useRef<HTMLDivElement>(null);
+  const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const { getNote, setNote, hasNote } = usePlayerNotes();
   const fmt = (baseUnits: number) => baseUnitsToDisplay(baseUnits, token).toFixed(2);
   const isEmpty = status === "empty";
   const isFolded = status === "folded";
@@ -67,6 +73,47 @@ export const PlayerSeat: FC<PlayerSeatProps> = ({
     status !== "folded" &&
     status !== "empty" &&
     (status === "playing" || status === "allin");
+
+  // Close notes popover on outside click
+  useEffect(() => {
+    if (!showNotes) return;
+    const handler = (e: MouseEvent) => {
+      if (notesRef.current && !notesRef.current.contains(e.target as Node)) {
+        setShowNotes(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [showNotes]);
+
+  const openNotes = () => {
+    if (!player || isCurrentPlayer) return;
+    setNoteText(getNote(player));
+    setShowNotes(true);
+  };
+
+  const handleContextMenu = (e: React.MouseEvent) => {
+    if (!player || isCurrentPlayer || isEmpty) return;
+    e.preventDefault();
+    openNotes();
+  };
+
+  const handleTouchStart = () => {
+    if (!player || isCurrentPlayer || isEmpty) return;
+    longPressTimer.current = setTimeout(openNotes, 500);
+  };
+
+  const handleTouchEnd = () => {
+    if (longPressTimer.current) {
+      clearTimeout(longPressTimer.current);
+      longPressTimer.current = null;
+    }
+  };
+
+  const handleSaveNote = () => {
+    if (player) setNote(player, noteText);
+    setShowNotes(false);
+  };
 
   // Format wallet address
   const shortAddress = player
@@ -111,11 +158,61 @@ export const PlayerSeat: FC<PlayerSeatProps> = ({
       `}
       onMouseEnter={() => !isEmpty && !isCurrentPlayer && player && setShowHUD(true)}
       onMouseLeave={() => setShowHUD(false)}
+      onContextMenu={handleContextMenu}
+      onTouchStart={handleTouchStart}
+      onTouchEnd={handleTouchEnd}
+      onTouchCancel={handleTouchEnd}
     >
       {/* HUD tooltip */}
-      {showHUD && player && (
+      {showHUD && player && !showNotes && (
         <div className="absolute z-50 bottom-full left-1/2 -translate-x-1/2 mb-2 pointer-events-none">
           <PlayerHUD wallet={player} stats={playerStats ?? null} token={token} />
+        </div>
+      )}
+
+      {/* Notes popover */}
+      {showNotes && player && (
+        <div
+          ref={notesRef}
+          className="absolute z-50 bottom-full left-1/2 -translate-x-1/2 mb-2 w-52"
+        >
+          <div className="glass-dark rounded-xl p-3 border border-[var(--gold-main)]/30 shadow-lg">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-[10px] text-[var(--text-muted)] uppercase tracking-wider">Player Notes</span>
+              <button
+                onClick={() => setShowNotes(false)}
+                className="text-[var(--text-muted)] hover:text-[var(--text-primary)] text-xs"
+              >
+                x
+              </button>
+            </div>
+            <textarea
+              value={noteText}
+              onChange={(e) => setNoteText(e.target.value)}
+              placeholder="e.g. plays tight preflop..."
+              rows={3}
+              className="w-full bg-[var(--bg-dark)] text-[var(--text-primary)] text-xs rounded-lg p-2 border border-white/10 resize-none focus:border-[var(--gold-main)] placeholder:text-[var(--text-muted)]"
+            />
+            <button
+              onClick={handleSaveNote}
+              className="mt-2 w-full btn-gold text-xs py-1.5 rounded-lg"
+            >
+              Save
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Note indicator icon */}
+      {player && !isCurrentPlayer && !isEmpty && hasNote(player) && !showNotes && (
+        <div
+          className="absolute -top-2 -right-2 z-10 w-5 h-5 rounded-full bg-[var(--gold-dark)] flex items-center justify-center cursor-pointer border border-[var(--gold-main)]/50"
+          onClick={openNotes}
+          title="Player notes"
+        >
+          <svg className="w-3 h-3 text-[var(--gold-light)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+          </svg>
         </div>
       )}
 
