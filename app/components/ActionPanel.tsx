@@ -62,6 +62,8 @@ export const ActionPanel: FC<ActionPanelProps> = ({
     setRaiseAmount(Math.max(minRaiseTotal, raiseAmount));
   }, [minRaiseTotal]);
 
+  const raiseInputRef = useRef<HTMLInputElement>(null);
+
   const handleAllInClick = () => {
     setShowAllInConfirm(true);
   };
@@ -70,6 +72,51 @@ export const ActionPanel: FC<ActionPanelProps> = ({
     setShowAllInConfirm(false);
     onAllIn();
   };
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    if (!isPlayerTurn || isLoading) return;
+
+    const handler = (e: KeyboardEvent) => {
+      // Skip if any input/textarea/modal is focused
+      const tag = (e.target as HTMLElement)?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") {
+        // Allow Enter in raise input
+        if (e.key === "Enter" && (e.target as HTMLElement) === raiseInputRef.current) {
+          e.preventDefault();
+          onRaise(raiseAmount);
+        }
+        return;
+      }
+      if (showAllInConfirm) return;
+
+      switch (e.key.toLowerCase()) {
+        case "f":
+          e.preventDefault();
+          onFold();
+          break;
+        case "k":
+          if (canCheck) { e.preventDefault(); onCheck(); }
+          break;
+        case "c":
+          if (!canCheck) { e.preventDefault(); onCall(); }
+          break;
+        case "r":
+          if (canRaise) {
+            e.preventDefault();
+            raiseInputRef.current?.focus();
+          }
+          break;
+        case "a":
+          e.preventDefault();
+          handleAllInClick();
+          break;
+      }
+    };
+
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [isPlayerTurn, isLoading, canCheck, canRaise, raiseAmount, showAllInConfirm, onFold, onCheck, onCall, onRaise]);
 
   if (!isPlayerTurn) {
     return (
@@ -154,18 +201,20 @@ export const ActionPanel: FC<ActionPanelProps> = ({
           <button
             onClick={onFold}
             disabled={isLoading}
-            className="btn-danger py-4 rounded-xl font-bold uppercase tracking-wide disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+            className="btn-danger py-4 rounded-xl font-bold uppercase tracking-wide disabled:opacity-50 disabled:cursor-not-allowed transition-all flex flex-col items-center gap-0.5"
           >
-            Fold
+            <span>Fold</span>
+            <span className="text-[10px] opacity-50 font-normal normal-case tracking-normal">F</span>
           </button>
 
           {canCheck ? (
             <button
               onClick={onCheck}
               disabled={isLoading}
-              className="btn-info py-4 rounded-xl font-bold uppercase tracking-wide disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+              className="btn-info py-4 rounded-xl font-bold uppercase tracking-wide disabled:opacity-50 disabled:cursor-not-allowed transition-all flex flex-col items-center gap-0.5"
             >
-              Check
+              <span>Check</span>
+              <span className="text-[10px] opacity-50 font-normal normal-case tracking-normal">K</span>
             </button>
           ) : (
             <button
@@ -177,15 +226,17 @@ export const ActionPanel: FC<ActionPanelProps> = ({
               <span className="text-xs opacity-80">
                 {fmt(Math.min(toCall, playerChips))}
               </span>
+              <span className="text-[10px] opacity-50 font-normal normal-case tracking-normal">C</span>
             </button>
           )}
 
           <button
             onClick={handleAllInClick}
             disabled={isLoading}
-            className="btn-gold py-4 rounded-xl font-bold uppercase tracking-wide disabled:opacity-50 disabled:cursor-not-allowed transition-all animate-pulse-gold"
+            className="btn-gold py-4 rounded-xl font-bold uppercase tracking-wide disabled:opacity-50 disabled:cursor-not-allowed transition-all animate-pulse-gold flex flex-col items-center gap-0.5"
           >
-            All In
+            <span>All In</span>
+            <span className="text-[10px] opacity-50 font-normal normal-case tracking-normal">A</span>
           </button>
         </div>
 
@@ -221,6 +272,7 @@ export const ActionPanel: FC<ActionPanelProps> = ({
 
               {/* Input range */}
               <input
+                ref={raiseInputRef}
                 type="range"
                 min={minRaiseTotal}
                 max={playerChips}
@@ -261,6 +313,7 @@ export const ActionPanel: FC<ActionPanelProps> = ({
               className="btn-success w-full py-4 rounded-xl font-bold uppercase tracking-wide disabled:opacity-50 disabled:cursor-not-allowed transition-all"
             >
               Raise to {fmt(raiseAmount)} {token.symbol}
+              <span className="text-[10px] opacity-50 font-normal normal-case tracking-normal ml-2">R / Enter</span>
             </button>
           </div>
         )}
