@@ -43,6 +43,7 @@ This project was started for the **Solana Privacy Hack** hackathon (Jan 12-30, 2
 - **USDC Denomination** - Tables use SPL tokens (default: USDC on devnet)
 - **On-Chain Hand Replay** - 5 program events create full action-by-action audit trail, frontend reconstructs timelines from past transactions
 - **MagicBlock Session Keys** - Popup-free gameplay: player_action, reveal_cards, reveal_community use session keys for instant signing
+- **Mobile-Responsive Design** - Full mobile support: landscape table with compact seats/cards, fixed bottom action bar, rotation prompt, safe area handling, touch-optimized controls
 
 ### Session Keys (Popup-Free Gameplay)
 
@@ -65,6 +66,33 @@ Uses MagicBlock's `session-keys` crate (v3.0.10, program `KeyspM2ssCJbqUhQ4k7sve
 **Frontend**: `useSessionKey.ts` hook manages session lifecycle. `usePokerGame.ts` accepts optional `SessionKeyParam` and routes transactions through session signing when active. `SessionStatus.tsx` component shows session state.
 
 **Security model**: Session key can only call HiddenHand program. Cannot withdraw USDC (leave_table requires real wallet). Worst case if compromised: attacker folds hands or makes bad bets. Max loss = table buy-in.
+
+### Mobile-Responsive Architecture
+
+The frontend supports mobile phones in both portrait and landscape orientations. The table page is optimized for landscape (like PokerStars/GGPoker mobile apps).
+
+**Key mobile hooks** (`useIsMobile.ts`):
+- `useIsMobileLandscape()` — true when `innerHeight <= 500 && landscape`. Triggers compact table mode.
+- `useIsMobilePortrait()` — true when `portrait && width <= 768`. Triggers rotation overlay.
+- `useIsTouch()` — true when `(hover: none) and (pointer: coarse)`. Hides keyboard shortcut hints.
+
+**Table page mobile behavior:**
+- `RotateDeviceOverlay` appears on portrait mobile, suggesting landscape. Dismissible.
+- `PokerTable` uses tighter `SEAT_POSITIONS_MOBILE` (seats at 6%/94% instead of 12%/88%) and seat width shrinks from `w-36` to `w-[5.5rem]`.
+- `PlayerSeat` accepts `compact` prop: xs cards, smaller padding/text/badges.
+- `Card.tsx` has `xs` size (36x50px) in addition to sm/md/lg.
+- `ActionPanel` in `mobile` mode renders as a fixed bottom bar with 4 inline buttons and an expandable raise drawer (slides up). Hidden keyboard hints via `.kbd-hint` CSS class.
+
+**CSS utilities** (`globals.css`):
+- `.safe-bottom/.safe-left/.safe-right/.safe-top` — `env(safe-area-inset-*)` for notched devices
+- `.touch-target` — min 48px on touch devices
+- `.kbd-hint` — hidden on `(hover: none) and (pointer: coarse)`
+- `.no-overscroll` — prevents pull-to-refresh on table page
+- `.scrollbar-hide` — hides scrollbar on horizontal filter pill rows
+
+**Viewport meta** (`layout.tsx`): `viewport-fit=cover, maximum-scale=1, user-scalable=no` prevents accidental zoom during gameplay.
+
+**Modals on mobile**: `CreateTableModal` and `QuickPlayModal` use `items-end sm:items-center` and `rounded-t-*` to slide up from bottom as sheets on mobile, centered on desktop.
 
 ### On-Chain Events & Hand Replay
 
@@ -288,26 +316,43 @@ hiddenhand/
 ├── app/                          # Next.js frontend (complete)
 │   ├── app/
 │   │   ├── page.tsx             # Landing page
+│   │   ├── layout.tsx           # Root layout (viewport meta, safe areas)
+│   │   ├── globals.css          # Global styles (mobile utilities, animations)
 │   │   ├── lobby/page.tsx       # Table lobby (filters, Quick Play, view toggle)
-│   │   └── table/[tableId]/page.tsx  # Table page (player + spectator modes)
+│   │   ├── table/[tableId]/page.tsx  # Table page (player + spectator modes)
+│   │   ├── leaderboard/page.tsx # Leaderboard with mobile card layout
+│   │   ├── player/[walletAddress]/page.tsx  # Player profile + stats
+│   │   └── responsible-gaming/page.tsx      # Responsible gaming info
 │   ├── components/
-│   │   ├── PokerTable.tsx       # Table visualization
-│   │   ├── PlayerSeat.tsx       # Player seat UI
-│   │   ├── ActionPanel.tsx      # Betting controls
-│   │   ├── Card.tsx             # Card rendering with flip animation
+│   │   ├── PokerTable.tsx       # Table visualization (mobile seat positions)
+│   │   ├── PlayerSeat.tsx       # Player seat UI (compact mode for mobile)
+│   │   ├── ActionPanel.tsx      # Betting controls (mobile bottom bar + raise drawer)
+│   │   ├── Card.tsx             # Card rendering (xs/sm/md/lg sizes, flip animation)
 │   │   ├── SpectatorView.tsx    # Read-only spectator view (privacy-safe)
+│   │   ├── RotateDeviceOverlay.tsx  # Portrait rotation prompt for table page
+│   │   ├── HandReplayer.tsx     # Visual hand replay modal
+│   │   ├── OnChainHandHistory.tsx   # On-chain event timeline
+│   │   ├── SwapModal.tsx        # Jupiter swap integration
+│   │   ├── SessionStatus.tsx    # Session key state display
+│   │   ├── stats/
+│   │   │   ├── PlayerHUD.tsx    # Hover/tap stats tooltip on seats
+│   │   │   └── ProfitChart.tsx  # SVG profit chart
 │   │   └── lobby/
 │   │       ├── TableList.tsx    # Grid/list view container
 │   │       ├── TableCard.tsx    # Grid view card
 │   │       ├── TableRow.tsx     # List view row
-│   │       ├── CreateTableModal.tsx  # Table creation with stake presets
-│   │       └── QuickPlayModal.tsx    # Quick Play instant seating
+│   │       ├── CreateTableModal.tsx  # Table creation (bottom sheet on mobile)
+│   │       └── QuickPlayModal.tsx    # Quick Play (bottom sheet on mobile)
 │   ├── hooks/
 │   │   ├── usePokerGame.ts      # Full game logic (wallet required)
 │   │   ├── usePokerProgram.ts   # Anchor program hook (wallet required)
 │   │   ├── useTableState.ts     # Read-only table state (no wallet needed)
 │   │   ├── useLobby.ts          # Lobby data + filters (no wallet needed)
-│   │   └── useHandHistory.ts    # On-chain event parsing
+│   │   ├── useHandHistory.ts    # On-chain event parsing
+│   │   ├── useIsMobile.ts       # Mobile detection hooks (landscape, touch, portrait)
+│   │   ├── useTokenBalance.ts   # SPL token balance polling
+│   │   ├── useSessionKey.ts     # MagicBlock session key lifecycle
+│   │   └── usePlayerStats.ts    # On-chain player statistics
 │   └── lib/
 │       ├── inco.ts              # Inco SDK integration
 │       ├── tokens.ts            # SPL token definitions (USDC)
@@ -369,9 +414,12 @@ cd app && npm run dev
 ## Design Notes
 
 - Dark theme with poker aesthetic (green felt, gold accents)
-- Card reveal animations
-- Sound effects for chips/cards
-- Mobile-responsive
+- Card reveal animations with 3D flip effect
+- Sound effects for chips/cards/actions
+- Mobile-first responsive: landscape table, bottom action bar, compact seats
+- Safe area support for notched phones (iPhone X+, Dynamic Island)
+- Touch-optimized: 48px minimum targets, no hover-only interactions
+- Reduced motion support via `prefers-reduced-motion`
 
 ## User Background
 
