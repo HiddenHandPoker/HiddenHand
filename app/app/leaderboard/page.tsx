@@ -164,15 +164,16 @@ export default function LeaderboardPage() {
             </p>
           </div>
         ) : (
-          <div className="glass-dark rounded-xl overflow-hidden">
+          {/* Desktop table layout */}
+          <div className="hidden md:block glass-dark rounded-xl overflow-hidden">
             {/* Table header */}
             <div className="grid grid-cols-[3rem_1fr_4.5rem_6rem_4.5rem_4.5rem] gap-2 px-4 py-3 text-[10px] uppercase tracking-wider text-[var(--text-muted)] border-b border-white/5">
               <div>#</div>
               <div>Player</div>
               <div className="text-right">Hands</div>
               <div className="text-right">Profit</div>
-              <div className="text-right hidden sm:block">Win %</div>
-              <div className="text-right hidden sm:block">VPIP</div>
+              <div className="text-right">Win %</div>
+              <div className="text-right">VPIP</div>
             </div>
 
             {/* Rows */}
@@ -186,6 +187,18 @@ export default function LeaderboardPage() {
                 />
               ))}
             </div>
+          </div>
+
+          {/* Mobile card layout */}
+          <div className="md:hidden space-y-3">
+            {leaderboard.map((entry) => (
+              <MobileLeaderboardCard
+                key={entry.wallet}
+                entry={entry}
+                isCurrentUser={entry.wallet === currentWallet}
+                token={token}
+              />
+            ))}
           </div>
         )}
 
@@ -260,11 +273,88 @@ function LeaderboardRow({
       <div className={`text-right text-sm font-semibold ${profit >= 0 ? "text-[var(--status-active)]" : "text-[var(--status-danger)]"}`}>
         {profit >= 0 ? "+" : ""}{profit.toFixed(2)}
       </div>
-      <div className="text-right text-sm text-[var(--text-secondary)] hidden sm:block">
+      <div className="text-right text-sm text-[var(--text-secondary)]">
         {winPct.toFixed(0)}%
       </div>
-      <div className="text-right text-sm text-[var(--text-secondary)] hidden sm:block">
+      <div className="text-right text-sm text-[var(--text-secondary)]">
         {vpip.toFixed(0)}%
+      </div>
+    </Link>
+  );
+}
+
+// ─── Mobile Leaderboard Card ───
+
+function MobileLeaderboardCard({
+  entry,
+  isCurrentUser,
+  token,
+}: {
+  entry: LeaderboardEntry;
+  isCurrentUser: boolean;
+  token: ReturnType<typeof getDefaultToken>;
+}) {
+  const profit = baseUnitsToDisplay(entry.stats.totalProfit, token);
+  const vpip = getVPIP(entry.stats);
+  const winPct = getWinPercentage(entry.stats);
+  const shortWallet = `${entry.wallet.slice(0, 4)}...${entry.wallet.slice(-4)}`;
+
+  const rankBorder =
+    entry.rank === 1 ? "border-[var(--gold-light)]/50" :
+    entry.rank === 2 ? "border-gray-300/30" :
+    entry.rank === 3 ? "border-amber-600/30" :
+    "border-white/5";
+
+  const rankBg =
+    entry.rank === 1 ? "bg-[var(--gold-main)]/10" :
+    entry.rank === 2 ? "bg-gray-300/5" :
+    entry.rank === 3 ? "bg-amber-600/5" :
+    "";
+
+  return (
+    <Link
+      href={`/player/${entry.wallet}`}
+      className={`glass-dark rounded-xl p-4 border ${rankBorder} ${rankBg} ${
+        isCurrentUser ? "ring-1 ring-[var(--gold-main)]/40" : ""
+      } block`}
+    >
+      {/* Top row: rank + wallet + profit */}
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center gap-3">
+          <span className={`text-lg font-bold w-8 text-center ${
+            entry.rank === 1 ? "text-[var(--gold-light)]" :
+            entry.rank === 2 ? "text-gray-300" :
+            entry.rank === 3 ? "text-amber-600" :
+            "text-[var(--text-muted)]"
+          }`}>
+            #{entry.rank}
+          </span>
+          <span className={`text-sm font-medium ${isCurrentUser ? "text-[var(--gold-light)]" : "text-[var(--text-primary)]"}`}>
+            {isCurrentUser ? "You" : shortWallet}
+          </span>
+          {isCurrentUser && (
+            <span className="text-[10px] text-[var(--gold-main)] font-mono">{shortWallet}</span>
+          )}
+        </div>
+        <span className={`text-sm font-bold ${profit >= 0 ? "text-[var(--status-active)]" : "text-[var(--status-danger)]"}`}>
+          {profit >= 0 ? "+" : ""}{profit.toFixed(2)}
+        </span>
+      </div>
+
+      {/* Stats grid */}
+      <div className="grid grid-cols-3 gap-3">
+        <div>
+          <div className="text-[10px] text-[var(--text-muted)] uppercase tracking-wider">Hands</div>
+          <div className="text-sm font-medium text-[var(--text-primary)]">{entry.stats.handsPlayed}</div>
+        </div>
+        <div>
+          <div className="text-[10px] text-[var(--text-muted)] uppercase tracking-wider">Win %</div>
+          <div className="text-sm font-medium text-[var(--text-primary)]">{winPct.toFixed(0)}%</div>
+        </div>
+        <div>
+          <div className="text-[10px] text-[var(--text-muted)] uppercase tracking-wider">VPIP</div>
+          <div className="text-sm font-medium text-[var(--text-primary)]">{vpip.toFixed(0)}%</div>
+        </div>
       </div>
     </Link>
   );
