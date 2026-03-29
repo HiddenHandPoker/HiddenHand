@@ -433,253 +433,6 @@
       ]
     },
     {
-      "name": "deal_cards",
-      "docs": [
-        "DEPRECATED: Plaintext dealing for local testing ONLY.",
-        "Cards are stored unencrypted on-chain — DO NOT use in production.",
-        "For production, use request_shuffle + callback_shuffle (VRF + Inco FHE)."
-      ],
-      "discriminator": [
-        38,
-        218,
-        247,
-        103,
-        218,
-        237,
-        24,
-        65
-      ],
-      "accounts": [
-        {
-          "name": "caller",
-          "docs": [
-            "Anyone can call, but non-authority must wait for timeout"
-          ],
-          "writable": true,
-          "signer": true
-        },
-        {
-          "name": "table",
-          "writable": true,
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  116,
-                  97,
-                  98,
-                  108,
-                  101
-                ]
-              },
-              {
-                "kind": "account",
-                "path": "table.table_id",
-                "account": "Table"
-              }
-            ]
-          }
-        },
-        {
-          "name": "hand_state",
-          "writable": true,
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  104,
-                  97,
-                  110,
-                  100
-                ]
-              },
-              {
-                "kind": "account",
-                "path": "table"
-              },
-              {
-                "kind": "account",
-                "path": "table.hand_number",
-                "account": "Table"
-              }
-            ]
-          }
-        },
-        {
-          "name": "deck_state",
-          "writable": true,
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  100,
-                  101,
-                  99,
-                  107
-                ]
-              },
-              {
-                "kind": "account",
-                "path": "table"
-              },
-              {
-                "kind": "account",
-                "path": "table.hand_number",
-                "account": "Table"
-              }
-            ]
-          }
-        },
-        {
-          "name": "sb_seat",
-          "docs": [
-            "Small blind player seat"
-          ],
-          "writable": true
-        },
-        {
-          "name": "bb_seat",
-          "docs": [
-            "Big blind player seat"
-          ],
-          "writable": true
-        }
-      ],
-      "args": []
-    },
-    {
-      "name": "deal_cards_encrypted",
-      "docs": [
-        "Deal cards with ATOMIC Inco encryption (RECOMMENDED for privacy)",
-        "Cards are encrypted immediately during dealing - NEVER stored as plaintext",
-        "After calling this, use grant_card_allowance for each player to enable decryption"
-      ],
-      "discriminator": [
-        224,
-        161,
-        115,
-        102,
-        206,
-        20,
-        208,
-        215
-      ],
-      "accounts": [
-        {
-          "name": "caller",
-          "docs": [
-            "The caller (authority can call immediately, others must wait for timeout)"
-          ],
-          "writable": true,
-          "signer": true
-        },
-        {
-          "name": "table",
-          "writable": true,
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  116,
-                  97,
-                  98,
-                  108,
-                  101
-                ]
-              },
-              {
-                "kind": "account",
-                "path": "table.table_id",
-                "account": "Table"
-              }
-            ]
-          }
-        },
-        {
-          "name": "hand_state",
-          "writable": true,
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  104,
-                  97,
-                  110,
-                  100
-                ]
-              },
-              {
-                "kind": "account",
-                "path": "table"
-              },
-              {
-                "kind": "account",
-                "path": "table.hand_number",
-                "account": "Table"
-              }
-            ]
-          }
-        },
-        {
-          "name": "deck_state",
-          "writable": true,
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  100,
-                  101,
-                  99,
-                  107
-                ]
-              },
-              {
-                "kind": "account",
-                "path": "table"
-              },
-              {
-                "kind": "account",
-                "path": "table.hand_number",
-                "account": "Table"
-              }
-            ]
-          }
-        },
-        {
-          "name": "sb_seat",
-          "docs": [
-            "Small blind player seat"
-          ],
-          "writable": true
-        },
-        {
-          "name": "bb_seat",
-          "docs": [
-            "Big blind player seat"
-          ],
-          "writable": true
-        },
-        {
-          "name": "inco_program",
-          "docs": [
-            "The Inco Lightning program for encryption"
-          ],
-          "address": "5sjEbPiqgZrYwR31ahR6Uk9wf5awoX61YGg7jExQSwaj"
-        },
-        {
-          "name": "system_program",
-          "address": "11111111111111111111111111111111"
-        }
-      ],
-      "args": []
-    },
-    {
       "name": "encrypt_hole_cards",
       "docs": [
         "Phase 1: Encrypt hole cards using Inco FHE",
@@ -1339,12 +1092,9 @@
       ],
       "accounts": [
         {
-          "name": "player",
+          "name": "signer",
           "writable": true,
-          "signer": true,
-          "relations": [
-            "player_seat"
-          ]
+          "signer": true
         },
         {
           "name": "table",
@@ -1423,6 +1173,15 @@
         {
           "name": "player_seat",
           "writable": true
+        },
+        {
+          "name": "session_token",
+          "docs": [
+            "Session token account — optional. When present, validates that",
+            "the signer is an authorized session key for this player's wallet.",
+            "When absent, the signer must be the player's wallet directly."
+          ],
+          "optional": true
         }
       ],
       "args": [
@@ -1604,9 +1363,9 @@
       ],
       "accounts": [
         {
-          "name": "player",
+          "name": "signer",
           "docs": [
-            "The player revealing their cards (must be the seat owner)"
+            "The signer — either the player's real wallet or their session key"
           ],
           "writable": true,
           "signer": true
@@ -1660,29 +1419,14 @@
         },
         {
           "name": "player_seat",
-          "writable": true,
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  115,
-                  101,
-                  97,
-                  116
-                ]
-              },
-              {
-                "kind": "account",
-                "path": "table"
-              },
-              {
-                "kind": "account",
-                "path": "player_seat.seat_index",
-                "account": "PlayerSeat"
-              }
-            ]
-          }
+          "writable": true
+        },
+        {
+          "name": "session_token",
+          "docs": [
+            "Session token account — optional. Validates session key authorization."
+          ],
+          "optional": true
         },
         {
           "name": "instructions_sysvar",
@@ -1734,7 +1478,8 @@
           "name": "caller",
           "docs": [
             "Caller revealing the community cards",
-            "Authority can call immediately, others must wait for timeout"
+            "Authority can call immediately (with or without session key),",
+            "others must wait for timeout"
           ],
           "writable": true,
           "signer": true
@@ -1812,6 +1557,13 @@
               }
             ]
           }
+        },
+        {
+          "name": "session_token",
+          "docs": [
+            "Session token account — optional. Validates session key for authority."
+          ],
+          "optional": true
         },
         {
           "name": "instructions_sysvar",
@@ -2204,6 +1956,19 @@
         150,
         238,
         232
+      ]
+    },
+    {
+      "name": "SessionToken",
+      "discriminator": [
+        233,
+        4,
+        115,
+        14,
+        46,
+        21,
+        1,
+        15
       ]
     },
     {
@@ -2780,6 +2545,9 @@
     },
     {
       "name": "GamePhase",
+      "repr": {
+        "kind": "rust"
+      },
       "type": {
         "kind": "enum",
         "variants": [
@@ -3318,6 +3086,30 @@
           },
           {
             "name": "AllIn"
+          }
+        ]
+      }
+    },
+    {
+      "name": "SessionToken",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "authority",
+            "type": "pubkey"
+          },
+          {
+            "name": "target_program",
+            "type": "pubkey"
+          },
+          {
+            "name": "session_signer",
+            "type": "pubkey"
+          },
+          {
+            "name": "valid_until",
+            "type": "i64"
           }
         ]
       }

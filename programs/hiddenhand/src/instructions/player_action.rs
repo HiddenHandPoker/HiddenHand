@@ -1,4 +1,5 @@
 use anchor_lang::prelude::*;
+use session_keys::{Session, SessionError, SessionToken};
 
 use crate::constants::*;
 use crate::error::HiddenHandError;
@@ -14,10 +15,10 @@ pub enum Action {
     AllIn,
 }
 
-#[derive(Accounts)]
+#[derive(Accounts, Session)]
 pub struct PlayerAction<'info> {
     #[account(mut)]
-    pub player: Signer<'info>,
+    pub signer: Signer<'info>,
 
     #[account(
         seeds = [TABLE_SEED, table.table_id.as_ref()],
@@ -43,11 +44,23 @@ pub struct PlayerAction<'info> {
         mut,
         seeds = [SEAT_SEED, table.key().as_ref(), &[player_seat.seat_index]],
         bump = player_seat.bump,
-        has_one = player @ HiddenHandError::PlayerNotAtTable
     )]
     pub player_seat: Account<'info, PlayerSeat>,
+
+    /// Session token account — optional. When present, validates that
+    /// the signer is an authorized session key for this player's wallet.
+    /// When absent, the signer must be the player's wallet directly.
+    #[session(
+        signer = signer,
+        authority = player_seat.player
+    )]
+    pub session_token: Option<Account<'info, SessionToken>>,
 }
 
+#[session_keys::session_auth_or(
+    ctx.accounts.player_seat.player == ctx.accounts.signer.key(),
+    HiddenHandError::PlayerNotAtTable
+)]
 pub fn handler(ctx: Context<PlayerAction>, action: Action) -> Result<()> {
     let table = &ctx.accounts.table;
     let hand_state = &mut ctx.accounts.hand_state;

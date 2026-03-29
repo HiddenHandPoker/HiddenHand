@@ -21,6 +21,8 @@ use anchor_lang::solana_program::sysvar::instructions::{
 };
 use sha2::{Digest, Sha256};
 
+use session_keys::{Session, SessionError, SessionToken};
+
 use crate::constants::*;
 use crate::error::HiddenHandError;
 use crate::events::CommunityCardsRevealed;
@@ -39,10 +41,11 @@ pub const INCO_COVALIDATOR_PUBKEY: [u8; 32] = [
     0xcb, 0x3e, 0xa1, 0x34, 0x77, 0x0e, 0xb6, 0xa9, 0x51, 0xed, 0xd3, 0x80, 0xd0, 0x82, 0xe4, 0xf3,
 ];
 
-#[derive(Accounts)]
+#[derive(Accounts, Session)]
 pub struct RevealCommunity<'info> {
     /// Caller revealing the community cards
-    /// Authority can call immediately, others must wait for timeout
+    /// Authority can call immediately (with or without session key),
+    /// others must wait for timeout
     #[account(mut)]
     pub caller: Signer<'info>,
 
@@ -65,6 +68,13 @@ pub struct RevealCommunity<'info> {
         bump = deck_state.bump
     )]
     pub deck_state: Account<'info, DeckState>,
+
+    /// Session token account — optional. Validates session key for authority.
+    #[session(
+        signer = caller,
+        authority = table.authority
+    )]
+    pub session_token: Option<Account<'info, SessionToken>>,
 
     /// Instructions sysvar for Ed25519 signature verification
     /// CHECK: Verified by address constraint
@@ -121,6 +131,14 @@ fn verify_ed25519_for_handle(data: &[u8], handle: u128, plaintext: u8) -> Result
 ///   - PreFlop -> Flop: 3 cards (or 5 if all-in runout)
 ///   - Flop -> Turn: 1 card (or 2 if all-in runout)
 ///   - Turn -> River: 1 card
+///
+/// Session key support: if the caller provides a valid session token scoped
+/// to the table authority, they skip the wallet popup. Non-authority callers
+/// (timeout recovery) don't use session keys — they sign directly.
+#[session_keys::session_auth_or(
+    true,  // Handler has its own authority/timeout logic below
+    HiddenHandError::UnauthorizedAuthority
+)]
 pub fn handler(ctx: Context<RevealCommunity>, cards: Vec<u8>) -> Result<()> {
     let table = &ctx.accounts.table;
     let hand_state = &mut ctx.accounts.hand_state;

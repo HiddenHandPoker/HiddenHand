@@ -13,6 +13,8 @@ pub const ED25519_PROGRAM_ID: Pubkey = Pubkey::new_from_array([
     0xfc, 0xca, 0x70, 0x44, 0x80, 0x00, 0x00, 0x00,
 ]);
 
+use session_keys::{Session, SessionError, SessionToken};
+
 use crate::constants::*;
 use crate::error::HiddenHandError;
 use crate::events::ShowdownReveal;
@@ -30,12 +32,12 @@ pub const INCO_COVALIDATOR_PUBKEY: [u8; 32] = [
 
 /// Reveal cards instruction - player reveals their decrypted cards
 /// with Ed25519 signature verification from Inco covalidators
-#[derive(Accounts)]
+#[derive(Accounts, Session)]
 #[instruction(card1: u8, card2: u8)]
 pub struct RevealCards<'info> {
-    /// The player revealing their cards (must be the seat owner)
+    /// The signer — either the player's real wallet or their session key
     #[account(mut)]
-    pub player: Signer<'info>,
+    pub signer: Signer<'info>,
 
     #[account(
         seeds = [TABLE_SEED, table.table_id.as_ref()],
@@ -53,9 +55,15 @@ pub struct RevealCards<'info> {
         mut,
         seeds = [SEAT_SEED, table.key().as_ref(), &[player_seat.seat_index]],
         bump = player_seat.bump,
-        constraint = player_seat.player == player.key() @ HiddenHandError::PlayerNotAtTable
     )]
     pub player_seat: Account<'info, PlayerSeat>,
+
+    /// Session token account — optional. Validates session key authorization.
+    #[session(
+        signer = signer,
+        authority = player_seat.player
+    )]
+    pub session_token: Option<Account<'info, SessionToken>>,
 
     /// Instructions sysvar for Ed25519 signature verification
     /// CHECK: Verified by address constraint
@@ -164,6 +172,10 @@ fn verify_ed25519_signature(
 }
 
 /// Reveal cards with Ed25519 signature verification
+#[session_keys::session_auth_or(
+    ctx.accounts.player_seat.player == ctx.accounts.signer.key(),
+    HiddenHandError::PlayerNotAtTable
+)]
 pub fn handler(ctx: Context<RevealCards>, card1: u8, card2: u8) -> Result<()> {
     let player_seat = &mut ctx.accounts.player_seat;
     let hand_state = &ctx.accounts.hand_state;

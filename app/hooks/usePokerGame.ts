@@ -263,7 +263,18 @@ const initialGameState: GameState = {
   isRevealingCommunity: false,
 };
 
-export function usePokerGame(): UsePokerGameResult {
+export interface SessionKeyParam {
+  /** The session ephemeral key's public key (used as tx signer) */
+  signerPublicKey: PublicKey;
+  /** The session token PDA to pass as an account */
+  sessionTokenPDA: PublicKey;
+  /** Send a transaction signed by the session key (no wallet popup) */
+  sendWithSession: (tx: Transaction) => Promise<string>;
+  /** Whether the session is currently valid */
+  isActive: boolean;
+}
+
+export function usePokerGame(sessionKey?: SessionKeyParam | null): UsePokerGameResult {
   const { program, provider, publicKey, signMessage } = usePokerProgram();
   const [gameState, setGameState] = useState<GameState>(initialGameState);
   const [loading, setLoading] = useState(false);
@@ -1497,16 +1508,25 @@ export function usePokerGame(): UsePokerGameResult {
       const [seatPDA] = getSeatPDA(gameState.tablePDA, gameState.currentPlayerSeat);
       const [handPDA] = getHandPDA(gameState.tablePDA, handNumber);
 
+      // Use session key signer when available, otherwise real wallet
+      const signerKey = sessionKey?.isActive ? sessionKey.signerPublicKey : publicKey;
+      const sessionTokenAccount = sessionKey?.isActive ? sessionKey.sessionTokenPDA : null;
+
       // Build reveal_cards instruction (not sent yet)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const revealAccounts: any = {
+        signer: signerKey,
+        table: gameState.tablePDA,
+        handState: handPDA,
+        playerSeat: seatPDA,
+        instructionsSysvar: new PublicKey("Sysvar1nstructions1111111111111111111111111"),
+      };
+      if (sessionTokenAccount) {
+        revealAccounts.sessionToken = sessionTokenAccount;
+      }
       const revealIx = await program.methods
         .revealCards(card1, card2)
-        .accounts({
-          player: publicKey,
-          table: gameState.tablePDA,
-          handState: handPDA,
-          playerSeat: seatPDA,
-          instructionsSysvar: new PublicKey("Sysvar1nstructions1111111111111111111111111"),
-        })
+        .accountsPartial(revealAccounts)
         .instruction();
 
       // Build transaction with Ed25519 instructions FIRST, then reveal_cards
@@ -1523,21 +1543,23 @@ export function usePokerGame(): UsePokerGameResult {
       // Add reveal_cards instruction last
       tx.add(revealIx);
 
-      // Get latest blockhash and send
-      const { blockhash, lastValidBlockHeight } = await provider.connection.getLatestBlockhash();
-      tx.recentBlockhash = blockhash;
-      tx.feePayer = publicKey;
-
-      // Sign and send
-      const signedTx = await provider.wallet.signTransaction(tx);
-      const signature = await provider.connection.sendRawTransaction(signedTx.serialize());
-
-      // Wait for confirmation
-      await provider.connection.confirmTransaction({
-        signature,
-        blockhash,
-        lastValidBlockHeight,
-      }, "confirmed");
+      let signature: string;
+      if (sessionKey?.isActive) {
+        // Session key signs — no wallet popup
+        signature = await sessionKey.sendWithSession(tx);
+      } else {
+        // Wallet signs — popup required
+        const { blockhash, lastValidBlockHeight } = await provider.connection.getLatestBlockhash();
+        tx.recentBlockhash = blockhash;
+        tx.feePayer = publicKey;
+        const signedTx = await provider.wallet.signTransaction(tx);
+        signature = await provider.connection.sendRawTransaction(signedTx.serialize());
+        await provider.connection.confirmTransaction({
+          signature,
+          blockhash,
+          lastValidBlockHeight,
+        }, "confirmed");
+      }
 
       console.log("Cards revealed on-chain with Ed25519 verification:", signature);
       setGameState((prev) => ({ ...prev, isRevealing: false }));
@@ -1549,7 +1571,7 @@ export function usePokerGame(): UsePokerGameResult {
       setGameState((prev) => ({ ...prev, isRevealing: false }));
       throw e;
     }
-  }, [program, provider, publicKey, gameState.tablePDA, gameState.table, gameState.currentPlayerSeat, gameState.decryptedCards, gameState.ed25519Instructions]);
+  }, [program, provider, publicKey, gameState.tablePDA, gameState.table, gameState.currentPlayerSeat, gameState.decryptedCards, gameState.ed25519Instructions, sessionKey]);
 
   // ============================================================
   // Community Card Reveal: Reveal encrypted community cards (authority only)
@@ -1686,18 +1708,27 @@ export function usePokerGame(): UsePokerGameResult {
 
       console.log(`Building reveal_community transaction with ${cardCount} Ed25519 verification instruction(s)`);
 
+      // Use session key signer when available (authority only), otherwise real wallet
+      const signerKey = sessionKey?.isActive ? sessionKey.signerPublicKey : publicKey;
+      const sessionTokenAccount = sessionKey?.isActive ? sessionKey.sessionTokenPDA : null;
+
       // Build reveal_community instruction
       // Convert to Buffer for Anchor's Vec<u8> serialization
       const cardsBuffer = Buffer.from(cardValues);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const communityAccounts: any = {
+        caller: signerKey,
+        table: gameState.tablePDA,
+        handState: handPDA,
+        deckState: deckPDA,
+        instructionsSysvar: new PublicKey("Sysvar1nstructions1111111111111111111111111"),
+      };
+      if (sessionTokenAccount) {
+        communityAccounts.sessionToken = sessionTokenAccount;
+      }
       const revealIx = await program.methods
         .revealCommunity(cardsBuffer)
-        .accounts({
-          caller: publicKey,
-          table: gameState.tablePDA,
-          handState: handPDA,
-          deckState: deckPDA,
-          instructionsSysvar: new PublicKey("Sysvar1nstructions1111111111111111111111111"),
-        })
+        .accountsPartial(communityAccounts)
         .instruction();
 
       // Build transaction: Ed25519 instructions first, then reveal_community
@@ -1711,21 +1742,23 @@ export function usePokerGame(): UsePokerGameResult {
       // Add reveal_community instruction last
       tx.add(revealIx);
 
-      // Get latest blockhash and send
-      const { blockhash, lastValidBlockHeight } = await provider.connection.getLatestBlockhash();
-      tx.recentBlockhash = blockhash;
-      tx.feePayer = publicKey;
-
-      // Sign and send
-      const signedTx = await provider.wallet.signTransaction(tx);
-      const signature = await provider.connection.sendRawTransaction(signedTx.serialize());
-
-      // Wait for confirmation
-      await provider.connection.confirmTransaction({
-        signature,
-        blockhash,
-        lastValidBlockHeight,
-      }, "confirmed");
+      let signature: string;
+      if (sessionKey?.isActive) {
+        // Session key signs — no wallet popup
+        signature = await sessionKey.sendWithSession(tx);
+      } else {
+        // Wallet signs — popup required
+        const { blockhash, lastValidBlockHeight } = await provider.connection.getLatestBlockhash();
+        tx.recentBlockhash = blockhash;
+        tx.feePayer = publicKey;
+        const signedTx = await provider.wallet.signTransaction(tx);
+        signature = await provider.connection.sendRawTransaction(signedTx.serialize());
+        await provider.connection.confirmTransaction({
+          signature,
+          blockhash,
+          lastValidBlockHeight,
+        }, "confirmed");
+      }
 
       console.log("Community cards revealed on-chain:", signature);
       setGameState((prev) => ({
@@ -1751,7 +1784,7 @@ export function usePokerGame(): UsePokerGameResult {
       setGameState((prev) => ({ ...prev, isRevealingCommunity: false }));
       throw e;
     }
-  }, [program, provider, publicKey, signMessage, gameState.tablePDA, gameState.table, gameState.deckState, gameState.handState, gameState.phase, gameState.isAuthority, gameState.awaitingCommunityReveal, refreshState]);
+  }, [program, provider, publicKey, signMessage, gameState.tablePDA, gameState.table, gameState.deckState, gameState.handState, gameState.phase, gameState.isAuthority, gameState.awaitingCommunityReveal, refreshState, sessionKey]);
 
   // ============================================================
   // Auto-reveal community cards:
@@ -2062,18 +2095,38 @@ export function usePokerGame(): UsePokerGameResult {
             break;
         }
 
-        const tx = await program.methods
-          .playerAction(actionArg)
-          .accounts({
-            player: publicKey,
-            table: gameState.tablePDA,
-            handState: handPDA,
-            deckState: deckPDA,
-            playerSeat: seatPDA,
-          })
-          .rpc();
+        let tx: string;
 
-        await provider.connection.confirmTransaction(tx, "confirmed");
+        if (sessionKey?.isActive) {
+          // Session key path — sign with ephemeral key, no wallet popup
+          const txn = await program.methods
+            .playerAction(actionArg)
+            .accountsPartial({
+              signer: sessionKey.signerPublicKey,
+              table: gameState.tablePDA,
+              handState: handPDA,
+              deckState: deckPDA,
+              playerSeat: seatPDA,
+              sessionToken: sessionKey.sessionTokenPDA,
+            })
+            .transaction();
+
+          tx = await sessionKey.sendWithSession(txn);
+        } else {
+          // Direct wallet path — standard .rpc() with wallet approval
+          tx = await program.methods
+            .playerAction(actionArg)
+            .accountsPartial({
+              signer: publicKey,
+              table: gameState.tablePDA,
+              handState: handPDA,
+              deckState: deckPDA,
+              playerSeat: seatPDA,
+            })
+            .rpc();
+
+          await provider.connection.confirmTransaction(tx, "confirmed");
+        }
         await refreshState();
         return tx;
       } catch (e) {
@@ -2084,7 +2137,7 @@ export function usePokerGame(): UsePokerGameResult {
         setLoading(false);
       }
     },
-    [program, provider, publicKey, gameState.tablePDA, gameState.table, gameState.currentPlayerSeat, refreshState]
+    [program, provider, publicKey, gameState.tablePDA, gameState.table, gameState.currentPlayerSeat, refreshState, sessionKey]
   );
 
   // Showdown (authority can call immediately, anyone else after timeout)

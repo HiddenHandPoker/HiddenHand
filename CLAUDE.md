@@ -42,6 +42,29 @@ This project was started for the **Solana Privacy Hack** hackathon (Jan 12-30, 2
 - **Rake System** - Tiered percentage with cap, auto-calculated from blind level
 - **USDC Denomination** - Tables use SPL tokens (default: USDC on devnet)
 - **On-Chain Hand Replay** - 5 program events create full action-by-action audit trail, frontend reconstructs timelines from past transactions
+- **MagicBlock Session Keys** - Popup-free gameplay: player_action, reveal_cards, reveal_community use session keys for instant signing
+
+### Session Keys (Popup-Free Gameplay)
+
+Uses MagicBlock's `session-keys` crate (v3.0.10, program `KeyspM2ssCJbqUhQ4k7sveSiY4WjnYsrXkC8oDbwde5`).
+
+**How it works:** Player creates a session (one wallet popup) which generates an ephemeral keypair. All gameplay transactions are signed by the ephemeral key -- zero popups. Session is scoped to the HiddenHand program only with configurable expiry (max 7 days, default 4 hours).
+
+**Instructions with session support** (via `#[derive(Session)]` + `#[session_auth_or(...)]`):
+- `player_action` -- fold/check/call/raise/all-in (hot path)
+- `reveal_cards` -- showdown card reveals
+- `reveal_community` -- community card reveals
+
+**Instructions WITHOUT session support** (require real wallet):
+- `join_table` / `leave_table` -- real USDC transfers
+- `grant_own_allowance` -- Inco CPI needs real wallet as fee payer
+- All other instructions (create_table, showdown, start_hand, etc.)
+
+**IDL field rename**: `player_action` and `reveal_cards` renamed their signer field from `player` to `signer`. `reveal_community` keeps `caller`. All three now have an optional `session_token` account.
+
+**Frontend**: `useSessionKey.ts` hook manages session lifecycle. `usePokerGame.ts` accepts optional `SessionKeyParam` and routes transactions through session signing when active. `SessionStatus.tsx` component shows session state.
+
+**Security model**: Session key can only call HiddenHand program. Cannot withdraw USDC (leave_table requires real wallet). Worst case if compromised: attacker folds hands or makes bad bets. Max loss = table buy-in.
 
 ### On-Chain Events & Hand Replay
 

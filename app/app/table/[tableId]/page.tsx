@@ -36,6 +36,9 @@ import { usePlayerStats } from "@/hooks/usePlayerStats";
 import { useTokenBalance } from "@/hooks/useTokenBalance";
 import { SwapModal } from "@/components/SwapModal";
 import { useResponsibleGaming } from "@/hooks/useResponsibleGaming";
+import { useSessionKey } from "@/hooks/useSessionKey";
+import { usePokerProgram } from "@/hooks/usePokerProgram";
+import { SessionStatus } from "@/components/SessionStatus";
 import { SessionTimer } from "@/components/SessionTimer";
 import { BreakReminder } from "@/components/BreakReminder";
 import { SelfExclusionBanner } from "@/components/SelfExclusionBanner";
@@ -47,6 +50,28 @@ export default function TablePage({ params }: { params: Promise<{ tableId: strin
   const decodedTableId = decodeURIComponent(tableId);
 
   const { connected, publicKey, disconnect } = useWallet();
+  const { provider } = usePokerProgram();
+
+  // Session key for popup-free gameplay
+  const {
+    session: sessionState,
+    createSession,
+    revokeSession,
+    sendWithSession,
+    loading: sessionLoading,
+    error: sessionError,
+  } = useSessionKey(provider, publicKey);
+
+  // Build session key param for usePokerGame (only when session is active)
+  const sessionKeyParam = sessionState.isActive && sessionState.keypair && sessionState.sessionTokenPDA
+    ? {
+        signerPublicKey: sessionState.keypair.publicKey,
+        sessionTokenPDA: sessionState.sessionTokenPDA,
+        sendWithSession,
+        isActive: true as const,
+      }
+    : null;
+
   const {
     gameState,
     loading,
@@ -77,7 +102,7 @@ export default function TablePage({ params }: { params: Promise<{ tableId: strin
     closeInactiveTable,
     // Program for event listeners
     program,
-  } = usePokerGame();
+  } = usePokerGame(sessionKeyParam);
 
   // Set the table ID from URL parameter
   useEffect(() => {
@@ -1591,6 +1616,17 @@ export default function TablePage({ params }: { params: Promise<{ tableId: strin
                     }
                   }}
                   isLoading={loading}
+                />
+              )}
+
+              {/* Session key status — instant play indicator */}
+              {!isMobileLandscape && (
+                <SessionStatus
+                  session={sessionState}
+                  onCreateSession={createSession}
+                  onRevokeSession={revokeSession}
+                  loading={sessionLoading}
+                  error={sessionError}
                 />
               )}
 
