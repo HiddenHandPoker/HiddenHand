@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { WalletButton } from "@/components/WalletButton";
 import { SoundToggle } from "@/components/SoundToggle";
+import { SwapModal } from "@/components/SwapModal";
 import { NETWORK } from "@/contexts/WalletProvider";
 import { useLobby, type StakeTier, type TableSize, type LobbyTable } from "@/hooks/useLobby";
 import { usePokerProgram } from "@/hooks/usePokerProgram";
@@ -18,6 +19,10 @@ import { BN } from "@coral-xyz/anchor";
 import { getDefaultToken, baseUnitsToDisplay, TOKEN_PROGRAM_ID } from "@/lib/tokens";
 import { getRakeForBlinds } from "@/lib/rake";
 import { usePlayerStats } from "@/hooks/usePlayerStats";
+import { useResponsibleGaming } from "@/hooks/useResponsibleGaming";
+import { SessionTimer } from "@/components/SessionTimer";
+import { BreakReminder } from "@/components/BreakReminder";
+import { SelfExclusionBanner } from "@/components/SelfExclusionBanner";
 
 export default function LobbyPage() {
   const { connected, publicKey } = useWallet();
@@ -43,9 +48,19 @@ export default function LobbyPage() {
 
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showQuickPlay, setShowQuickPlay] = useState(false);
+  const [showSwapModal, setShowSwapModal] = useState(false);
   const [creating, setCreating] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [viewMode, setViewMode] = useState<ViewMode>("grid");
+
+  // Responsible gaming
+  const {
+    formatSessionTime,
+    showBreakReminder,
+    dismissBreakReminder,
+    isExcluded,
+    exclusionTimeLeft,
+  } = useResponsibleGaming(publicKey?.toString() ?? null);
 
   // Player stats (for mini-stats line)
   const { fetchStats, getPlayerStats } = usePlayerStats();
@@ -192,8 +207,39 @@ export default function LobbyPage() {
     { value: "6max", label: "6-Max" },
   ];
 
+  // Self-exclusion: block access when active
+  if (isExcluded) {
+    return (
+      <main className="min-h-screen relative">
+        <header className="glass-dark sticky top-0 z-50 px-6 py-4 flex justify-between items-center border-b border-white/5">
+          <div className="flex items-center gap-4">
+            <Link href="/" className="text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors">
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+              </svg>
+            </Link>
+            <h1 className="font-display text-2xl font-bold tracking-wide">
+              <span className="text-[var(--text-primary)]">Hidden</span>
+              <span className="text-gold-gradient">Hand</span>
+            </h1>
+          </div>
+          <WalletButton className="btn-gold !text-sm !px-5 !py-2.5 !rounded-xl" />
+        </header>
+        <SelfExclusionBanner timeLeft={exclusionTimeLeft()} />
+      </main>
+    );
+  }
+
   return (
     <main className="min-h-screen relative">
+      {/* Break reminder toast */}
+      {showBreakReminder && (
+        <BreakReminder
+          sessionTime={formatSessionTime()}
+          onDismiss={dismissBreakReminder}
+        />
+      )}
+
       {/* Header */}
       <header className="glass-dark sticky top-0 z-50 px-6 py-4 flex justify-between items-center border-b border-white/5">
         <div className="flex items-center gap-4">
@@ -221,7 +267,20 @@ export default function LobbyPage() {
         </div>
 
         <div className="flex items-center gap-3">
+          {connected && <SessionTimer formattedTime={formatSessionTime()} />}
           <SoundToggle />
+          {connected && (
+            <button
+              onClick={() => setShowSwapModal(true)}
+              className="px-4 py-2.5 rounded-xl text-sm font-semibold flex items-center gap-2 bg-[var(--bg-dark)] border border-white/5 text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:border-white/10 transition-all"
+              title="Swap tokens to USDC"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
+              </svg>
+              Swap
+            </button>
+          )}
           <WalletButton className="btn-gold !text-sm !px-5 !py-2.5 !rounded-xl" />
         </div>
       </header>
@@ -519,6 +578,12 @@ export default function LobbyPage() {
         loading={creating}
       />
 
+      {/* Swap Modal (Jupiter Plugin) */}
+      <SwapModal
+        isOpen={showSwapModal}
+        onClose={() => setShowSwapModal(false)}
+      />
+
       {/* Footer */}
       <footer className="fixed bottom-0 w-full glass-dark py-4 text-center border-t border-white/5">
         <div className="flex items-center justify-center gap-4">
@@ -535,6 +600,10 @@ export default function LobbyPage() {
               </Link>
             </>
           )}
+          <span className="text-white/10">|</span>
+          <Link href="/responsible-gaming" className="text-amber-400/60 hover:text-amber-400 text-sm transition-colors">
+            Responsible Gaming
+          </Link>
         </div>
       </footer>
     </main>

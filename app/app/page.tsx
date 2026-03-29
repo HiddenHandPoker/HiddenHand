@@ -3,6 +3,7 @@
 import { useWallet } from "@solana/wallet-adapter-react";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
+import Link from "next/link";
 import { WalletButton } from "@/components/WalletButton";
 import { SoundToggle } from "@/components/SoundToggle";
 import { NETWORK } from "@/contexts/WalletProvider";
@@ -247,6 +248,10 @@ export default function Home() {
           >
             Inco FHE
           </a>
+          <span className="mx-2 text-white/10">|</span>
+          <Link href="/responsible-gaming" className="text-amber-400/60 hover:text-amber-400 transition-colors">
+            Responsible Gaming
+          </Link>
         </p>
       </footer>
     </main>

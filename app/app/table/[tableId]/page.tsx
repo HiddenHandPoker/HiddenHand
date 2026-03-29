@@ -35,6 +35,10 @@ import {
 import { usePlayerStats } from "@/hooks/usePlayerStats";
 import { useTokenBalance } from "@/hooks/useTokenBalance";
 import { SwapModal } from "@/components/SwapModal";
+import { useResponsibleGaming } from "@/hooks/useResponsibleGaming";
+import { SessionTimer } from "@/components/SessionTimer";
+import { BreakReminder } from "@/components/BreakReminder";
+import { SelfExclusionBanner } from "@/components/SelfExclusionBanner";
 
 export default function TablePage({ params }: { params: Promise<{ tableId: string }> }) {
   const { tableId } = React.use(params);
@@ -79,6 +83,17 @@ export default function TablePage({ params }: { params: Promise<{ tableId: strin
       setTableId(decodedTableId);
     }
   }, [decodedTableId, setTableId]);
+
+  // Responsible gaming
+  const {
+    formatSessionTime,
+    showBreakReminder,
+    dismissBreakReminder,
+    isExcluded,
+    exclusionTimeLeft,
+    checkDepositAllowed,
+    recordDeposit,
+  } = useResponsibleGaming(publicKey?.toString() ?? null);
 
   // On-chain hand history from events
   const { history: onChainHistory, handTimelines, isListening: isHistoryListening, loadingHistory } = useHandHistory(program, gameState.tablePDA);
@@ -176,6 +191,7 @@ export default function TablePage({ params }: { params: Promise<{ tableId: strin
   const [buyInSol, setBuyInSol] = useState(10); // Default buy-in in display units (e.g. $10 USDC)
   const [selectedSeat, setSelectedSeat] = useState<number | null>(null);
   const [showSwapModal, setShowSwapModal] = useState(false);
+  const [depositLimitMsg, setDepositLimitMsg] = useState<string | null>(null);
 
   // USDC balance check for join flow
   const { balance: usdcBalance, refresh: refreshBalance } = useTokenBalance(tableToken.mint);
@@ -491,12 +507,23 @@ export default function TablePage({ params }: { params: Promise<{ tableId: strin
   // Handle join table
   const handleJoinTable = async () => {
     if (selectedSeat === null) return;
+
+    // Check deposit limits
+    const buyInBase = displayToBaseUnits(buyInSol, tableToken);
+    const { allowed, reason } = checkDepositAllowed(buyInBase);
+    if (!allowed) {
+      setDepositLimitMsg(reason ?? "Deposit limit exceeded.");
+      return;
+    }
+    setDepositLimitMsg(null);
+
     try {
       await withToast(
-        () => joinTable(selectedSeat, displayToBaseUnits(buyInSol, tableToken)),
-        `Joining table with ${buyInSol} SOL...`,
+        () => joinTable(selectedSeat, buyInBase),
+        `Joining table with ${buyInSol} ${tableToken.symbol}...`,
         "Joined table"
       );
+      recordDeposit(buyInBase);
       setSelectedSeat(null);
     } catch (e) {
       console.error("Join failed:", e);
@@ -636,8 +663,39 @@ export default function TablePage({ params }: { params: Promise<{ tableId: strin
     );
   }
 
+  // Self-exclusion: block access when active
+  if (isExcluded) {
+    return (
+      <main className="min-h-screen relative">
+        <header className="glass-dark sticky top-0 z-50 px-6 py-4 flex justify-between items-center border-b border-white/5">
+          <div className="flex items-center gap-4">
+            <Link href="/lobby" className="text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors">
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+              </svg>
+            </Link>
+            <h1 className="font-display text-2xl font-bold tracking-wide">
+              <span className="text-[var(--text-primary)]">Hidden</span>
+              <span className="text-gold-gradient">Hand</span>
+            </h1>
+          </div>
+          <WalletButton className="btn-gold !text-sm !px-5 !py-2.5 !rounded-xl" />
+        </header>
+        <SelfExclusionBanner timeLeft={exclusionTimeLeft()} />
+      </main>
+    );
+  }
+
   return (
     <main className="min-h-screen relative">
+      {/* Break reminder toast */}
+      {showBreakReminder && (
+        <BreakReminder
+          sessionTime={formatSessionTime()}
+          onDismiss={dismissBreakReminder}
+        />
+      )}
+
       {/* Header */}
       <header className="glass-dark sticky top-0 z-50 px-6 py-4 flex justify-between items-center border-b border-white/5">
         <div className="flex items-center gap-4">
@@ -664,6 +722,7 @@ export default function TablePage({ params }: { params: Promise<{ tableId: strin
         </div>
 
         <div className="flex items-center gap-3">
+          <SessionTimer formattedTime={formatSessionTime()} />
           <SoundToggle />
           <WalletButton className="btn-gold !text-sm !px-5 !py-2.5 !rounded-xl" />
         </div>
@@ -825,6 +884,19 @@ export default function TablePage({ params }: { params: Promise<{ tableId: strin
                         <span className="text-[var(--status-warning)] text-xs w-full">
                           Balance: {baseUnitsToDisplay(usdcBalance, tableToken).toFixed(2)} {tableToken.symbol} (need {buyInSol.toFixed(2)})
                         </span>
+                      )}
+                      {depositLimitMsg && (
+                        <div className="w-full glass-dark border border-amber-500/30 rounded-xl px-4 py-2 flex items-start gap-2">
+                          <svg className="w-4 h-4 text-amber-400 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                          </svg>
+                          <span className="text-amber-300 text-xs">{depositLimitMsg}</span>
+                          <button onClick={() => setDepositLimitMsg(null)} className="text-amber-400/60 hover:text-amber-300 ml-auto flex-shrink-0">
+                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                          </button>
+                        </div>
                       )}
                     </div>
                   )}
@@ -1654,6 +1726,10 @@ export default function TablePage({ params }: { params: Promise<{ tableId: strin
           >
             Inco FHE
           </a>
+          <span className="mx-2 text-white/10">|</span>
+          <Link href="/responsible-gaming" className="text-amber-400/60 hover:text-amber-400 transition-colors">
+            Responsible Gaming
+          </Link>
         </p>
       </footer>
 
