@@ -1,6 +1,6 @@
 "use client";
 
-import { FC } from "react";
+import { FC, useState, useEffect, useRef } from "react";
 import { PlayerSeat } from "./PlayerSeat";
 import { CardHand } from "./Card";
 import { ProvablyFairBadge } from "./ProvablyFairBadge";
@@ -78,6 +78,30 @@ export const PokerTable: FC<PokerTableProps> = ({
   playerStatsMap,
 }) => {
   const fmt = (baseUnits: number) => baseUnitsToDisplay(baseUnits, token).toFixed(2);
+
+  // Phase transition animation
+  const [displayPhase, setDisplayPhase] = useState(phase);
+  const [phaseAnimClass, setPhaseAnimClass] = useState("opacity-100");
+  const prevPhaseRef = useRef(phase);
+
+  useEffect(() => {
+    if (phase !== prevPhaseRef.current) {
+      // Fade out
+      setPhaseAnimClass("opacity-0 scale-95");
+      const t = setTimeout(() => {
+        setDisplayPhase(phase);
+        // Fade in
+        setPhaseAnimClass("opacity-100 scale-100");
+      }, 200);
+      prevPhaseRef.current = phase;
+      return () => clearTimeout(t);
+    }
+  }, [phase]);
+
+  // Track previous community card count for flip animation
+  const [newCardIndices, setNewCardIndices] = useState<Set<number>>(new Set());
+  const prevCardCountRef = useRef(0);
+
   // Calculate SB and BB positions
   const occupiedSeats = players
     .filter((p) => p.status !== "empty")
@@ -94,6 +118,25 @@ export const PokerTable: FC<PokerTableProps> = ({
 
   // Revealed community cards
   const revealedCards = communityCards.filter((c) => c !== 255);
+
+  // Detect new community cards and mark them for flip animation
+  useEffect(() => {
+    const count = revealedCards.length;
+    if (count > prevCardCountRef.current) {
+      const indices = new Set<number>();
+      for (let i = prevCardCountRef.current; i < count; i++) indices.add(i);
+      setNewCardIndices(indices);
+      // Clear animation class after it plays
+      const t = setTimeout(() => setNewCardIndices(new Set()), 500);
+      prevCardCountRef.current = count;
+      return () => clearTimeout(t);
+    }
+    if (count < prevCardCountRef.current) {
+      // Reset on new hand
+      prevCardCountRef.current = count;
+      setNewCardIndices(new Set());
+    }
+  }, [revealedCards.length]);
 
   return (
     <div className="relative w-full max-w-5xl aspect-[16/10] mx-auto">
@@ -216,7 +259,10 @@ export const PokerTable: FC<PokerTableProps> = ({
                 const isRiver = idx === 4;
 
                 return (
-                  <div key={idx} className="relative">
+                  <div
+                    key={idx}
+                    className={`relative ${newCardIndices.has(idx) ? "animate-deal" : ""}`}
+                  >
                     {card !== undefined ? (
                       <CardHand cards={[card]} size="md" dealt />
                     ) : (
@@ -244,13 +290,14 @@ export const PokerTable: FC<PokerTableProps> = ({
             <div
               className={`
                 px-5 py-2 rounded-full uppercase tracking-widest text-sm font-semibold
-                ${phase === "Showdown" || phase === "Settled"
+                transition-all duration-200 ease-in-out ${phaseAnimClass}
+                ${displayPhase === "Showdown" || displayPhase === "Settled"
                   ? "bg-[var(--gold-main)] text-black"
                   : "glass text-[var(--gold-light)]"
                 }
               `}
             >
-              {phase}
+              {displayPhase}
             </div>
             <ProvablyFairBadge isActive={isVrfVerified} />
           </div>
