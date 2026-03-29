@@ -45,6 +45,14 @@
     --text-secondary: #a0a0a0;
     --text-muted: #606060;
 
+    /* Jupiter Plugin Theme */
+    --jupiter-plugin-primary: 212, 160, 18;
+    --jupiter-plugin-background: 10, 11, 13;
+    --jupiter-plugin-primaryText: 245, 245, 245;
+    --jupiter-plugin-warning: 243, 156, 18;
+    --jupiter-plugin-interactive: 26, 29, 36;
+    --jupiter-plugin-module: 18, 20, 26;
+
     /* Status */
     --status-active: #2ecc71;
     --status-warning: #f39c12;
@@ -312,6 +320,43 @@
   }
 }
 
+/* Replayer — active seat pulse */
+@keyframes replay-seat-pulse {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(212, 160, 18, 0.5),
+                inset 0 0 12px rgba(212, 160, 18, 0.05);
+  }
+  50% {
+    box-shadow: 0 0 12px 4px rgba(212, 160, 18, 0.3),
+                inset 0 0 16px rgba(212, 160, 18, 0.1);
+  }
+}
+
+/* Replayer — winner seat gold ring */
+@keyframes replay-winner-ring {
+  0%, 100% {
+    box-shadow: 0 0 0 2px rgba(212, 160, 18, 0.6),
+                0 0 20px rgba(212, 160, 18, 0.3);
+  }
+  50% {
+    box-shadow: 0 0 0 3px rgba(244, 196, 48, 0.8),
+                0 0 30px rgba(244, 196, 48, 0.4);
+  }
+}
+
+/* Replayer — verified badge pop-in */
+@keyframes replay-badge-pop {
+  0% { opacity: 0; transform: translate(-50%, 0) scale(0.6); }
+  60% { opacity: 1; transform: translate(-50%, 0) scale(1.1); }
+  100% { opacity: 1; transform: translate(-50%, 0) scale(1); }
+}
+
+/* Replayer — community card entrance */
+@keyframes replay-card-slide {
+  0% { opacity: 0; transform: translateY(-8px) scale(0.9); }
+  100% { opacity: 1; transform: translateY(0) scale(1); }
+}
+
 /* Component Layer - Reusable Components */
 @layer components {
   /* Glass Effect */
@@ -512,4 +557,21 @@
   .floating-card.hearts::after { content: '♥'; color: rgba(220, 80, 80, 0.4); }
   .floating-card.diamonds::after { content: '♦'; color: rgba(220, 80, 80, 0.4); }
   .floating-card.clubs::after { content: '♣'; }
+
+  /* Replayer utilities */
+  .replay-active-seat {
+    animation: replay-seat-pulse 1.5s ease-in-out infinite;
+  }
+
+  .replay-winner-seat {
+    animation: replay-winner-ring 1.5s ease-in-out infinite;
+  }
+
+  .replay-verified-badge {
+    animation: replay-badge-pop 0.4s ease-out forwards;
+  }
+
+  .replay-card-enter {
+    animation: replay-card-slide 0.3s ease-out forwards;
+  }
 }

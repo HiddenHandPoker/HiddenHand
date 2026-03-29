@@ -13,6 +13,7 @@ import { getDefaultToken, baseUnitsToDisplay, TokenInfo } from "@/lib/tokens";
 import { SECONDS_PER_MINUTE, SECONDS_PER_HOUR, SECONDS_PER_DAY } from "@/lib/constants";
 import { NETWORK } from "@/contexts/WalletProvider";
 import { Tooltip, InfoIcon } from "@/components/Tooltip";
+import { HandReplayer } from "@/components/HandReplayer";
 
 interface OnChainHandHistoryProps {
   history: HandHistoryEntry[];
@@ -30,6 +31,7 @@ export function OnChainHandHistory({
   loadingHistory = false,
 }: OnChainHandHistoryProps) {
   const [expandedHands, setExpandedHands] = useState<Set<number>>(new Set());
+  const [replayHandNumber, setReplayHandNumber] = useState<number | null>(null);
   const token = getDefaultToken();
 
   const explorerUrl = NETWORK === "devnet"
@@ -205,9 +207,26 @@ export function OnChainHandHistory({
                 })}
               </div>
 
-              {/* Explorer Link */}
-              {hand.signature && (
-                <div className="mt-2 pt-2 border-t border-white/5">
+              {/* Replay + Explorer Link */}
+              <div className="mt-2 pt-2 border-t border-white/5 flex items-center justify-between">
+                {/* Replay button */}
+                {hasTimeline && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setReplayHandNumber(hand.handNumber);
+                    }}
+                    className="text-xs text-[var(--gold-light)] hover:text-[var(--gold-main)] flex items-center gap-1 transition-colors"
+                  >
+                    <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clipRule="evenodd" />
+                    </svg>
+                    Replay
+                  </button>
+                )}
+
+                {/* Explorer link */}
+                {hand.signature && (
                   <a
                     href={`${explorerUrl}${hand.signature}${explorerSuffix}`}
                     target="_blank"
@@ -219,12 +238,27 @@ export function OnChainHandHistory({
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
                     </svg>
                   </a>
-                </div>
-              )}
+                )}
+              </div>
             </div>
           );
         })}
       </div>
+
+      {/* Hand Replayer Modal */}
+      {replayHandNumber !== null && (() => {
+        const replayHand = history.find((h) => h.handNumber === replayHandNumber);
+        const replayTimeline = handTimelines.get(replayHandNumber) || [];
+        if (!replayHand || replayTimeline.length === 0) return null;
+        return (
+          <HandReplayer
+            hand={replayHand}
+            timeline={replayTimeline}
+            token={token}
+            onClose={() => setReplayHandNumber(null)}
+          />
+        );
+      })()}
     </div>
   );
 }
