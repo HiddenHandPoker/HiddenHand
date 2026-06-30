@@ -96,7 +96,7 @@ export default function TablePage({ params }: { params: Promise<{ tableId: strin
     // MagicBlock VRF
     requestShuffle,
     setUseVrf,
-    // Inco FHE Encryption
+    // Inco TEE Encryption
     encryptHoleCards,
     grantCardAllowance,
     encryptAndGrantCards,
@@ -696,7 +696,7 @@ export default function TablePage({ params }: { params: Promise<{ tableId: strin
               target="_blank"
               rel="noopener noreferrer"
             >
-              Inco FHE
+              Inco TEE
             </a>
           </p>
         </footer>
@@ -807,7 +807,7 @@ export default function TablePage({ params }: { params: Promise<{ tableId: strin
                       <span className="text-[var(--text-muted)] text-xs">&mdash; Select a seat below to join</span>
                     </div>
                     <p className="text-[var(--text-muted)] text-xs mt-0.5">
-                      Hole cards are FHE encrypted &mdash; only seated players can see their hands
+                      Hole cards are TEE encrypted &mdash; only seated players can see their hands
                     </p>
                   </div>
                 </div>
@@ -1056,7 +1056,7 @@ export default function TablePage({ params }: { params: Promise<{ tableId: strin
                   )}
                 </div>
 
-                {/* Inco FHE Privacy Toggle (Cryptographic) */}
+                {/* Inco TEE Privacy Toggle (Cryptographic) */}
                 <div className="flex items-center gap-2 glass-dark px-3 py-1.5 rounded-lg">
                   <span className="text-[var(--text-muted)] text-xs uppercase tracking-wider">Inco</span>
                   <button
@@ -1072,7 +1072,7 @@ export default function TablePage({ params }: { params: Promise<{ tableId: strin
                     />
                   </button>
                   {gameState.useIncoPrivacy && (
-                    <span className="text-cyan-400 text-xs font-medium">FHE Encrypted</span>
+                    <span className="text-cyan-400 text-xs font-medium">TEE Encrypted</span>
                   )}
                 </div>
 
@@ -1117,7 +1117,7 @@ export default function TablePage({ params }: { params: Promise<{ tableId: strin
                             {!gameState.isDeckShuffled && !gameState.isShuffling && (
                               <Tooltip
                                 title="🎲 Deal Cards"
-                                content="Shuffles deck with MagicBlock VRF (provably fair), encrypts cards with Inco FHE (cryptographic privacy), and grants decryption access to all players. One click does it all!"
+                                content="Shuffles deck with MagicBlock VRF (provably fair), encrypts cards with Inco TEE (cryptographic privacy), and grants decryption access to all players. One click does it all!"
                               >
                                 <button
                                   onClick={() => {
@@ -1187,13 +1187,13 @@ export default function TablePage({ params }: { params: Promise<{ tableId: strin
                         )
                       )}
 
-                      {/* Inco FHE Encryption - show after cards are dealt */}
+                      {/* Inco TEE Encryption - show after cards are dealt */}
                       {gameState.phase === "PreFlop" && gameState.useIncoPrivacy && !gameState.areCardsEncrypted && !gameState.isEncrypting && (
                         <button
                           onClick={async () => {
                             try {
                               await encryptAllPlayersCards();
-                              addGameEvent("privacy", "Cards encrypted with Inco FHE");
+                              addGameEvent("privacy", "Cards encrypted with Inco TEE");
                             } catch (e) {
                               console.error("Encryption failed:", e);
                             }
@@ -1220,7 +1220,7 @@ export default function TablePage({ params }: { params: Promise<{ tableId: strin
                           <svg className="w-4 h-4 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
                           </svg>
-                          <span className="text-cyan-400 text-xs font-medium">FHE Encrypted</span>
+                          <span className="text-cyan-400 text-xs font-medium">TEE Encrypted</span>
                         </div>
                       )}
                       {/* Grant Allowances - now auto-granted after VRF shuffle completes */}
@@ -1453,14 +1453,14 @@ export default function TablePage({ params }: { params: Promise<{ tableId: strin
                 </div>
               ) : (
                 <Tooltip
-                  title="🔐 Inco FHE Decryption"
-                  content="Your cards are encrypted on-chain using Fully Homomorphic Encryption. Only you can decrypt them locally - no one else can see your hand."
+                  title="🔐 Inco TEE Decryption"
+                  content="Your cards are encrypted on-chain using confidential computing (TEE). Only you can decrypt them locally - no one else can see your hand."
                 >
                   <button
                     onClick={async () => {
                       try {
                         await decryptMyCards();
-                        addGameEvent("privacy", "Cards decrypted via Inco FHE");
+                        addGameEvent("privacy", "Cards decrypted via Inco TEE");
                       } catch (e) {
                         console.error("Decryption failed:", e);
                       }
@@ -1586,7 +1586,7 @@ export default function TablePage({ params }: { params: Promise<{ tableId: strin
                 </span>
               </div>
               <p className="text-[var(--text-muted)] text-sm">
-                Decrypting community cards with Inco FHE
+                Decrypting community cards with Inco TEE
               </p>
               {gameState.isRevealingCommunity && (
                 <p className="text-purple-400 text-xs mt-2">
@@ -1779,7 +1779,7 @@ export default function TablePage({ params }: { params: Promise<{ tableId: strin
             target="_blank"
             rel="noopener noreferrer"
           >
-            Inco FHE
+            Inco TEE
           </a>
           <span className="mx-2 text-white/10">|</span>
           <Link href="/responsible-gaming" className="text-amber-400/60 hover:text-amber-400 transition-colors">

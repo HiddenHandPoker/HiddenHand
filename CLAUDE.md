@@ -11,9 +11,9 @@ This project was started for the **Solana Privacy Hack** hackathon (Jan 12-30, 2
    - Exciting demo potential
    - Targets MagicBlock ($5K) + Open Track ($18K) = $23K bounty potential
 
-2. **Privacy Approach**: Hybrid **MagicBlock VRF + Inco FHE** for ultimate privacy:
+2. **Privacy Approach**: Hybrid **MagicBlock VRF + Inco TEE** for ultimate privacy:
    - **MagicBlock VRF**: Provably fair card shuffling with verifiable randomness
-   - **Inco FHE**: Fully Homomorphic Encryption for card privacy
+   - **Inco TEE**: confidential computing (TEE) for card privacy
      - Cards encrypted as u128 handles on-chain
      - Only card owner can decrypt (via allowances)
      - Ed25519 signature verification for reveals
@@ -27,12 +27,12 @@ This project was started for the **Solana Privacy Hack** hackathon (Jan 12-30, 2
 - Player join/leave with USDC buy-in (SPL token support)
 - Betting logic (Fold/Check/Call/Raise/AllIn)
 - Pot management and action rotation
-- Card encoding (0-51) with Inco FHE encryption
+- Card encoding (0-51) with Inco TEE encryption
 - **Hand evaluation algorithm** (best 5 from 7 cards)
 - **Showdown with pot distribution** (handles split pots)
 - **48 passing unit tests**
 - **MagicBlock VRF Integration** - Provably fair card shuffling
-- **Inco FHE Encryption** - Hole cards encrypted as u128 handles
+- **Inco TEE Encryption** - Hole cards encrypted as u128 handles
 - **Ed25519 Signature Verification** - Secure card reveals at showdown
 - **Complete Next.js Frontend** - Playable poker UI with wallet integration
 - **Client-side Decryption** - Players decrypt their own cards via Inco SDK
@@ -135,7 +135,7 @@ The game includes robust timeout mechanisms to prevent games from getting stuck 
 
 The spectator system lets anyone watch live tables without connecting a wallet.
 
-**Privacy invariant (CRITICAL):** Encrypted u128 Inco FHE card handles must NEVER be passed to spectator-rendered components. The `useTableState` hook enforces this at the data layer — all player hole cards are returned as `[null, null]`. Only revealed showdown cards (public on-chain data) are shown. This is not just a UI concern; it's the core privacy guarantee.
+**Privacy invariant (CRITICAL):** Encrypted u128 Inco TEE card handles must NEVER be passed to spectator-rendered components. The `useTableState` hook enforces this at the data layer — all player hole cards are returned as `[null, null]`. Only revealed showdown cards (public on-chain data) are shown. This is not just a UI concern; it's the core privacy guarantee.
 
 **Read-only Anchor provider pattern:** Both `useTableState` and `useLobby` create their own Anchor `Program` instance using a dummy wallet when no real wallet is connected. This allows on-chain reads without wallet connection:
 ```ts
@@ -164,7 +164,7 @@ Rake is a percentage of each pot, capped per hand, tiered by blind level. Set at
 ### What's Next
 1. ~~Write tests for current poker logic~~ Done
 2. ~~Integrate MagicBlock VRF for shuffling~~ Done
-3. ~~Integrate Inco FHE for card encryption~~ Done
+3. ~~Integrate Inco TEE for card encryption~~ Done
 4. ~~Build Next.js frontend with game UI~~ Done
 5. ~~Ed25519 signature verification for secure reveals~~ Done
 6. ~~Spectator mode and lobby upgrade~~ Done
@@ -192,8 +192,8 @@ HiddenHand is a fully on-chain Texas Hold'em poker game with cryptographic priva
 - **VRF Features**: Provably fair shuffling, callback-based randomness
 - **Status**: Integrated and working (42 tests passing)
 
-### Inco FHE Integration
-- **Inco Lightning**: TEE-based FHE encryption for hole cards
+### Inco TEE Integration
+- **Inco Lightning**: TEE-based confidential encryption for hole cards
 - **Encryption**: Cards stored as u128 handles on-chain
 - **Decryption**: Client-side via Inco SDK with wallet signing
 - **Ed25519 Verification**: Covalidator signatures verify card reveals at showdown
@@ -210,7 +210,7 @@ HiddenHand is a fully on-chain Texas Hold'em poker game with cryptographic priva
 - Cards encoded as 0-51 (u8)
 - Suit: card / 13 (0=Hearts, 1=Diamonds, 2=Clubs, 3=Spades)
 - Rank: card % 13 (0=2, 1=3, ..., 8=10, 9=J, 10=Q, 11=K, 12=A)
-- Stored as encrypted `u128` handles via Inco FHE
+- Stored as encrypted `u128` handles via Inco TEE
 
 ### Game Phases
 ```
@@ -260,7 +260,7 @@ Each table is denominated in a single SPL token (stored as `token_mint: Pubkey` 
 | `request_shuffle` | Request VRF randomness for card shuffle | Done |
 | `callback_shuffle` | VRF callback - atomic shuffle + encrypt with Inco | Done |
 
-### Inco FHE Instructions (Encrypted Cards)
+### Inco TEE Instructions (Encrypted Cards)
 
 | Instruction | Description | Status |
 |-------------|-------------|--------|
@@ -310,7 +310,7 @@ hiddenhand/
 │           ├── close_inactive_table.rs # Return funds from abandoned table
 │           ├── request_shuffle.rs      # VRF randomness request
 │           ├── callback_shuffle.rs     # VRF callback - atomic shuffle + encrypt
-│           ├── encrypt_hole_cards.rs   # Inco FHE encryption
+│           ├── encrypt_hole_cards.rs   # Inco TEE encryption
 │           ├── grant_own_allowance.rs  # Player grants decryption access
 │           └── grant_community_allowances.rs  # Community card access for AFK recovery
 ├── app/                          # Next.js frontend (complete)
@@ -388,7 +388,7 @@ cd app && npm run dev
 - [VRF SDK](https://crates.io/crates/ephemeral-vrf-sdk)
 - [Example: Roll Dice](https://github.com/magicblock-labs/roll-dice) - VRF pattern
 
-### Inco FHE (Card Encryption)
+### Inco TEE (Card Encryption)
 - [Inco Network](https://inco.org/)
 - [Inco Solana SDK](https://www.npmjs.com/package/@inco/solana-sdk)
 

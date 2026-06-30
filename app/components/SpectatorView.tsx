@@ -12,7 +12,7 @@ import { getTokenByMint, getDefaultToken, baseUnitsToDisplay, type TokenInfo } f
  * Works WITHOUT a connected wallet. Uses useTableState for on-chain reads.
  *
  * PRIVACY INVARIANT: All player hole cards are [null, null]. Encrypted u128
- * handles from Inco FHE are NEVER passed to any component. Spectators see
+ * handles from Inco TEE are NEVER passed to any component. Spectators see
  * card backs only. At showdown, only explicitly revealed cards are shown.
  */
 
@@ -225,7 +225,7 @@ export const SpectatorView: FC<SpectatorViewProps> = ({
                 </span>
               </div>
               <p className="text-[var(--text-muted)] text-xs mt-0.5">
-                Hole cards are FHE encrypted &mdash; only seated players can see their hands
+                Hole cards are TEE encrypted &mdash; only seated players can see their hands
               </p>
             </div>
           </div>
@@ -435,7 +435,7 @@ export const SpectatorView: FC<SpectatorViewProps> = ({
                   Privacy-First Poker
                 </h4>
                 <p className="text-[var(--text-muted)] text-xs leading-relaxed">
-                  Player hole cards are encrypted using Inco&apos;s Fully Homomorphic Encryption (FHE).
+                  Player hole cards are encrypted using Inco&apos;s confidential computing (TEE).
                   Cards are encrypted on-chain &mdash; not even the server can see them. Only each player
                   can decrypt their own hand. Card backs shown above represent truly encrypted data,
                   not hidden UI elements.
@@ -450,7 +450,7 @@ export const SpectatorView: FC<SpectatorViewProps> = ({
                   <div className="flex items-center gap-1.5">
                     <div className="w-1.5 h-1.5 rounded-full bg-cyan-400" />
                     <span className="text-[var(--text-muted)] text-[10px] uppercase tracking-wider">
-                      Inco FHE
+                      Inco TEE
                     </span>
                   </div>
                   <div className="flex items-center gap-1.5">

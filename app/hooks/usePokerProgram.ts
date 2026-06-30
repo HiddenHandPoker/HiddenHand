@@ -21,7 +21,7 @@ export interface UsePokerProgramResult {
  * Hook to get the Anchor program instance for HiddenHand
  *
  * Uses MagicBlock VRF for provably fair shuffling and
- * Inco FHE for cryptographic card privacy (on base layer)
+ * Inco TEE for cryptographic card privacy (on base layer)
  */
 export function usePokerProgram(): UsePokerProgramResult {
   const { connection } = useConnection();

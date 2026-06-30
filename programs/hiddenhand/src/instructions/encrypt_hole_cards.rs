@@ -1,4 +1,4 @@
-//! Encrypt hole cards using Inco FHE
+//! Encrypt hole cards using Inco TEE
 //!
 //! This module provides two-phase encryption:
 //! 1. `encrypt_hole_cards` - Encrypts plaintext cards, stores handles in PlayerSeat

@@ -149,7 +149,7 @@ pub fn handler(ctx: Context<CallbackShuffle>, randomness: [u8; 32]) -> Result<()
         deck.swap(i, j);
     }
 
-    msg!("Deck shuffled. Now encrypting ALL cards (community + hole cards) via Inco FHE...");
+    msg!("Deck shuffled. Now encrypting ALL cards (community + hole cards) via Inco TEE...");
 
     // ============================================================
     // ENCRYPT AND DEAL CARDS ATOMICALLY

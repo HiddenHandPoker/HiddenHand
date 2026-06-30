@@ -17,7 +17,7 @@ declare_id!("5fcckjDn8wzRSodJbQVpHeuWZ8x4B3htKv1WEMx36XJe");
 
 /// HiddenHand - Privacy Poker on Solana
 /// Using MagicBlock VRF for provably fair shuffling and
-/// Inco FHE for cryptographic card privacy
+/// Inco TEE for cryptographic card privacy
 #[program]
 pub mod hiddenhand {
     use super::*;
@@ -104,7 +104,7 @@ pub mod hiddenhand {
     // Inco Encryption Instructions (Phase 2 - Cryptographic Privacy)
     // ============================================================
 
-    /// Phase 1: Encrypt hole cards using Inco FHE
+    /// Phase 1: Encrypt hole cards using Inco TEE
     /// Called via Magic Actions after ER commit
     /// Encrypts plaintext cards and stores handles in PlayerSeat
     /// Call once per player with their seat_index

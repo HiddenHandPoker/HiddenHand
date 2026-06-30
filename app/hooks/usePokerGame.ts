@@ -146,8 +146,8 @@ export interface GameState {
   useVrf: boolean; // Whether to use VRF for shuffling
   isShuffling: boolean; // VRF shuffle in progress
   isDeckShuffled: boolean; // VRF shuffle complete
-  // Inco FHE privacy state
-  useIncoPrivacy: boolean; // Whether to use Inco FHE encryption for cards
+  // Inco TEE privacy state
+  useIncoPrivacy: boolean; // Whether to use Inco TEE encryption for cards
   isEncrypting: boolean; // Inco encryption in progress
   areCardsEncrypted: boolean; // Whether current cards are Inco-encrypted
   areAllowancesGranted: boolean; // Whether current player's decryption allowances have been granted
@@ -182,7 +182,7 @@ export interface UsePokerGameResult {
   // MagicBlock VRF Actions
   requestShuffle: () => Promise<string>;
 
-  // Inco FHE Encryption Actions
+  // Inco TEE Encryption Actions
   encryptHoleCards: (seatIndex: number) => Promise<string>; // Phase 1: Encrypt cards
   grantCardAllowance: (seatIndex: number) => Promise<string>; // Phase 2: Grant decryption
   revealCards: () => Promise<string>; // Reveal decrypted cards for showdown
@@ -253,7 +253,7 @@ const initialGameState: GameState = {
   useVrf: true, // VRF oracle is working - use provably fair shuffling
   isShuffling: false,
   isDeckShuffled: false,
-  // Inco FHE privacy state
+  // Inco TEE privacy state
   useIncoPrivacy: true, // Default to Inco privacy ON (cryptographic card encryption)
   isEncrypting: false,
   areCardsEncrypted: false,
@@ -303,7 +303,7 @@ export function usePokerGame(sessionKey?: SessionKeyParam | null): UsePokerGameR
     setGameState((prev) => ({ ...prev, useVrf }));
   }, []);
 
-  // Toggle Inco FHE Privacy mode (cryptographic card encryption)
+  // Toggle Inco TEE Privacy mode (cryptographic card encryption)
   const setUseIncoPrivacy = useCallback((useIncoPrivacy: boolean) => {
     setGameState((prev) => ({ ...prev, useIncoPrivacy }));
   }, []);
@@ -1235,7 +1235,7 @@ export function usePokerGame(sessionKey?: SessionKeyParam | null): UsePokerGameR
   }, [program, provider, publicKey, gameState.tablePDA, gameState.table, refreshState]);
 
   // ============================================================
-  // Inco FHE: Phase 1 - Encrypt hole cards (stores handles)
+  // Inco TEE: Phase 1 - Encrypt hole cards (stores handles)
   // ============================================================
   const encryptHoleCards = useCallback(async (seatIndex: number): Promise<string> => {
     if (!program || !provider || !publicKey || !gameState.tablePDA || !gameState.table) {
@@ -1250,7 +1250,7 @@ export function usePokerGame(sessionKey?: SessionKeyParam | null): UsePokerGameR
       const [handPDA] = getHandPDA(gameState.tablePDA, handNumber);
       const [seatPDA] = getSeatPDA(gameState.tablePDA, seatIndex);
 
-      console.log(`Encrypting hole cards for seat ${seatIndex} via Inco FHE...`);
+      console.log(`Encrypting hole cards for seat ${seatIndex} via Inco TEE...`);
 
       const tx = await program.methods
         .encryptHoleCards(seatIndex)
@@ -1279,7 +1279,7 @@ export function usePokerGame(sessionKey?: SessionKeyParam | null): UsePokerGameR
   }, [program, provider, publicKey, gameState.tablePDA, gameState.table]);
 
   // ============================================================
-  // Inco FHE: Phase 2 - Grant decryption allowance
+  // Inco TEE: Phase 2 - Grant decryption allowance
   // Must be called AFTER encryptHoleCards to have valid handles
   // ============================================================
   const grantCardAllowance = useCallback(async (seatIndex: number): Promise<string> => {
@@ -1345,7 +1345,7 @@ export function usePokerGame(sessionKey?: SessionKeyParam | null): UsePokerGameR
   }, [program, provider, publicKey, gameState.tablePDA, gameState.table]);
 
   // ============================================================
-  // Inco FHE: Combined helper - Encrypt + Grant in sequence
+  // Inco TEE: Combined helper - Encrypt + Grant in sequence
   // ============================================================
   const encryptAndGrantCards = useCallback(async (seatIndex: number): Promise<void> => {
     console.log(`Starting Inco encryption for seat ${seatIndex}...`);
@@ -1363,7 +1363,7 @@ export function usePokerGame(sessionKey?: SessionKeyParam | null): UsePokerGameR
   }, [encryptHoleCards, grantCardAllowance]);
 
   // ============================================================
-  // Inco FHE: Encrypt all players' cards (after dealing)
+  // Inco TEE: Encrypt all players' cards (after dealing)
   // Called automatically when useIncoPrivacy is enabled
   // ============================================================
   const encryptAllPlayersCards = useCallback(async (): Promise<void> => {
@@ -1372,7 +1372,7 @@ export function usePokerGame(sessionKey?: SessionKeyParam | null): UsePokerGameR
     }
 
     const occupied = getOccupiedSeats(gameState.table.occupiedSeats, gameState.table.maxPlayers);
-    console.log(`Encrypting cards for ${occupied.length} players via Inco FHE...`);
+    console.log(`Encrypting cards for ${occupied.length} players via Inco TEE...`);
 
     setGameState((prev) => ({ ...prev, isEncrypting: true }));
 
@@ -1407,7 +1407,7 @@ export function usePokerGame(sessionKey?: SessionKeyParam | null): UsePokerGameR
   }, [gameState.table, gameState.tablePDA, encryptAndGrantCards, refreshState]);
 
   // ============================================================
-  // Inco FHE: Grant allowances only (for atomic encryption)
+  // Inco TEE: Grant allowances only (for atomic encryption)
   // When cards are encrypted during deal_cards_encrypted, we still need
   // to grant allowances for players to decrypt their own cards
   // ============================================================
@@ -1452,7 +1452,7 @@ export function usePokerGame(sessionKey?: SessionKeyParam | null): UsePokerGameR
   }, [gameState.table, gameState.tablePDA, grantCardAllowance, refreshState]);
 
   // ============================================================
-  // Inco FHE: Decrypt own cards (client-side)
+  // Inco TEE: Decrypt own cards (client-side)
   // Uses Inco SDK to decrypt encrypted handles with wallet signing
   // Also stores Ed25519 attestation instructions for on-chain verification
   // ============================================================
@@ -2308,7 +2308,7 @@ export function usePokerGame(sessionKey?: SessionKeyParam | null): UsePokerGameR
     timeoutPlayer,
     // MagicBlock VRF
     requestShuffle,
-    // Inco FHE Encryption
+    // Inco TEE Encryption
     encryptHoleCards,
     grantCardAllowance,
     encryptAndGrantCards,

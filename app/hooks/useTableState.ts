@@ -10,7 +10,7 @@
  * PRIVACY INVARIANT: This hook must NEVER leak encrypted u128 card handles.
  * All player hole cards are returned as [null, null] unless the player is
  * the connected wallet AND cards are plaintext (0-51). Encrypted handles
- * (Inco FHE) are stripped at the data layer, not just the UI layer.
+ * (Inco TEE) are stripped at the data layer, not just the UI layer.
  */
 
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";

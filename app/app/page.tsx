@@ -174,7 +174,7 @@ export default function Home() {
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
                   </svg>
                 ),
-                title: "FHE Encryption",
+                title: "TEE Encryption",
                 desc: "Hole cards encrypted with Inco Lightning. Only you can decrypt them.",
               },
               {
@@ -246,7 +246,7 @@ export default function Home() {
             target="_blank"
             rel="noopener noreferrer"
           >
-            Inco FHE
+            Inco TEE
           </a>
           <span className="mx-2 text-white/10">|</span>
           <Link href="/responsible-gaming" className="text-amber-400/60 hover:text-amber-400 transition-colors">

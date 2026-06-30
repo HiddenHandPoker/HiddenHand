@@ -2,7 +2,7 @@
 
 **The only poker game where the house can't see your cards.**
 
-HiddenHand is a fully on-chain Texas Hold'em poker game with cryptographic privacy guarantees. Built on Solana with MagicBlock VRF for provably fair shuffling and Inco Lightning FHE for encrypted hole cards.
+HiddenHand is a fully on-chain Texas Hold'em poker game with strong privacy guarantees. Built on Solana with MagicBlock VRF for provably fair shuffling and Inco Lightning's confidential computing (TEE) for encrypted hole cards.
 
 > *"Don't trust the dealer. Trust the math."*
 
@@ -31,7 +31,7 @@ HiddenHand is the first poker game where **no one can see your cards—not even 
 
 ## Security Model
 
-HiddenHand combines three cryptographic layers to eliminate trust requirements:
+HiddenHand combines three layers to minimize trust requirements:
 
 ### Layer 1: Provably Fair Shuffling (MagicBlock VRF)
 
@@ -45,12 +45,12 @@ HiddenHand combines three cryptographic layers to eliminate trust requirements:
 
 **Security guarantee:** The shuffle is provably fair—anyone can verify the randomness was not manipulated. The VRF seed exists only in memory during the callback transaction and is never stored on-chain.
 
-### Layer 2: Card Encryption (Inco Lightning FHE)
+### Layer 2: Card Encryption (Inco Lightning — TEE Confidential Compute)
 
 **What it does:** Encrypts all cards—both hole cards AND community cards—so no one can see them prematurely.
 
 **How it works:**
-1. After shuffle, ALL 52 cards are encrypted via Inco's Fully Homomorphic Encryption
+1. After shuffle, ALL 52 cards are encrypted via Inco Lightning's confidential computing (TEE-backed)
 2. Cards are stored on-chain as encrypted `u128` handles
 3. **Hole cards**: Decryption allowances granted only to the card owner
 4. **Community cards**: Remain encrypted until flop/turn/river, then revealed with Ed25519 verification
@@ -75,8 +75,8 @@ HiddenHand combines three cryptographic layers to eliminate trust requirements:
 | Attack Vector | Prevention |
 |--------------|------------|
 | Rigged shuffle | VRF provides verifiable randomness with on-chain proof |
-| Peeking at hole cards | FHE encryption—only card owner can decrypt |
-| Peeking at community cards | FHE encryption—revealed only at flop/turn/river with Ed25519 proof |
+| Peeking at hole cards | TEE encryption—only card owner can decrypt |
+| Peeking at community cards | TEE encryption—revealed only at flop/turn/river with Ed25519 proof |
 | Card forgery at showdown | Ed25519 signatures verify card authenticity |
 | Seed prediction | VRF seed never stored, only in-memory during callback |
 | Replay attacks | Unique encryption handles per card per hand |
@@ -104,7 +104,7 @@ These are infrastructure-level dependencies, not application-level trust. No sin
 │                                                                          │
 │  1. START HAND          2. VRF SHUFFLE           3. ENCRYPT CARDS        │
 │  ┌─────────────┐       ┌─────────────┐          ┌─────────────┐         │
-│  │ Initialize  │──────▶│  Request    │─────────▶│ Inco FHE    │         │
+│  │ Initialize  │──────▶│  Request    │─────────▶│ Inco TEE    │         │
 │  │ deck state  │       │  VRF seed   │          │ encryption  │         │
 │  └─────────────┘       └─────────────┘          └─────────────┘         │
 │                              │                         │                 │
@@ -137,7 +137,7 @@ These are infrastructure-level dependencies, not application-level trust. No sin
 
 ```
 ┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
-│  MagicBlock VRF │────▶│  Atomic Shuffle │────▶│  Inco FHE       │
+│  MagicBlock VRF │────▶│  Atomic Shuffle │────▶│  Inco TEE       │
 │  (Randomness)   │     │  + Encrypt      │     │  (Encryption)   │
 └─────────────────┘     └─────────────────┘     └─────────────────┘
                                                         │
@@ -153,7 +153,7 @@ These are infrastructure-level dependencies, not application-level trust. No sin
 ## Features
 
 - **Provably Fair Shuffling** — MagicBlock VRF provides verifiable randomness
-- **Encrypted Cards** — All cards (hole + community) encrypted via Inco Lightning FHE
+- **Encrypted Cards** — All cards (hole + community) encrypted via Inco Lightning (TEE confidential compute)
 - **Ed25519 Verified Reveals** — Covalidator signatures prove card authenticity
 - **Full Texas Hold'em** — PreFlop, Flop, Turn, River, Showdown
 - **On-Chain Hand History** — Every action emitted as Anchor events for audit trail
@@ -172,7 +172,7 @@ These are infrastructure-level dependencies, not application-level trust. No sin
 | Smart Contract | Anchor 0.32.1 / Rust | Game logic & state management |
 | Blockchain | Solana Devnet | Settlement & data availability |
 | Randomness | MagicBlock VRF | Provably fair card shuffling |
-| Encryption | Inco Lightning FHE | Card privacy (hole + community) |
+| Encryption | Inco Lightning (TEE) | Card privacy (hole + community) |
 | Signatures | Ed25519 | Card reveal verification |
 | Frontend | Next.js 15 / TypeScript | Player interface |
 | Wallet | Solana Wallet Adapter | Authentication & signing |
@@ -181,7 +181,7 @@ These are infrastructure-level dependencies, not application-level trust. No sin
 
 | Program | Address |
 |---------|---------|
-| HiddenHand | `HS3GdhRBU3jMT4G6ogKVktKaibqsMhPRhDhNsmgzeB8Q` |
+| HiddenHand | `5fcckjDn8wzRSodJbQVpHeuWZ8x4B3htKv1WEMx36XJe` |
 | Inco Lightning | `5sjEbPiqgZrYwR31ahR6Uk9wf5awoX61YGg7jExQSwaj` |
 | MagicBlock VRF | `Vrf1RNUjXmQGjmQrQLvJHs9SNkvDJEsRVFPkfSQUwGz` |
 
@@ -189,7 +189,7 @@ These are infrastructure-level dependencies, not application-level trust. No sin
 
 ## Live Demo
 
-**Play now:** [https://hiddenhand.netlify.app](https://hiddenhand.netlify.app)
+**Play now:** [https://hiddenhand.netlify.app](https://hiddenhand.netlify.app) | **Discord:** [https://discord.gg/N4dtmnyCw7](https://discord.gg/N4dtmnyCw7)
 
 > **Note:** Due to browser popup policies, your wallet may not automatically open when approving transactions. If the wallet doesn't pop up, click on your wallet extension to see pending transaction requests.
 
@@ -269,7 +269,7 @@ HiddenHand/
 │   │   ├── player.rs             # Player seats & chips
 │   │   ├── deck.rs               # Card utilities
 │   │   └── hand_eval.rs          # Poker hand ranking
-│   ├── inco_cpi.rs               # Inco FHE integration
+│   ├── inco_cpi.rs               # Inco TEE confidential-compute CPI
 │   └── error.rs                  # 30+ custom errors
 ├── app/                          # Next.js frontend
 │   ├── components/               # UI components
@@ -325,7 +325,7 @@ HiddenHand/
 - [x] 42 unit tests passing
 - [x] Ed25519 signature verification
 - [x] MagicBlock VRF integration
-- [x] Inco FHE encryption
+- [x] Inco confidential-compute (TEE) encryption
 - [x] 3-minute demo video
 
 ---

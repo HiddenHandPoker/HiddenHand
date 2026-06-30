@@ -29,6 +29,12 @@ anchor-spl = { version = "0.32.1", features = ["token", "associated_token"] }
 # See src/inco_cpi.rs for the manual implementation
 
 # MagicBlock VRF SDK for verifiable randomness (provably fair shuffling)
+# NOTE: 0.2.1 (and everything <= 0.4.0) was yanked from crates.io in June 2026.
+# The only live release, 0.4.1, requires anchor-lang 1.0.3 + solana-program 3.0.0,
+# which is INCOMPATIBLE with this program's anchor-lang 0.32.1 / solana-program 2.2.x
+# (causes duplicate-Pubkey type errors). Moving to a non-yanked VRF crate therefore
+# requires a full Anchor 0.32 -> 1.0 / Solana 2.2 -> 3.0 migration. Tracked separately.
+# Yanked crates remain resolvable from Cargo.lock, so 0.2.1 still builds for now.
 ephemeral-vrf-sdk = { version = "0.2.1", features = ["anchor"] }
 constant_time_eq = "=0.3.1"
 
@@ -36,6 +42,7 @@ constant_time_eq = "=0.3.1"
 sha2 = "0.10"
 
 # MagicBlock Session Keys for popup-free gameplay transactions
+# NOTE: 3.1.1 exists but is held back pending the same Anchor 1.0 migration above.
 session-keys = { version = "3.0.10", features = ["no-entrypoint"] }
 
 # Note: LiteSVM requires solana-sdk version matching anchor-lang's requirements

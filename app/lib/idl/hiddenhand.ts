@@ -15,7 +15,7 @@ export type Hiddenhand = {
   "docs": [
     "HiddenHand - Privacy Poker on Solana",
     "Using MagicBlock VRF for provably fair shuffling and",
-    "Inco FHE for cryptographic card privacy"
+    "Inco TEE for cryptographic card privacy"
   ],
   "instructions": [
     {
@@ -443,7 +443,7 @@ export type Hiddenhand = {
       "docs": [
         "DEPRECATED: Plaintext dealing for local testing ONLY.",
         "Cards are stored unencrypted on-chain — DO NOT use in production.",
-        "For production, use request_shuffle + callback_shuffle (VRF + Inco FHE)."
+        "For production, use request_shuffle + callback_shuffle (VRF + Inco TEE)."
       ],
       "discriminator": [
         38,
@@ -688,7 +688,7 @@ export type Hiddenhand = {
     {
       "name": "encryptHoleCards",
       "docs": [
-        "Phase 1: Encrypt hole cards using Inco FHE",
+        "Phase 1: Encrypt hole cards using Inco TEE",
         "Called via Magic Actions after ER commit",
         "Encrypts plaintext cards and stores handles in PlayerSeat",
         "Call once per player with their seat_index",

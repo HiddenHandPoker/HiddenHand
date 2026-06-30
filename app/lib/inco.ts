@@ -1,5 +1,5 @@
 /**
- * Inco Lightning FHE Client-Side Decryption
+ * Inco Lightning (TEE) Client-Side Decryption
  *
  * This module provides utilities for decrypting Inco-encrypted hole cards
  * on the client side. Players can only decrypt cards they've been granted
