@@ -67,7 +67,7 @@ pub struct GrantCommunityAllowances<'info> {
 }
 
 /// Grant community card allowances to a player
-pub fn handler<'info>(ctx: Context<'_, '_, 'info, 'info, GrantCommunityAllowances<'info>>, _seat_index: u8) -> Result<()> {
+pub fn handler<'info>(ctx: Context<'info, GrantCommunityAllowances<'info>>, _seat_index: u8) -> Result<()> {
     let table = &ctx.accounts.table;
     let hand_state = &ctx.accounts.hand_state;
     let deck_state = &ctx.accounts.deck_state;

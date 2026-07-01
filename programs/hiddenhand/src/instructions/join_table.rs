@@ -90,7 +90,7 @@ pub fn handler(ctx: Context<JoinTable>, seat_index: u8, buy_in: u64) -> Result<(
     // Transfer buy-in tokens to vault
     token_interface::transfer_checked(
         CpiContext::new(
-            ctx.accounts.token_program.to_account_info(),
+            ctx.accounts.token_program.key(),
             TransferChecked {
                 from: ctx.accounts.player_token_account.to_account_info(),
                 mint: ctx.accounts.mint.to_account_info(),

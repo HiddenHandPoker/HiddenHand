@@ -80,7 +80,7 @@ pub struct CloseInactiveTable<'info> {
 /// remaining_accounts should contain player seats and their corresponding token accounts
 /// Format: [seat0, player_token_account0, seat1, player_token_account1, ...]
 pub fn handler<'info>(
-    ctx: Context<'_, '_, 'info, 'info, CloseInactiveTable<'info>>,
+    ctx: Context<'info, CloseInactiveTable<'info>>,
 ) -> Result<()> {
     let table = &ctx.accounts.table;
     let clock = Clock::get()?;
@@ -174,7 +174,7 @@ pub fn handler<'info>(
 
             token_interface::transfer_checked(
                 CpiContext::new_with_signer(
-                    ctx.accounts.token_program.to_account_info(),
+                    ctx.accounts.token_program.key(),
                     TransferChecked {
                         from: ctx.accounts.vault.to_account_info(),
                         mint: ctx.accounts.mint.to_account_info(),

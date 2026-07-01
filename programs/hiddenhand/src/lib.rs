@@ -153,7 +153,7 @@ pub mod hiddenhand {
     /// Table must be in Waiting status (not mid-hand)
     /// All seated players receive their chips back
     pub fn close_inactive_table<'info>(
-        ctx: Context<'_, '_, 'info, 'info, CloseInactiveTable<'info>>,
+        ctx: Context<'info, CloseInactiveTable<'info>>,
     ) -> Result<()> {
         instructions::close_inactive_table::handler(ctx)
     }
@@ -165,7 +165,7 @@ pub mod hiddenhand {
     /// Called by authority after VRF shuffle for each active player.
     /// remaining_accounts: 5 allowance PDAs for community cards [card0-card4]
     pub fn grant_community_allowances<'info>(
-        ctx: Context<'_, '_, 'info, 'info, GrantCommunityAllowances<'info>>,
+        ctx: Context<'info, GrantCommunityAllowances<'info>>,
         seat_index: u8,
     ) -> Result<()> {
         instructions::grant_community_allowances::handler(ctx, seat_index)

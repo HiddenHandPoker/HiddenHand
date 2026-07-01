@@ -1,6 +1,7 @@
 use anchor_lang::prelude::*;
 
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, PartialEq, Eq, Debug, InitSpace)]
+#[borsh(use_discriminant = true)]
 #[repr(u8)]
 pub enum GamePhase {
     /// Cards being dealt

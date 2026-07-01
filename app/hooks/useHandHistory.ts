@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useConnection } from "@solana/wallet-adapter-react";
 import { PublicKey } from "@solana/web3.js";
-import { Program, BN, Idl } from "@coral-xyz/anchor";
+import { Program, BN, Idl } from "@anchor-lang/core";
 
 // Hand rank names matching the Rust enum order
 const HAND_RANKS = [

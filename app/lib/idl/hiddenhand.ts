@@ -439,253 +439,6 @@ export type Hiddenhand = {
       ]
     },
     {
-      "name": "dealCards",
-      "docs": [
-        "DEPRECATED: Plaintext dealing for local testing ONLY.",
-        "Cards are stored unencrypted on-chain — DO NOT use in production.",
-        "For production, use request_shuffle + callback_shuffle (VRF + Inco TEE)."
-      ],
-      "discriminator": [
-        38,
-        218,
-        247,
-        103,
-        218,
-        237,
-        24,
-        65
-      ],
-      "accounts": [
-        {
-          "name": "caller",
-          "docs": [
-            "Anyone can call, but non-authority must wait for timeout"
-          ],
-          "writable": true,
-          "signer": true
-        },
-        {
-          "name": "table",
-          "writable": true,
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  116,
-                  97,
-                  98,
-                  108,
-                  101
-                ]
-              },
-              {
-                "kind": "account",
-                "path": "table.table_id",
-                "account": "table"
-              }
-            ]
-          }
-        },
-        {
-          "name": "handState",
-          "writable": true,
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  104,
-                  97,
-                  110,
-                  100
-                ]
-              },
-              {
-                "kind": "account",
-                "path": "table"
-              },
-              {
-                "kind": "account",
-                "path": "table.hand_number",
-                "account": "table"
-              }
-            ]
-          }
-        },
-        {
-          "name": "deckState",
-          "writable": true,
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  100,
-                  101,
-                  99,
-                  107
-                ]
-              },
-              {
-                "kind": "account",
-                "path": "table"
-              },
-              {
-                "kind": "account",
-                "path": "table.hand_number",
-                "account": "table"
-              }
-            ]
-          }
-        },
-        {
-          "name": "sbSeat",
-          "docs": [
-            "Small blind player seat"
-          ],
-          "writable": true
-        },
-        {
-          "name": "bbSeat",
-          "docs": [
-            "Big blind player seat"
-          ],
-          "writable": true
-        }
-      ],
-      "args": []
-    },
-    {
-      "name": "dealCardsEncrypted",
-      "docs": [
-        "Deal cards with ATOMIC Inco encryption (RECOMMENDED for privacy)",
-        "Cards are encrypted immediately during dealing - NEVER stored as plaintext",
-        "After calling this, use grant_card_allowance for each player to enable decryption"
-      ],
-      "discriminator": [
-        224,
-        161,
-        115,
-        102,
-        206,
-        20,
-        208,
-        215
-      ],
-      "accounts": [
-        {
-          "name": "caller",
-          "docs": [
-            "The caller (authority can call immediately, others must wait for timeout)"
-          ],
-          "writable": true,
-          "signer": true
-        },
-        {
-          "name": "table",
-          "writable": true,
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  116,
-                  97,
-                  98,
-                  108,
-                  101
-                ]
-              },
-              {
-                "kind": "account",
-                "path": "table.table_id",
-                "account": "table"
-              }
-            ]
-          }
-        },
-        {
-          "name": "handState",
-          "writable": true,
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  104,
-                  97,
-                  110,
-                  100
-                ]
-              },
-              {
-                "kind": "account",
-                "path": "table"
-              },
-              {
-                "kind": "account",
-                "path": "table.hand_number",
-                "account": "table"
-              }
-            ]
-          }
-        },
-        {
-          "name": "deckState",
-          "writable": true,
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  100,
-                  101,
-                  99,
-                  107
-                ]
-              },
-              {
-                "kind": "account",
-                "path": "table"
-              },
-              {
-                "kind": "account",
-                "path": "table.hand_number",
-                "account": "table"
-              }
-            ]
-          }
-        },
-        {
-          "name": "sbSeat",
-          "docs": [
-            "Small blind player seat"
-          ],
-          "writable": true
-        },
-        {
-          "name": "bbSeat",
-          "docs": [
-            "Big blind player seat"
-          ],
-          "writable": true
-        },
-        {
-          "name": "incoProgram",
-          "docs": [
-            "The Inco Lightning program for encryption"
-          ],
-          "address": "5sjEbPiqgZrYwR31ahR6Uk9wf5awoX61YGg7jExQSwaj"
-        },
-        {
-          "name": "systemProgram",
-          "address": "11111111111111111111111111111111"
-        }
-      ],
-      "args": []
-    },
-    {
       "name": "encryptHoleCards",
       "docs": [
         "Phase 1: Encrypt hole cards using Inco TEE",
@@ -1345,12 +1098,9 @@ export type Hiddenhand = {
       ],
       "accounts": [
         {
-          "name": "player",
+          "name": "signer",
           "writable": true,
-          "signer": true,
-          "relations": [
-            "playerSeat"
-          ]
+          "signer": true
         },
         {
           "name": "table",
@@ -1429,6 +1179,15 @@ export type Hiddenhand = {
         {
           "name": "playerSeat",
           "writable": true
+        },
+        {
+          "name": "sessionToken",
+          "docs": [
+            "Session token account — optional. When present, validates that",
+            "the signer is an authorized session key for this player's wallet.",
+            "When absent, the signer must be the player's wallet directly."
+          ],
+          "optional": true
         }
       ],
       "args": [
@@ -1610,9 +1369,9 @@ export type Hiddenhand = {
       ],
       "accounts": [
         {
-          "name": "player",
+          "name": "signer",
           "docs": [
-            "The player revealing their cards (must be the seat owner)"
+            "The signer — either the player's real wallet or their session key"
           ],
           "writable": true,
           "signer": true
@@ -1666,29 +1425,14 @@ export type Hiddenhand = {
         },
         {
           "name": "playerSeat",
-          "writable": true,
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  115,
-                  101,
-                  97,
-                  116
-                ]
-              },
-              {
-                "kind": "account",
-                "path": "table"
-              },
-              {
-                "kind": "account",
-                "path": "player_seat.seat_index",
-                "account": "playerSeat"
-              }
-            ]
-          }
+          "writable": true
+        },
+        {
+          "name": "sessionToken",
+          "docs": [
+            "Session token account — optional. Validates session key authorization."
+          ],
+          "optional": true
         },
         {
           "name": "instructionsSysvar",
@@ -1740,7 +1484,8 @@ export type Hiddenhand = {
           "name": "caller",
           "docs": [
             "Caller revealing the community cards",
-            "Authority can call immediately, others must wait for timeout"
+            "Authority can call immediately (with or without session key),",
+            "others must wait for timeout"
           ],
           "writable": true,
           "signer": true
@@ -1818,6 +1563,13 @@ export type Hiddenhand = {
               }
             ]
           }
+        },
+        {
+          "name": "sessionToken",
+          "docs": [
+            "Session token account — optional. Validates session key for authority."
+          ],
+          "optional": true
         },
         {
           "name": "instructionsSysvar",
@@ -2228,6 +1980,32 @@ export type Hiddenhand = {
   ],
   "events": [
     {
+      "name": "actionTaken",
+      "discriminator": [
+        128,
+        186,
+        77,
+        12,
+        99,
+        195,
+        48,
+        60
+      ]
+    },
+    {
+      "name": "communityCardsRevealed",
+      "discriminator": [
+        194,
+        255,
+        78,
+        4,
+        116,
+        95,
+        22,
+        180
+      ]
+    },
+    {
       "name": "handCompleted",
       "discriminator": [
         84,
@@ -2238,6 +2016,32 @@ export type Hiddenhand = {
         74,
         200,
         229
+      ]
+    },
+    {
+      "name": "handStarted",
+      "discriminator": [
+        92,
+        115,
+        135,
+        103,
+        133,
+        169,
+        143,
+        43
+      ]
+    },
+    {
+      "name": "showdownReveal",
+      "discriminator": [
+        87,
+        131,
+        37,
+        141,
+        199,
+        192,
+        92,
+        178
       ]
     }
   ],
@@ -2524,6 +2328,143 @@ export type Hiddenhand = {
       }
     },
     {
+      "name": "actionTaken",
+      "docs": [
+        "Emitted when a player acts or is timed out"
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "tableId",
+            "docs": [
+              "Table identifier"
+            ],
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "handNumber",
+            "docs": [
+              "Sequential hand number"
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "seatIndex",
+            "docs": [
+              "Seat index of the player who acted"
+            ],
+            "type": "u8"
+          },
+          {
+            "name": "actionType",
+            "docs": [
+              "0=Fold, 1=Check, 2=Call, 3=Raise, 4=AllIn, 5=TimeoutFold, 6=TimeoutCheck"
+            ],
+            "type": "u8"
+          },
+          {
+            "name": "amount",
+            "docs": [
+              "Amount bet in this action (0 for fold/check)"
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "potAfter",
+            "docs": [
+              "Total pot after this action"
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "phase",
+            "docs": [
+              "Game phase (0=Dealing, 1=PreFlop, 2=Flop, 3=Turn, 4=River, 5=Showdown, 6=Settled)"
+            ],
+            "type": "u8"
+          },
+          {
+            "name": "timestamp",
+            "docs": [
+              "Unix timestamp"
+            ],
+            "type": "i64"
+          },
+          {
+            "name": "nextActionOn",
+            "docs": [
+              "Next player to act (255 if round/hand ended)"
+            ],
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "communityCardsRevealed",
+      "docs": [
+        "Emitted when community cards are revealed (flop/turn/river)"
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "tableId",
+            "docs": [
+              "Table identifier"
+            ],
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "handNumber",
+            "docs": [
+              "Sequential hand number"
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "newPhase",
+            "docs": [
+              "The phase entering (Flop=2, Turn=3, River=4, Showdown=5 for all-in runout)"
+            ],
+            "type": "u8"
+          },
+          {
+            "name": "cards",
+            "docs": [
+              "Card values revealed in this step (3 for flop, 1 for turn, 1 for river)"
+            ],
+            "type": "bytes"
+          },
+          {
+            "name": "timestamp",
+            "docs": [
+              "Unix timestamp"
+            ],
+            "type": "i64"
+          },
+          {
+            "name": "actionOn",
+            "docs": [
+              "Next player to act in new betting round (255 if showdown)"
+            ],
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
       "name": "deckState",
       "docs": [
         "Encrypted deck state for a hand",
@@ -2597,6 +2538,9 @@ export type Hiddenhand = {
     },
     {
       "name": "gamePhase",
+      "repr": {
+        "kind": "rust"
+      },
       "type": {
         "kind": "enum",
         "variants": [
@@ -2706,6 +2650,92 @@ export type Hiddenhand = {
             "name": "resultsCount",
             "docs": [
               "How many results are valid (rest are zeroed)"
+            ],
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "handStarted",
+      "docs": [
+        "Emitted when a new hand starts (VRF shuffle complete, blinds posted, phase set to PreFlop)"
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "tableId",
+            "docs": [
+              "Table identifier"
+            ],
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "handNumber",
+            "docs": [
+              "Sequential hand number"
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "timestamp",
+            "docs": [
+              "Unix timestamp"
+            ],
+            "type": "i64"
+          },
+          {
+            "name": "dealerPosition",
+            "docs": [
+              "Dealer button seat index"
+            ],
+            "type": "u8"
+          },
+          {
+            "name": "smallBlindSeat",
+            "docs": [
+              "Small blind seat index"
+            ],
+            "type": "u8"
+          },
+          {
+            "name": "bigBlindSeat",
+            "docs": [
+              "Big blind seat index"
+            ],
+            "type": "u8"
+          },
+          {
+            "name": "smallBlindAmount",
+            "docs": [
+              "Small blind amount posted"
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "bigBlindAmount",
+            "docs": [
+              "Big blind amount posted"
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "activePlayers",
+            "docs": [
+              "Bitmap of players dealt into this hand"
+            ],
+            "type": "u8"
+          },
+          {
+            "name": "playerCount",
+            "docs": [
+              "Number of active players"
             ],
             "type": "u8"
           }
@@ -3049,6 +3079,88 @@ export type Hiddenhand = {
           },
           {
             "name": "allIn"
+          }
+        ]
+      }
+    },
+    {
+      "name": "sessionToken",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "authority",
+            "type": "pubkey"
+          },
+          {
+            "name": "targetProgram",
+            "type": "pubkey"
+          },
+          {
+            "name": "sessionSigner",
+            "type": "pubkey"
+          },
+          {
+            "name": "validUntil",
+            "type": "i64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "showdownReveal",
+      "docs": [
+        "Emitted when a player reveals their hole cards at showdown"
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "tableId",
+            "docs": [
+              "Table identifier"
+            ],
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "handNumber",
+            "docs": [
+              "Sequential hand number"
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "seatIndex",
+            "docs": [
+              "Seat index of the revealing player"
+            ],
+            "type": "u8"
+          },
+          {
+            "name": "card1",
+            "docs": [
+              "First hole card (0-51)"
+            ],
+            "type": "u8"
+          },
+          {
+            "name": "card2",
+            "docs": [
+              "Second hole card (0-51)"
+            ],
+            "type": "u8"
+          },
+          {
+            "name": "timestamp",
+            "docs": [
+              "Unix timestamp"
+            ],
+            "type": "i64"
           }
         ]
       }

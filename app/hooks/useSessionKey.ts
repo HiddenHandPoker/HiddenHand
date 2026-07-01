@@ -9,7 +9,7 @@ import {
   TransactionInstruction,
   Connection,
 } from "@solana/web3.js";
-import { BN, AnchorProvider } from "@coral-xyz/anchor";
+import { BN, AnchorProvider } from "@anchor-lang/core";
 import { PROGRAM_ID } from "@/lib/program";
 
 // ─── Constants ───────────────────────────────────────────────────────

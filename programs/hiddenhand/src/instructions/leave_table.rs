@@ -82,7 +82,7 @@ pub fn handler(ctx: Context<LeaveTable>) -> Result<()> {
 
         token_interface::transfer_checked(
             CpiContext::new_with_signer(
-                ctx.accounts.token_program.to_account_info(),
+                ctx.accounts.token_program.key(),
                 TransferChecked {
                     from: ctx.accounts.vault.to_account_info(),
                     mint: ctx.accounts.mint.to_account_info(),

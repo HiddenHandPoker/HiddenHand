@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useEffect, useRef } from "react";
 import { PublicKey, SystemProgram } from "@solana/web3.js";
-import { BN } from "@coral-xyz/anchor";
+import { BN } from "@anchor-lang/core";
 import { usePokerProgram } from "./usePokerProgram";
 import {
   PROGRAM_ID,

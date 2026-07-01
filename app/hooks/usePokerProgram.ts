@@ -2,7 +2,7 @@
 
 import { useMemo } from "react";
 import { useConnection, useAnchorWallet, useWallet } from "@solana/wallet-adapter-react";
-import { Program, AnchorProvider, Idl } from "@coral-xyz/anchor";
+import { Program, AnchorProvider, Idl } from "@anchor-lang/core";
 import { PublicKey } from "@solana/web3.js";
 import idl from "@/lib/idl/hiddenhand.json";
 

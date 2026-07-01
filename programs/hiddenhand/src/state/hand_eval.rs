@@ -2,6 +2,7 @@ use anchor_lang::prelude::*;
 
 /// Hand ranking from highest to lowest
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, PartialEq, Eq, Debug, PartialOrd, Ord)]
+#[borsh(use_discriminant = true)]
 #[repr(u8)]
 pub enum HandRank {
     HighCard = 0,

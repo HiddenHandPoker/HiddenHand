@@ -16,8 +16,8 @@
 //! 5. Phase advances and play continues
 
 use anchor_lang::prelude::*;
-use anchor_lang::solana_program::sysvar::instructions::{
-    self, load_current_index_checked, load_instruction_at_checked,
+use solana_instructions_sysvar::{
+    self as instructions, load_current_index_checked, load_instruction_at_checked,
 };
 use sha2::{Digest, Sha256};
 

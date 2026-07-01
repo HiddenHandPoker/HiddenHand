@@ -15,7 +15,7 @@ import { CreateTableModal } from "@/components/lobby/CreateTableModal";
 import { QuickPlayModal } from "@/components/lobby/QuickPlayModal";
 import { generateTableId, getTablePDA, getVaultPDA } from "@/lib/program";
 import { SystemProgram } from "@solana/web3.js";
-import { BN } from "@coral-xyz/anchor";
+import { BN } from "@anchor-lang/core";
 import { getDefaultToken, baseUnitsToDisplay, TOKEN_PROGRAM_ID } from "@/lib/tokens";
 import { getRakeForBlinds } from "@/lib/rake";
 import { usePlayerStats } from "@/hooks/usePlayerStats";
