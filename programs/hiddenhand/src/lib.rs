@@ -1,24 +1,25 @@
 pub mod constants;
 pub mod error;
 pub mod events;
-pub mod inco_cpi;
 pub mod instructions;
 pub mod state;
 
 use anchor_lang::prelude::*;
+use arcium_anchor::prelude::*;
 
 pub use constants::*;
 pub use events::*;
-pub use inco_cpi::*;
 pub use instructions::*;
 pub use state::*;
 
-declare_id!("5fcckjDn8wzRSodJbQVpHeuWZ8x4B3htKv1WEMx36XJe");
+declare_id!("9chPz3vJDeU7gr4zBtDreJUpVLKbqwrKoQBQQjT1SF5X");
 
 /// HiddenHand - Privacy Poker on Solana
-/// Using MagicBlock VRF for provably fair shuffling and
-/// Inco TEE for cryptographic card privacy
-#[program]
+/// Card shuffle, deal, and reveal run as Arcium MPC circuits (Phase 3b):
+/// the deck is shuffled in-MPC, stored on-chain as opaque ciphertext, and
+/// re-fed into every later circuit. All betting/pot/showdown-eval logic stays
+/// on the public Solana path.
+#[arcium_program]
 pub mod hiddenhand {
     use super::*;
 
@@ -66,30 +67,6 @@ pub mod hiddenhand {
     }
 
     // ============================================================
-    // MagicBlock VRF Instructions (Provably Fair Shuffling)
-    // Modified Option B: Atomic shuffle + encrypt in callback
-    // VRF seed is NEVER stored - only used in memory!
-    // ============================================================
-
-    /// Request VRF randomness for card shuffling
-    /// This initiates the shuffle - VRF oracle will callback with randomness
-    ///
-    /// IMPORTANT: Pass all player seat accounts as remaining_accounts!
-    /// The callback will shuffle + encrypt cards atomically.
-    pub fn request_shuffle(ctx: Context<RequestShuffle>) -> Result<()> {
-        instructions::request_shuffle::handler(ctx)
-    }
-
-    /// VRF callback - ATOMIC shuffle + encrypt
-    /// Called by VRF oracle, not directly by users
-    ///
-    /// SECURITY: The VRF seed is NEVER stored in account state!
-    /// Shuffle and encryption happen atomically in this single transaction.
-    pub fn callback_shuffle(ctx: Context<CallbackShuffle>, randomness: [u8; 32]) -> Result<()> {
-        instructions::callback_shuffle::handler(ctx, randomness)
-    }
-
-    // ============================================================
     // Timeout Handling (Prevents Stuck Games)
     // ============================================================
 
@@ -100,97 +77,131 @@ pub mod hiddenhand {
         instructions::timeout_player::handler(ctx)
     }
 
-    // ============================================================
-    // Inco Encryption Instructions (Phase 2 - Cryptographic Privacy)
-    // ============================================================
-
-    /// Phase 1: Encrypt hole cards using Inco TEE
-    /// Called via Magic Actions after ER commit
-    /// Encrypts plaintext cards and stores handles in PlayerSeat
-    /// Call once per player with their seat_index
-    /// IMPORTANT: After this, call grant_card_allowance to enable decryption
-    pub fn encrypt_hole_cards(ctx: Context<EncryptHoleCards>, seat_index: u8) -> Result<()> {
-        instructions::encrypt_hole_cards::handler(ctx, seat_index)
-    }
-
-    /// Phase 2: Grant decryption allowance for encrypted cards
-    /// Must be called AFTER encrypt_hole_cards
-    /// Client should derive allowance PDAs from stored handles:
-    ///   PDA = ["allowance", handle.to_le_bytes(), player_pubkey]
-    pub fn grant_card_allowance(ctx: Context<GrantCardAllowance>, seat_index: u8) -> Result<()> {
-        instructions::encrypt_hole_cards::grant_allowance_handler(ctx, seat_index)
-    }
-
-    /// Reveal cards at showdown with Ed25519 signature verification
-    ///
-    /// Players call this at Showdown phase to reveal their decrypted cards.
-    /// The transaction must include Ed25519 verification instructions from
-    /// Inco's attested decryption to prove the revealed values are correct.
-    pub fn reveal_cards(ctx: Context<RevealCards>, card1: u8, card2: u8) -> Result<()> {
-        instructions::reveal_cards::handler(ctx, card1, card2)
-    }
-
-    // ============================================================
-    // Game Liveness Instructions (Prevent Stuck Games)
-    // ============================================================
-
-    /// Allow player to grant their OWN decryption allowance after timeout
-    /// If authority doesn't grant allowances within 60 seconds, players can self-grant
-    /// This prevents the game from getting stuck if authority is AFK
-    pub fn grant_own_allowance(ctx: Context<GrantOwnAllowance>, seat_index: u8) -> Result<()> {
-        instructions::grant_own_allowance::handler(ctx, seat_index)
-    }
-
-    /// Timeout a player who hasn't revealed cards at showdown
-    /// After 3 minutes without revealing, any player can call this to "muck" the non-revealer
-    /// Mucked players forfeit their claim to the pot (standard poker rules)
-    pub fn timeout_reveal(ctx: Context<TimeoutReveal>, target_seat: u8) -> Result<()> {
-        instructions::timeout_reveal::handler(ctx, target_seat)
-    }
-
     /// Close an inactive table and return all funds to players
     /// Can be called by anyone after 1 hour of inactivity
-    /// Table must be in Waiting status (not mid-hand)
-    /// All seated players receive their chips back
     pub fn close_inactive_table<'info>(
         ctx: Context<'info, CloseInactiveTable<'info>>,
     ) -> Result<()> {
         instructions::close_inactive_table::handler(ctx)
     }
 
-    /// Grant community card allowances to a player
-    /// This enables the player to decrypt community cards via Inco, which is needed
-    /// if they want to reveal community cards when authority is AFK
-    ///
-    /// Called by authority after VRF shuffle for each active player.
-    /// remaining_accounts: 5 allowance PDAs for community cards [card0-card4]
-    pub fn grant_community_allowances<'info>(
-        ctx: Context<'info, GrantCommunityAllowances<'info>>,
-        seat_index: u8,
-    ) -> Result<()> {
-        instructions::grant_community_allowances::handler(ctx, seat_index)
-    }
-
-    /// Reveal community cards (flop/turn/river) with Ed25519 signature verification
-    ///
-    /// Authority calls this when betting round completes and community cards need to be revealed.
-    /// Community cards are encrypted during VRF shuffle for privacy - this reveals them.
-    ///
-    /// The transaction must include Ed25519 verification instructions for each card from
-    /// Inco's attested decryption to prove the revealed values are correct.
-    ///
-    /// Card count depends on phase:
-    /// - PreFlop -> Flop: 3 cards (or 5 if all-in runout)
-    /// - Flop -> Turn: 1 card (or 2 if all-in runout)
-    /// - Turn -> River: 1 card
-    pub fn reveal_community(ctx: Context<RevealCommunity>, cards: Vec<u8>) -> Result<()> {
-        instructions::reveal_community::handler(ctx, cards)
-    }
-
     /// Collect accumulated rake from the table vault
     /// Only the table authority can call this, and only when not mid-hand
     pub fn collect_rake(ctx: Context<CollectRake>) -> Result<()> {
         instructions::collect_rake::handler(ctx)
+    }
+
+    // ============================================================
+    // Arcium MPC — computation-definition initializers
+    // (called once per circuit at deploy time)
+    // ============================================================
+    pub fn init_shuffle_comp_def(ctx: Context<InitShuffleCompDef>) -> Result<()> {
+        instructions::shuffle::init_shuffle_comp_def(ctx)
+    }
+    pub fn init_deal_to_seat_comp_def(ctx: Context<InitDealToSeatCompDef>) -> Result<()> {
+        instructions::deal_to_seat::init_deal_to_seat_comp_def(ctx)
+    }
+    pub fn init_reveal_flop_comp_def(ctx: Context<InitRevealFlopCompDef>) -> Result<()> {
+        instructions::reveal_flop::init_reveal_flop_comp_def(ctx)
+    }
+    pub fn init_reveal_turn_comp_def(ctx: Context<InitRevealTurnCompDef>) -> Result<()> {
+        instructions::reveal_turn::init_reveal_turn_comp_def(ctx)
+    }
+    pub fn init_reveal_river_comp_def(ctx: Context<InitRevealRiverCompDef>) -> Result<()> {
+        instructions::reveal_river::init_reveal_river_comp_def(ctx)
+    }
+    pub fn init_showdown_reveal_comp_def(ctx: Context<InitShowdownRevealCompDef>) -> Result<()> {
+        instructions::showdown_reveal::init_showdown_reveal_comp_def(ctx)
+    }
+
+    // ============================================================
+    // Arcium MPC — shuffle (shuffle deck in-MPC, persist to MXE)
+    // ============================================================
+    pub fn shuffle(ctx: Context<Shuffle>, computation_offset: u64) -> Result<()> {
+        instructions::shuffle::handler(ctx, computation_offset)
+    }
+
+    #[arcium_callback(encrypted_ix = "shuffle")]
+    pub fn shuffle_callback(
+        ctx: Context<ShuffleCallback>,
+        output: SignedComputationOutputs<ShuffleOutput>,
+    ) -> Result<()> {
+        instructions::shuffle::callback(ctx, output)
+    }
+
+    // ============================================================
+    // Arcium MPC — deal_to_seat (one seat's sealed hole cards)
+    // ============================================================
+    pub fn deal_to_seat(
+        ctx: Context<DealToSeat>,
+        computation_offset: u64,
+        seat_index: u8,
+        seat_pubkey: [u8; 32],
+        seat_nonce: u128,
+    ) -> Result<()> {
+        instructions::deal_to_seat::handler(ctx, computation_offset, seat_index, seat_pubkey, seat_nonce)
+    }
+
+    #[arcium_callback(encrypted_ix = "deal_to_seat")]
+    pub fn deal_to_seat_callback(
+        ctx: Context<DealToSeatCallback>,
+        output: SignedComputationOutputs<DealToSeatOutput>,
+    ) -> Result<()> {
+        instructions::deal_to_seat::callback(ctx, output)
+    }
+
+    // ============================================================
+    // Arcium MPC — reveal_flop / reveal_turn / reveal_river
+    // ============================================================
+    pub fn reveal_flop(ctx: Context<RevealFlop>, computation_offset: u64) -> Result<()> {
+        instructions::reveal_flop::handler(ctx, computation_offset)
+    }
+
+    #[arcium_callback(encrypted_ix = "reveal_flop")]
+    pub fn reveal_flop_callback(
+        ctx: Context<RevealFlopCallback>,
+        output: SignedComputationOutputs<RevealFlopOutput>,
+    ) -> Result<()> {
+        instructions::reveal_flop::callback(ctx, output)
+    }
+
+    pub fn reveal_turn(ctx: Context<RevealTurn>, computation_offset: u64) -> Result<()> {
+        instructions::reveal_turn::handler(ctx, computation_offset)
+    }
+
+    #[arcium_callback(encrypted_ix = "reveal_turn")]
+    pub fn reveal_turn_callback(
+        ctx: Context<RevealTurnCallback>,
+        output: SignedComputationOutputs<RevealTurnOutput>,
+    ) -> Result<()> {
+        instructions::reveal_turn::callback(ctx, output)
+    }
+
+    pub fn reveal_river(ctx: Context<RevealRiver>, computation_offset: u64) -> Result<()> {
+        instructions::reveal_river::handler(ctx, computation_offset)
+    }
+
+    #[arcium_callback(encrypted_ix = "reveal_river")]
+    pub fn reveal_river_callback(
+        ctx: Context<RevealRiverCallback>,
+        output: SignedComputationOutputs<RevealRiverOutput>,
+    ) -> Result<()> {
+        instructions::reveal_river::callback(ctx, output)
+    }
+
+    // ============================================================
+    // Arcium MPC — showdown_reveal (reveal non-folded hole cards)
+    // ============================================================
+    pub fn showdown_reveal(ctx: Context<ShowdownRevealAccounts>, computation_offset: u64) -> Result<()> {
+        instructions::showdown_reveal::handler(ctx, computation_offset)
+    }
+
+    #[arcium_callback(encrypted_ix = "showdown_reveal")]
+    pub fn showdown_reveal_callback(
+        ctx: Context<ShowdownRevealCallback>,
+        output: SignedComputationOutputs<ShowdownRevealOutput>,
+    ) -> Result<()> {
+        instructions::showdown_reveal::callback(ctx, output)
     }
 }
 
@@ -244,10 +255,10 @@ mod unit_tests {
 
         // Verify our size calculation is correct
         // 8 (discriminator) + 32 (table) + 32 (player) + 1 (seat_index) +
-        // 8 (chips) + 8 (current_bet) + 8 (total_bet) + 16 (hole_card_1) +
-        // 16 (hole_card_2) + 1 (revealed_card_1) + 1 (revealed_card_2) +
+        // 8 (chips) + 8 (current_bet) + 8 (total_bet) +
+        // 1 (revealed_card_1) + 1 (revealed_card_2) +
         // 1 (cards_revealed) + 1 (status) + 1 (has_acted) + 1 (bump)
-        let expected_size = 8 + 32 + 32 + 1 + 8 + 8 + 8 + 16 + 16 + 1 + 1 + 1 + 1 + 1 + 1;
+        let expected_size = 8 + 32 + 32 + 1 + 8 + 8 + 8 + 1 + 1 + 1 + 1 + 1 + 1;
         assert_eq!(PlayerSeat::SIZE, expected_size, "PlayerSeat size mismatch");
     }
 

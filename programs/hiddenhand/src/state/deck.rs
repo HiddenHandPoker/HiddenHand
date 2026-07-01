@@ -1,67 +1,46 @@
 use anchor_lang::prelude::*;
 
-use crate::constants::DECK_SIZE;
-
-/// Encrypted deck state for a hand
-/// Cards are stored as Inco encrypted handles
+/// Deck state for a hand — Arcium MPC edition.
 ///
-/// SECURITY NOTE: The VRF seed is NEVER stored here!
-/// It only exists in memory during the atomic shuffle+encrypt in callback_shuffle.
-/// This eliminates the account state leak vector.
+/// The whole 52-card deck is shuffled once in-MPC (`shuffle` circuit) and stored
+/// here as an opaque `Enc<Mxe, Pack<[u8;52]>>` ciphertext (`deck` + `deck_nonce`).
+/// No party — not even a chain observer — can read it. It is re-fed unchanged into
+/// every later circuit (`deal_to_seat`, `reveal_flop/turn/river`, `showdown_reveal`)
+/// via `.account(deck_state.key(), 8, 64)` + `deck_nonce`.
+///
+/// `deck` is the FIRST field so it sits at byte offset 8 (right after the 8-byte
+/// discriminator), which the `.account()` re-feed requires.
 #[account]
 pub struct DeckState {
-    /// Reference to hand
+    /// Enc<Mxe, Pack<[u8;52]>> — the whole shuffled deck as opaque ciphertext.
+    /// 52 bytes pack into 2 field elements (`[[u8;32];2]`, 64 bytes on-chain).
+    /// MUST be the first field (byte offset 8) for the `.account()` re-feed.
+    pub deck: [[u8; 32]; 2],
+
+    /// Nonce the deck was sealed with (re-fed on every read; never changes here).
+    pub deck_nonce: u128,
+
+    /// Reference to the hand this deck belongs to.
     pub hand: Pubkey,
 
-    /// Shuffled encrypted cards (Inco handles)
-    /// Each u128 is a handle to an encrypted card value (0-51)
-    /// First 5 cards (indices 0-4) are community cards (plaintext until revealed)
-    /// Remaining cards are encrypted hole cards
-    pub cards: [u128; DECK_SIZE],
+    /// Hand number (mirrors HandState.hand_number; used in DeckShuffled event).
+    pub hand_number: u64,
 
-    /// Next card index to deal
-    pub deal_index: u8,
-
-    /// Whether deck has been shuffled and cards encrypted
+    /// Whether the MPC shuffle has completed and `deck` is populated.
     pub is_shuffled: bool,
 
-    /// PDA bump
+    /// PDA bump.
     pub bump: u8,
-
-    /// Reserved space for future use (maintains account size compatibility)
-    /// Previously: vrf_seed [u8; 32] + seed_received bool = 33 bytes
-    pub _reserved: [u8; 33],
 }
 
 impl DeckState {
     pub const SIZE: usize = 8 + // discriminator
+        (32 * 2) + // deck (2 field elements)
+        16 + // deck_nonce (u128)
         32 + // hand
-        (16 * DECK_SIZE) + // cards array (52 * 16 bytes)
-        1 +  // deal_index
+        8 +  // hand_number
         1 +  // is_shuffled
-        1 +  // bump
-        33;  // _reserved (maintains size compatibility)
-
-    /// Deal next card, returns the encrypted handle
-    pub fn deal_card(&mut self) -> Option<u128> {
-        if (self.deal_index as usize) < DECK_SIZE {
-            let card = self.cards[self.deal_index as usize];
-            self.deal_index += 1;
-            Some(card)
-        } else {
-            None
-        }
-    }
-
-    /// Get number of cards dealt
-    pub fn cards_dealt(&self) -> u8 {
-        self.deal_index
-    }
-
-    /// Get number of cards remaining
-    pub fn cards_remaining(&self) -> u8 {
-        (DECK_SIZE as u8).saturating_sub(self.deal_index)
-    }
+        1;   // bump
 }
 
 /// Helper functions for card encoding

@@ -5,32 +5,25 @@ pub mod player_action;
 pub mod showdown;
 pub mod start_hand;
 
-// MagicBlock VRF instructions for provably fair shuffling
-pub mod request_shuffle;
-pub mod callback_shuffle;
-
 // Timeout handling
 pub mod timeout_player;
 
-// Inco encryption (Phase 2)
-pub mod encrypt_hole_cards;
-
-// Reveal cards for showdown (with Ed25519 verification)
-pub mod reveal_cards;
-
-// Reveal community cards (flop/turn/river with Ed25519 verification)
-pub mod reveal_community;
-
-// Game liveness - prevent stuck games
-pub mod grant_own_allowance;
-pub mod timeout_reveal;
+// Table management / liveness
 pub mod close_inactive_table;
-
-// Community card allowances - enable any player to reveal if authority AFK
-pub mod grant_community_allowances;
 
 // Rake collection
 pub mod collect_rake;
+
+// ============================================================
+// Arcium MPC card lifecycle (Phase 3b — replaces VRF + Inco)
+// ============================================================
+pub mod shuffle;
+pub mod deal_to_seat;
+pub mod reveal_common;
+pub mod reveal_flop;
+pub mod reveal_turn;
+pub mod reveal_river;
+pub mod showdown_reveal;
 
 // Re-export everything for convenience
 // The `handler` name conflicts are expected and handled by Anchor's program macro
@@ -47,24 +40,21 @@ pub use showdown::*;
 #[allow(ambiguous_glob_reexports)]
 pub use start_hand::*;
 #[allow(ambiguous_glob_reexports)]
-pub use request_shuffle::*;
-#[allow(ambiguous_glob_reexports)]
-pub use callback_shuffle::*;
-#[allow(ambiguous_glob_reexports)]
 pub use timeout_player::*;
-#[allow(ambiguous_glob_reexports)]
-pub use encrypt_hole_cards::*;
-#[allow(ambiguous_glob_reexports)]
-pub use reveal_cards::*;
-#[allow(ambiguous_glob_reexports)]
-pub use reveal_community::*;
-#[allow(ambiguous_glob_reexports)]
-pub use grant_own_allowance::*;
-#[allow(ambiguous_glob_reexports)]
-pub use timeout_reveal::*;
 #[allow(ambiguous_glob_reexports)]
 pub use close_inactive_table::*;
 #[allow(ambiguous_glob_reexports)]
-pub use grant_community_allowances::*;
-#[allow(ambiguous_glob_reexports)]
 pub use collect_rake::*;
+
+#[allow(ambiguous_glob_reexports)]
+pub use shuffle::*;
+#[allow(ambiguous_glob_reexports)]
+pub use deal_to_seat::*;
+#[allow(ambiguous_glob_reexports)]
+pub use reveal_flop::*;
+#[allow(ambiguous_glob_reexports)]
+pub use reveal_turn::*;
+#[allow(ambiguous_glob_reexports)]
+pub use reveal_river::*;
+#[allow(ambiguous_glob_reexports)]
+pub use showdown_reveal::*;

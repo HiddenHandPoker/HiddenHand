@@ -130,18 +130,19 @@ pub fn handler(ctx: Context<StartHand>) -> Result<()> {
     hand_state.last_action_time = clock.unix_timestamp;
     hand_state.hand_start_time = clock.unix_timestamp;
     hand_state.awaiting_community_reveal = false;
+    hand_state.dealt_players = 0;
     hand_state.bump = ctx.bumps.hand_state;
 
-    // Initialize deck state
-    // NOTE: With Modified Option B, VRF seed is NEVER stored!
-    // Shuffle + encrypt happens atomically in callback_shuffle
+    // Initialize deck state.
+    // The deck is shuffled in-MPC (shuffle circuit) and stored as opaque ciphertext;
+    // no randomness or plaintext deck ever touches on-chain state.
     let deck_state = &mut ctx.accounts.deck_state;
+    deck_state.deck = [[0u8; 32]; 2]; // populated by the shuffle callback
+    deck_state.deck_nonce = 0;
     deck_state.hand = hand_state.key();
-    deck_state.cards = [0u128; DECK_SIZE]; // Will be shuffled in callback
-    deck_state.deal_index = 0;
+    deck_state.hand_number = table.hand_number;
     deck_state.is_shuffled = false;
     deck_state.bump = ctx.bumps.deck_state;
-    deck_state._reserved = [0u8; 33]; // Reserved for future use
 
     msg!(
         "Hand #{} started. Dealer: seat {}, SB: seat {}, BB: seat {}, Action: seat {}",

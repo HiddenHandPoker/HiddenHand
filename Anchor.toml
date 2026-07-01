@@ -6,14 +6,11 @@ resolution = true
 skip-lint = false
 
 [programs.devnet]
-hiddenhand = "5fcckjDn8wzRSodJbQVpHeuWZ8x4B3htKv1WEMx36XJe"
+hiddenhand = "9chPz3vJDeU7gr4zBtDreJUpVLKbqwrKoQBQQjT1SF5X"
 inco_lightning = "5sjEbPiqgZrYwR31ahR6Uk9wf5awoX61YGg7jExQSwaj"
 
 [programs.localnet]
 hiddenhand = "5fcckjDn8wzRSodJbQVpHeuWZ8x4B3htKv1WEMx36XJe"
-
-[registry]
-url = "https://api.apr.dev"
 
 [provider]
 cluster = "devnet"
@@ -21,3 +18,5 @@ wallet = "~/.config/solana/id.json"
 
 [scripts]
 test = "npx ts-mocha -p ./tsconfig.json -t 1000000 \"tests/**/*.ts\""
+
+[hooks]

@@ -82,6 +82,11 @@ pub struct HandState {
     /// Set to true when betting round completes and phase needs to advance
     pub awaiting_community_reveal: bool,
 
+    /// Bitmap of players whose hole cards have been dealt this hand.
+    /// Set per seat by `deal_to_seat`; when it equals `active_players`,
+    /// dealing is complete and the phase advances to PreFlop.
+    pub dealt_players: u8,
+
     /// PDA bump
     pub bump: u8,
 }
@@ -105,6 +110,7 @@ impl HandState {
         8 +  // last_action_time (i64)
         8 +  // hand_start_time (i64)
         1 +  // awaiting_community_reveal
+        1 +  // dealt_players
         1;   // bump
 
     /// Check if player is still active in hand

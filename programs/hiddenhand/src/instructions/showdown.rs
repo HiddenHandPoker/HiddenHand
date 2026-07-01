@@ -448,8 +448,6 @@ pub fn handler(ctx: Context<Showdown>) -> Result<()> {
                 seat.status = PlayerStatus::Sitting;
                 seat.current_bet = 0;
                 seat.total_bet_this_hand = 0;
-                seat.hole_card_1 = 255;
-                seat.hole_card_2 = 255;
                 seat.revealed_card_1 = 255;
                 seat.revealed_card_2 = 255;
                 seat.cards_revealed = false;

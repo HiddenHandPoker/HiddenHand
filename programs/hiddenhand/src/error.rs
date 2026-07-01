@@ -151,4 +151,16 @@ pub enum HiddenHandError {
 
     #[msg("Token mint does not match table's configured token")]
     InvalidTokenMint,
+
+    #[msg("The MPC computation was aborted")]
+    AbortedComputation,
+
+    #[msg("Seat index does not match the player seat account")]
+    InvalidSeat,
+
+    #[msg("Player was not dealt into this hand")]
+    PlayerNotInHand,
+
+    #[msg("This seat has already been dealt its hole cards")]
+    AlreadyDealt,
 }

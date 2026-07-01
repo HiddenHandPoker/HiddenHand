@@ -14,7 +14,7 @@ cpi = ["no-entrypoint"]
 no-entrypoint = []
 no-idl = []
 no-log-ix-name = []
-idl-build = ["anchor-lang/idl-build", "anchor-spl/idl-build"]
+idl-build = ["anchor-lang/idl-build", "anchor-spl/idl-build", "arcium-anchor/idl-build"]
 anchor-debug = []
 custom-heap = []
 custom-panic = []
@@ -25,19 +25,13 @@ custom-panic = []
 anchor-lang = { version = "1.0.2", features = ["init-if-needed"] }
 anchor-spl = { version = "1.0.2", features = ["token", "associated_token"] }
 
-# Manual CPI to Inco Lightning (src/inco_cpi.rs) — no Anchor dep, but audited for
-# Solana v3 (unsafe sol_mem* ops, AccountInfo::new). Retired in Phase 3 (-> Arcium).
+# Arcium MPC — replaces the VRF (shuffle) + Inco (card privacy) layer (Phase 3b).
+# Card shuffle/deal/reveal now run as MPC circuits (see encrypted-ixs/).
+arcium-anchor = "=0.11.1"
+arcium-client = { version = "=0.11.1", default-features = false }
+arcium-macros = "=0.11.1"
 
-# MagicBlock VRF SDK — 0.4.1 is the live release on the Anchor 1.0 / Solana 3.0 line.
-ephemeral-vrf-sdk = { version = "0.4.1", features = ["anchor"] }
 constant_time_eq = "=0.3.1"
-
-# SHA256 hashing for Ed25519 message verification
-sha2 = "0.10"
-
-# Instructions sysvar helpers (load_instruction_at_checked, ID) — moved out of
-# solana-program into this crate in the Solana 3.x split.
-solana-instructions-sysvar = "3"
 
 # MagicBlock Session Keys — 3.1.1 accepts anchor-lang >=0.28,<2.0 (incl. 1.0).
 session-keys = { version = "3.1.1", features = ["no-entrypoint"] }

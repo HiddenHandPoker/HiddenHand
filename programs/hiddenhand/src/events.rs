@@ -129,6 +129,29 @@ pub struct CommunityCardsRevealed {
     pub action_on: u8,
 }
 
+/// Emitted when the MPC `shuffle` circuit finishes and the encrypted deck is
+/// persisted on-chain. Signals the frontend that seats can now be dealt.
+#[event]
+pub struct DeckShuffled {
+    /// Sequential hand number
+    pub hand_number: u64,
+}
+
+/// Emitted per seat by the `deal_to_seat` MPC callback. The sealed hole cards are
+/// addressed to a single client key; only the seat that owns `enc_pubkey` can
+/// decrypt `card0`/`card1` (via the Arcium client RescueCipher).
+#[event]
+pub struct HoleDealt {
+    /// The client x25519 public key the cards were sealed to.
+    pub enc_pubkey: [u8; 32],
+    /// Nonce used for the sealed ciphertext (little-endian u128).
+    pub nonce: [u8; 16],
+    /// Sealed first hole card (one field element).
+    pub card0: [u8; 32],
+    /// Sealed second hole card (one field element).
+    pub card1: [u8; 32],
+}
+
 /// Emitted when a player reveals their hole cards at showdown
 #[event]
 pub struct ShowdownReveal {
