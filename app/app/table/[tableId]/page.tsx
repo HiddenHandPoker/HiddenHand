@@ -93,10 +93,9 @@ export default function TablePage({ params }: { params: Promise<{ tableId: strin
     showdown,
     timeoutPlayer,
     setTableId,
-    // MagicBlock VRF
+    // Arcium MPC — shuffle the deck
     requestShuffle,
-    setUseVrf,
-    // Inco TEE Encryption
+    // Card lifecycle (deal own seat + decrypt, reveal at showdown)
     encryptHoleCards,
     grantCardAllowance,
     encryptAndGrantCards,
@@ -104,7 +103,6 @@ export default function TablePage({ params }: { params: Promise<{ tableId: strin
     grantAllPlayersAllowances,
     decryptMyCards,
     revealCards,
-    setUseIncoPrivacy,
     // Game Liveness (prevent stuck games)
     grantOwnAllowance,
     timeoutReveal,
@@ -1036,44 +1034,14 @@ export default function TablePage({ params }: { params: Promise<{ tableId: strin
                   </span>
                 </div>
 
-                {/* VRF Toggle */}
+                {/* Privacy backend — Arcium MPC is always on (shuffle, deal,
+                    and reveals run as MPC circuits; no toggle to disable). */}
                 <div className="flex items-center gap-2 glass-dark px-3 py-1.5 rounded-lg">
-                  <span className="text-[var(--text-muted)] text-xs uppercase tracking-wider">VRF</span>
-                  <button
-                    onClick={() => setUseVrf(!gameState.useVrf)}
-                    className={`relative w-10 h-5 rounded-full transition-colors ${
-                      gameState.useVrf ? "bg-purple-500" : "bg-gray-600"
-                    }`}
-                  >
-                    <span
-                      className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white transition-transform ${
-                        gameState.useVrf ? "translate-x-5" : ""
-                      }`}
-                    />
-                  </button>
-                  {gameState.useVrf && (
-                    <span className="text-purple-400 text-xs font-medium">Provably Fair</span>
-                  )}
-                </div>
-
-                {/* Inco TEE Privacy Toggle (Cryptographic) */}
-                <div className="flex items-center gap-2 glass-dark px-3 py-1.5 rounded-lg">
-                  <span className="text-[var(--text-muted)] text-xs uppercase tracking-wider">Inco</span>
-                  <button
-                    onClick={() => setUseIncoPrivacy(!gameState.useIncoPrivacy)}
-                    className={`relative w-10 h-5 rounded-full transition-colors ${
-                      gameState.useIncoPrivacy ? "bg-cyan-500" : "bg-gray-600"
-                    }`}
-                  >
-                    <span
-                      className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white transition-transform ${
-                        gameState.useIncoPrivacy ? "translate-x-5" : ""
-                      }`}
-                    />
-                  </button>
-                  {gameState.useIncoPrivacy && (
-                    <span className="text-cyan-400 text-xs font-medium">TEE Encrypted</span>
-                  )}
+                  <div className="w-2 h-2 rounded-full bg-cyan-400" />
+                  <span className="text-cyan-400 text-xs font-medium uppercase tracking-wider">
+                    Arcium MPC
+                  </span>
+                  <span className="text-[var(--text-muted)] text-xs">encrypted &amp; provably fair</span>
                 </div>
 
                 {/* Count players with chips */}

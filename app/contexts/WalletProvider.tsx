@@ -18,10 +18,16 @@ import "@solana/wallet-adapter-react-ui/styles.css";
 export type Network = "localnet" | "devnet";
 export const NETWORK: Network = "devnet";
 
-// Solana RPC endpoints
+// Solana RPC endpoints.
+//
+// IMPORTANT for the Arcium build: the public devnet RPC (clusterApiUrl) DROPS
+// Arcium MPC transactions, so the deployed site MUST point at a reliable RPC
+// (Helius/QuickNode/Triton). Set it via the NEXT_PUBLIC_SOLANA_RPC env var
+// (e.g. in the Netlify dashboard) so the key isn't committed to the repo.
+// Falls back to public devnet for local dev without a key configured.
 const ENDPOINTS: Record<Network, string> = {
   localnet: "http://127.0.0.1:8899",
-  devnet: clusterApiUrl("devnet"),
+  devnet: process.env.NEXT_PUBLIC_SOLANA_RPC || clusterApiUrl("devnet"),
 };
 
 interface Props {
