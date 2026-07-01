@@ -14,17 +14,24 @@ import {
   generateTableId,
 } from "@/lib/program";
 import {
-  DEFAULT_QUEUE,
-  waitForShuffle,
-} from "@/lib/magicblock";
-import {
   mapPlayerStatus,
   mapGamePhase,
   mapTableStatus,
   getOccupiedSeats,
   parseAnchorError,
 } from "@/lib/utils";
-import { decryptCardsWithAttestation, getAllowancePDA, INCO_PROGRAM_ID } from "@/lib/inco";
+import {
+  deriveEncryptionKeys,
+  fetchMXEPublicKey,
+  decryptHoleCards,
+  queueAccounts,
+  awaitFinalization,
+  fetchCallbackEvents,
+  newComputationOffset,
+  newNonce,
+  isRealCard,
+  type EncryptionKeys,
+} from "@/lib/arcium";
 import { TransactionInstruction, Transaction, Keypair } from "@solana/web3.js";
 import { getDefaultToken, getTokenByMint, TOKEN_PROGRAM_ID, type TokenInfo } from "@/lib/tokens";
 import { getAssociatedTokenAddressSync } from "@solana/spl-token";
@@ -86,8 +93,8 @@ export interface PlayerSeatAccount {
   chips: BN;
   currentBet: BN;
   totalBetThisHand: BN;
-  holeCard1: BN;
-  holeCard2: BN;
+  // Hole cards are NO LONGER stored on-chain (Arcium MPC): they live only
+  // client-side (decrypted from the HoleDealt event) until showdown.
   revealedCard1: number;  // Revealed plaintext card (0-51 or 255)
   revealedCard2: number;  // Revealed plaintext card (0-51 or 255)
   cardsRevealed: boolean; // Whether player has revealed cards for showdown
@@ -97,13 +104,14 @@ export interface PlayerSeatAccount {
 }
 
 export interface DeckStateAccount {
+  // Arcium MPC deck: the whole 52-card deck sealed to the MXE as opaque
+  // ciphertext (2 field elements). Re-fed into every later circuit.
+  deck: number[][];
+  deckNonce: BN;
   hand: PublicKey;
-  cards: BN[];
-  dealIndex: number;
+  handNumber: BN;
   isShuffled: boolean;
   bump: number;
-  // Note: vrfSeed and seedReceived removed in Modified Option B
-  // VRF seed is never stored - only used in memory during callback
 }
 
 // UI-friendly types
@@ -292,6 +300,11 @@ export function usePokerGame(sessionKey?: SessionKeyParam | null): UsePokerGameR
   const encryptionHandNumberRef = useRef<number | null>(null);
   // Ref to prevent duplicate community reveal attempts (race condition prevention)
   const communityRevealInProgressRef = useRef<boolean>(false);
+  // Arcium: cached MXE x25519 public key + this wallet's derived encryption keys.
+  const mxePublicKeyRef = useRef<Uint8Array | null>(null);
+  const encKeysRef = useRef<EncryptionKeys | null>(null);
+  // Guard so we fire the batched showdown reveal at most once.
+  const showdownRevealInProgressRef = useRef<boolean>(false);
 
   // Keep the ref in sync with gameState.encryptionHandNumber
   useEffect(() => {
@@ -339,55 +352,34 @@ export function usePokerGame(sessionKey?: SessionKeyParam | null): UsePokerGameR
             const [seatPDA] = getSeatPDA(tablePDA, i);
             const seat = await accounts.playerSeat.fetch(seatPDA) as PlayerSeatAccount;
 
-            // Convert hole cards - handle both plaintext (0-51) and encrypted (u128 handles)
-            const isCurrentPlayer = publicKey?.equals(seat.player);
+            // Arcium MPC: hole cards are NEVER on-chain. On-chain we only know a
+            // seat's status (in the hand or not) and — after showdown — its
+            // revealed plaintext cards. A player's own live hole cards are
+            // decrypted client-side from the HoleDealt event and substituted by
+            // the UI from gameState.decryptedCards.
+            const status = mapPlayerStatus(seat.status);
+            // "In the hand" this deal: dealt-in players are Playing/Folded/AllIn.
+            const inHand = status !== "sitting";
 
-            // Use BigInt for safe handling of large u128 encrypted values
-            const holeCard1BigInt = BigInt(seat.holeCard1.toString());
-            const holeCard2BigInt = BigInt(seat.holeCard2.toString());
-
-            // Check if cards are encrypted (values > 51) or plaintext (0-51)
-            // 255 means not dealt yet - exclude from "encrypted" check
-            // Encrypted handles are large u128 values, definitely > 255
-            const isCard1Encrypted = holeCard1BigInt > BigInt(255);
-            const isCard2Encrypted = holeCard2BigInt > BigInt(255);
-            const areCardsEncrypted = isCard1Encrypted || isCard2Encrypted;
-
-            // For plaintext cards, safely convert to number
-            const holeCard1 = isCard1Encrypted ? null : Number(holeCard1BigInt);
-            const holeCard2 = isCard2Encrypted ? null : Number(holeCard2BigInt);
-
-            // Check if cards have been dealt - card value 255 means not dealt
-            // Cards are valid if they're either plaintext (0-51) OR encrypted (> 51)
-            const hasDealtCards = holeCard1BigInt !== BigInt(255) && holeCard2BigInt !== BigInt(255);
-            const hasValidPlaintextCards = hasDealtCards && !areCardsEncrypted &&
-                                           holeCard1 !== null && holeCard1 >= 0 && holeCard1 <= 51 &&
-                                           holeCard2 !== null && holeCard2 >= 0 && holeCard2 <= 51;
-
-            // Get revealed cards (set during showdown via reveal_cards instruction)
+            // Revealed cards (written on-chain by the showdown_reveal callback).
             const revealedCard1 = seat.revealedCard1;
             const revealedCard2 = seat.revealedCard2;
             const hasRevealedCards = seat.cardsRevealed &&
-                                     revealedCard1 !== 255 && revealedCard2 !== 255 &&
-                                     revealedCard1 >= 0 && revealedCard1 <= 51 &&
-                                     revealedCard2 >= 0 && revealedCard2 <= 51;
+                                     isRealCard(revealedCard1) && isRealCard(revealedCard2);
 
             players.push({
               seatIndex: seat.seatIndex,
               player: seat.player.toString(),
               chips: seat.chips.toNumber(),
               currentBet: seat.totalBetThisHand.toNumber(), // Use total bet this hand, not per-round
-              // Show cards if: current player AND cards are plaintext valid (0-51)
-              // Encrypted cards will show as null (hidden) - need Inco decryption
-              holeCards: isCurrentPlayer && hasValidPlaintextCards
-                ? [holeCard1!, holeCard2!]
-                : [null, null],
-              status: mapPlayerStatus(seat.status),
-              // Player is active if cards have been dealt (encrypted or plaintext)
-              isActive: hasDealtCards,
-              // Track if cards are encrypted for UI display
-              isEncrypted: areCardsEncrypted,
-              // Track if cards have been revealed for showdown
+              // Others' hole cards are never visible; the local player's decrypted
+              // cards are merged in by the table page from gameState.decryptedCards.
+              holeCards: [null, null],
+              status,
+              isActive: inHand,
+              // Show the sealed/face-down "encrypted" state while a live hand is
+              // in progress and cards have not been revealed at showdown.
+              isEncrypted: inHand && !hasRevealedCards,
               cardsRevealed: seat.cardsRevealed ?? false,
               // Revealed cards for showdown display (visible to all players)
               revealedCards: hasRevealedCards ? [revealedCard1, revealedCard2] : [null, null],
@@ -505,101 +497,25 @@ export function usePokerGame(sessionKey?: SessionKeyParam | null): UsePokerGameR
       // Get current hand number for tracking encryption state across hands
       const currentHandNumber = table.handNumber.toNumber();
 
-      // Reset Inco encryption state when:
-      // 1. Phase is Dealing (hand just started)
-      // 2. Table is Waiting (between hands)
-      // 3. Hand number changed from what we last tracked (prevents cross-hand state leakage)
+      // Reset per-hand card state when the table is idle between hands, or when
+      // the hand number changed (prevents cross-hand leakage of decrypted cards).
+      // NOTE: we do NOT reset merely because phase === "Dealing" — under Arcium
+      // each player deals + decrypts their own cards DURING the Dealing phase.
       // NOTE: Uses ref to avoid stale closure - refreshState dependencies don't include encryptionHandNumber
       const isNewHand = encryptionHandNumberRef.current !== null &&
                         currentHandNumber !== encryptionHandNumberRef.current;
-      const resetEncryptionState = phase === "Dealing" || tableStatus === "Waiting" || isNewHand;
+      const resetEncryptionState = tableStatus === "Waiting" || isNewHand;
 
-      // Detect if cards are encrypted from on-chain state (any player has encrypted cards)
-      // This syncs encryption state for all players, not just the authority who dealt
-      // IMPORTANT: Only consider cards encrypted if we're past the Dealing phase
-      // During Dealing phase, old encrypted cards from previous hand might still be present
-      const detectedCardsEncrypted = phase !== "Dealing" && players.some(p => p.isEncrypted === true);
-
-      // Check if current player's allowances have been granted on-chain
-      // This allows all players to detect when they can decrypt, not just the authority
-      let detectedAllowancesGranted = false;
-      if (currentPlayerSeat !== null && !resetEncryptionState && detectedCardsEncrypted) {
-        const currentPlayer = players.find(p => p.seatIndex === currentPlayerSeat);
-        if (currentPlayer?.isEncrypted && publicKey) {
-          // Get the current player's encrypted handles from on-chain
-          try {
-            const [seatPDA] = getSeatPDA(gameState.tablePDA, currentPlayerSeat);
-            const seat = await accounts.playerSeat.fetch(seatPDA) as PlayerSeatAccount;
-            const handle1 = BigInt(seat.holeCard1.toString());
-            const handle2 = BigInt(seat.holeCard2.toString());
-
-            // Check if allowance accounts exist AND are owned by Inco program
-            if (handle1 > BigInt(255) && handle2 > BigInt(255)) {
-              const [allowancePDA1] = getAllowancePDA(handle1, publicKey);
-              const [allowancePDA2] = getAllowancePDA(handle2, publicKey);
-
-              // Check if both allowance accounts exist and are owned by Inco
-              const [acct1, acct2] = await Promise.all([
-                provider.connection.getAccountInfo(allowancePDA1),
-                provider.connection.getAccountInfo(allowancePDA2),
-              ]);
-
-              // Verify accounts exist AND are owned by Inco program (not just any account)
-              const isValid1 = acct1 !== null && acct1.owner.equals(INCO_PROGRAM_ID);
-              const isValid2 = acct2 !== null && acct2.owner.equals(INCO_PROGRAM_ID);
-              detectedAllowancesGranted = isValid1 && isValid2;
-
-            }
-          } catch (e) {
-            // Ignore errors - allowances not yet granted
-          }
-        }
-      }
-
-      // Check if ALL active players have allowances (for Grant Allowances button visibility)
-      // This is separate from the per-player check above - authority needs to know if ALL players are ready
-      let detectedAllPlayersHaveAllowances = false;
-      if (!resetEncryptionState && detectedCardsEncrypted) {
-        const activePlayers = players.filter(p => p.isEncrypted === true && p.player);
-
-        if (activePlayers.length > 0) {
-          try {
-            const allowanceChecks = await Promise.all(
-              activePlayers.map(async (player) => {
-                try {
-                  const [seatPDA] = getSeatPDA(gameState.tablePDA!, player.seatIndex);
-                  const seat = await accounts.playerSeat.fetch(seatPDA) as PlayerSeatAccount;
-                  const handle1 = BigInt(seat.holeCard1.toString());
-                  const handle2 = BigInt(seat.holeCard2.toString());
-
-                  if (handle1 > BigInt(255) && handle2 > BigInt(255)) {
-                    const playerPubkey = new PublicKey(player.player);
-                    const [allowancePDA1] = getAllowancePDA(handle1, playerPubkey);
-                    const [allowancePDA2] = getAllowancePDA(handle2, playerPubkey);
-
-                    const [acct1, acct2] = await Promise.all([
-                      provider.connection.getAccountInfo(allowancePDA1),
-                      provider.connection.getAccountInfo(allowancePDA2),
-                    ]);
-
-                    const isValid1 = acct1 !== null && acct1.owner.equals(INCO_PROGRAM_ID);
-                    const isValid2 = acct2 !== null && acct2.owner.equals(INCO_PROGRAM_ID);
-                    return isValid1 && isValid2;
-                  }
-                  return false;
-                } catch (e) {
-                  return false;
-                }
-              })
-            );
-
-            // All players must have allowances
-            detectedAllPlayersHaveAllowances = allowanceChecks.length > 0 && allowanceChecks.every(has => has);
-          } catch (e) {
-            // Ignore errors
-          }
-        }
-      }
+      // Arcium MPC has no per-card allowances: the deck is "sealed" (cards
+      // encrypted) the moment the MPC shuffle callback runs, and each player
+      // decrypts their own hole cards straight from the HoleDealt event — there
+      // is nothing to grant. We keep the legacy flag names (areCardsEncrypted /
+      // areAllowancesGranted / allPlayersHaveAllowances) so the table-page UI
+      // keeps working; here they all collapse to "is the deck sealed yet".
+      const deckSealed = deckState?.isShuffled ?? false;
+      const detectedCardsEncrypted = deckSealed;
+      const detectedAllowancesGranted = deckSealed;
+      const detectedAllPlayersHaveAllowances = deckSealed;
 
       setGameState((prev) => ({
         ...prev,
@@ -667,6 +583,177 @@ export function usePokerGame(sessionKey?: SessionKeyParam | null): UsePokerGameR
       }
     };
   }, [gameState.tablePDA, program, refreshState]);
+
+  // ============================================================
+  // Arcium crypto lifecycle
+  // Lazily fetch the MXE public key (once) and derive this wallet's x25519
+  // encryption keys (one signature, cached). Both are needed to seal/decrypt
+  // hole cards in the deal_to_seat MPC flow.
+  // ============================================================
+  const ensureCrypto = useCallback(async (): Promise<{ keys: EncryptionKeys; mxePublicKey: Uint8Array }> => {
+    if (!provider || !program || !publicKey || !signMessage) {
+      throw new Error("Wallet not connected");
+    }
+    if (!mxePublicKeyRef.current) {
+      const key = await fetchMXEPublicKey(provider, program.programId);
+      if (!key) throw new Error("Could not fetch Arcium MXE public key (nodes warming up?)");
+      mxePublicKeyRef.current = key;
+    }
+    if (!encKeysRef.current) {
+      encKeysRef.current = await deriveEncryptionKeys(
+        { publicKey, signMessage },
+        program.programId
+      );
+    }
+    return { keys: encKeysRef.current, mxePublicKey: mxePublicKeyRef.current };
+  }, [provider, program, publicKey, signMessage]);
+
+  // Build the full account map for a queue_computation instruction: the shared
+  // Arcium accounts plus this call's fresh computation offset.
+  const buildQueueAccounts = useCallback(
+    async (circuitName: string, computationOffset: BN) => {
+      if (!program) throw new Error("Program not ready");
+      return queueAccounts(program.programId, circuitName, computationOffset);
+    },
+    [program]
+  );
+
+  // ============================================================
+  // Arcium MPC: shuffle the deck (authority action). Queues the `shuffle`
+  // circuit; its callback seals the shuffled 52-card deck into DeckState as
+  // opaque ciphertext. After this, each seated player deals themselves in via
+  // deal_to_seat. Shared by requestShuffle() and the legacy dealCards() name.
+  // ============================================================
+  const doShuffle = useCallback(async (): Promise<string> => {
+    if (!program || !provider || !publicKey || !gameState.tablePDA || !gameState.table) {
+      throw new Error("Table not ready");
+    }
+
+    setLoading(true);
+    setError(null);
+    setGameState((prev) => ({ ...prev, isShuffling: true }));
+
+    try {
+      const handNumber = BigInt(gameState.table.handNumber.toNumber());
+      const [handPDA] = getHandPDA(gameState.tablePDA, handNumber);
+      const [deckPDA] = getDeckPDA(gameState.tablePDA, handNumber);
+
+      const computationOffset = newComputationOffset();
+      const arcium = await buildQueueAccounts("shuffle", computationOffset);
+
+      const tx = await program.methods
+        .shuffle(computationOffset)
+        .accountsPartial({
+          payer: publicKey,
+          ...arcium,
+          table: gameState.tablePDA,
+          handState: handPDA,
+          deckState: deckPDA,
+        })
+        .rpc();
+
+      await provider.connection.confirmTransaction(tx, "confirmed");
+
+      // Wait for the MPC callback to seal the deck on-chain (~15-20s on devnet).
+      await awaitFinalization(provider, computationOffset, program.programId);
+
+      setGameState((prev) => ({
+        ...prev,
+        isShuffling: false,
+        isDeckShuffled: true,
+        areCardsEncrypted: true,
+        areAllowancesGranted: true,
+        allPlayersHaveAllowances: true,
+      }));
+
+      await refreshState();
+      return tx;
+    } catch (e) {
+      setGameState((prev) => ({ ...prev, isShuffling: false }));
+      const message = parseAnchorError(e);
+      setError(message);
+      throw e;
+    } finally {
+      setLoading(false);
+    }
+  }, [program, provider, publicKey, gameState.tablePDA, gameState.table, buildQueueAccounts, refreshState]);
+
+  // ============================================================
+  // Arcium MPC: deal this player's own hole cards (deal_to_seat) and decrypt
+  // them locally from the HoleDealt event. Only the seat owner can do this —
+  // the cards seal to a key only they hold. Once every seated player has dealt
+  // in, the program advances the hand to PreFlop.
+  // ============================================================
+  const dealToOwnSeat = useCallback(async (): Promise<void> => {
+    if (!program || !provider || !publicKey || !gameState.tablePDA || !gameState.table || gameState.currentPlayerSeat === null) {
+      throw new Error("Not at table");
+    }
+
+    setGameState((prev) => ({ ...prev, isDecrypting: true }));
+    try {
+      const { keys, mxePublicKey } = await ensureCrypto();
+
+      const handNumber = BigInt(gameState.table.handNumber.toNumber());
+      const [handPDA] = getHandPDA(gameState.tablePDA, handNumber);
+      const [deckPDA] = getDeckPDA(gameState.tablePDA, handNumber);
+      const seatIndex = gameState.currentPlayerSeat;
+      const [seatPDA] = getSeatPDA(gameState.tablePDA, seatIndex);
+
+      const computationOffset = newComputationOffset();
+      const nonce = newNonce();
+      const arcium = await buildQueueAccounts("deal_to_seat", computationOffset);
+
+      const tx = await program.methods
+        .dealToSeat(
+          computationOffset,
+          seatIndex,
+          Array.from(keys.publicKey),
+          nonce.bn
+        )
+        .accountsPartial({
+          payer: publicKey,
+          ...arcium,
+          table: gameState.tablePDA,
+          handState: handPDA,
+          deckState: deckPDA,
+          playerSeat: seatPDA,
+        })
+        .rpc();
+
+      await provider.connection.confirmTransaction(tx, "confirmed");
+
+      // The callback emits a HoleDealt event on the finalization tx. Decrypt the
+      // sealed cards addressed to our key.
+      const finalizeSig = await awaitFinalization(provider, computationOffset, program.programId);
+      const events = await fetchCallbackEvents(provider.connection, program, finalizeSig);
+
+      const myPubHex = Buffer.from(keys.publicKey).toString("hex");
+      let decrypted: [number, number] | null = null;
+      for (const ev of events) {
+        if (ev.name !== "holeDealt" && ev.name !== "HoleDealt") continue;
+        const d = ev.data as { encPubkey?: number[]; enc_pubkey?: number[]; nonce: number[]; card0: number[]; card1: number[] };
+        const encPubkey = d.encPubkey ?? d.enc_pubkey ?? [];
+        if (Buffer.from(encPubkey).toString("hex") !== myPubHex) continue;
+        decrypted = await decryptHoleCards(keys.privateKey, mxePublicKey, d.card0, d.card1, d.nonce);
+        break;
+      }
+
+      if (!decrypted) {
+        throw new Error("Dealt, but no matching HoleDealt event found to decrypt");
+      }
+
+      setGameState((prev) => ({
+        ...prev,
+        isDecrypting: false,
+        decryptedCards: decrypted,
+        encryptionHandNumber: gameState.table!.handNumber.toNumber(),
+      }));
+      await refreshState();
+    } catch (e) {
+      setGameState((prev) => ({ ...prev, isDecrypting: false }));
+      throw e;
+    }
+  }, [program, provider, publicKey, gameState.tablePDA, gameState.table, gameState.currentPlayerSeat, ensureCrypto, buildQueueAccounts, refreshState]);
 
   // Create a new table
   const createTable = useCallback(
@@ -923,753 +1010,144 @@ export function usePokerGame(sessionKey?: SessionKeyParam | null): UsePokerGameR
     }
   }, [program, provider, publicKey, gameState.tablePDA, gameState.table, refreshState]);
 
-  // Deal cards (pseudorandom - non-VRF fallback)
-  const dealCards = useCallback(async (): Promise<string> => {
-    if (!program || !provider || !publicKey || !gameState.tablePDA || !gameState.table) {
-      throw new Error("Table not ready");
-    }
-
-    setLoading(true);
-    setError(null);
-
-    try {
-      const handNumber = BigInt(gameState.table.handNumber.toNumber());
-      const [handPDA] = getHandPDA(gameState.tablePDA, handNumber);
-      const [deckPDA] = getDeckPDA(gameState.tablePDA, handNumber);
-
-      // Find SB and BB positions
-      const dealerPos = gameState.table.dealerPosition;
-      const occupied = getOccupiedSeats(gameState.table.occupiedSeats, gameState.table.maxPlayers);
-      const isHeadsUp = occupied.length === 2;
-
-      // Find next occupied seats after dealer for SB and BB
-      const findNextOccupied = (startPos: number): number => {
-        let pos = (startPos + 1) % gameState.table!.maxPlayers;
-        while (!occupied.includes(pos)) {
-          pos = (pos + 1) % gameState.table!.maxPlayers;
-        }
-        return pos;
-      };
-
-      let sbPos: number;
-      let bbPos: number;
-
-      if (isHeadsUp) {
-        // Heads-up: dealer is SB, other player is BB
-        sbPos = dealerPos;
-        bbPos = findNextOccupied(dealerPos);
-      } else {
-        // Standard: SB is left of dealer, BB is left of SB
-        sbPos = findNextOccupied(dealerPos);
-        bbPos = findNextOccupied(sbPos);
-      }
-
-      const [sbSeatPDA] = getSeatPDA(gameState.tablePDA, sbPos);
-      const [bbSeatPDA] = getSeatPDA(gameState.tablePDA, bbPos);
-
-      let tx: string;
-
-      // Use atomic encrypted dealing when Inco privacy is enabled
-      if (gameState.useIncoPrivacy) {
-        console.log("Using deal_cards_encrypted for atomic Inco encryption (P0 security)");
-        tx = await program.methods
-          .dealCardsEncrypted()
-          .accounts({
-            caller: publicKey,
-            table: gameState.tablePDA,
-            handState: handPDA,
-            deckState: deckPDA,
-            sbSeat: sbSeatPDA,
-            bbSeat: bbSeatPDA,
-            incoProgram: INCO_PROGRAM_ID,
-            systemProgram: SystemProgram.programId,
-          })
-          .rpc();
-
-        // Cards are already encrypted - update state with hand number tracking
-        const handNumber = gameState.table.handNumber.toNumber();
-        setGameState((prev) => ({
-          ...prev,
-          areCardsEncrypted: true,
-          encryptionHandNumber: handNumber,
-        }));
-        console.log("Cards dealt with atomic encryption - no plaintext exposure");
-      } else {
-        // Legacy plaintext dealing (not recommended for production)
-        console.log("Using legacy deal_cards (WARNING: plaintext cards on-chain!)");
-        tx = await program.methods
-          .dealCards()
-          .accounts({
-            caller: publicKey,
-            table: gameState.tablePDA,
-            handState: handPDA,
-            deckState: deckPDA,
-            sbSeat: sbSeatPDA,
-            bbSeat: bbSeatPDA,
-          })
-          .rpc();
-      }
-
-      await provider.connection.confirmTransaction(tx, "confirmed");
-      await refreshState();
-      return tx;
-    } catch (e) {
-      const message = parseAnchorError(e);
-      setError(message);
-      throw e;
-    } finally {
-      setLoading(false);
-    }
-  }, [program, provider, publicKey, gameState.tablePDA, gameState.table, gameState.useIncoPrivacy, refreshState]);
+  // Legacy name kept for the table-page "Deal Cards" control. In the Arcium
+  // build there is no separate deal step for the authority — dealing the deck
+  // means running the MPC shuffle; each player then deals themselves in.
+  const dealCards = useCallback((): Promise<string> => doShuffle(), [doShuffle]);
 
   // ============================================================
-  // MagicBlock VRF: Request shuffle (initiates VRF randomness)
-  // Modified Option B: Callback now handles shuffle + encrypt ATOMICALLY
-  // VRF seed is NEVER stored - only used in memory during callback!
+  // Shuffle the deck via Arcium MPC (authority action). See doShuffle().
   // ============================================================
-  const requestShuffle = useCallback(async (): Promise<string> => {
-    if (!program || !provider || !publicKey || !gameState.tablePDA || !gameState.table) {
-      throw new Error("Table not ready");
-    }
-
-    setLoading(true);
-    setError(null);
-    setGameState((prev) => ({ ...prev, isShuffling: true }));
-
-    try {
-      const handNumber = BigInt(gameState.table.handNumber.toNumber());
-      const [handPDA] = getHandPDA(gameState.tablePDA, handNumber);
-      const [deckPDA] = getDeckPDA(gameState.tablePDA, handNumber);
-
-      // Build seat accounts for the callback (Modified Option B)
-      // The callback will shuffle + encrypt atomically using these accounts
-      const occupied = getOccupiedSeats(gameState.table.occupiedSeats);
-      const seatAccounts: { pubkey: PublicKey; isSigner: boolean; isWritable: boolean }[] = [];
-      for (const seatIndex of occupied) {
-        const [seatPDA] = getSeatPDA(gameState.tablePDA!, seatIndex);
-        seatAccounts.push({
-          pubkey: seatPDA,
-          isSigner: false,
-          isWritable: true,
-        });
-      }
-
-      console.log("MODIFIED OPTION B: Requesting VRF shuffle with atomic encrypt");
-      console.log(`Passing ${seatAccounts.length} seat accounts to callback`);
-
-      const tx = await program.methods
-        .requestShuffle()
-        .accounts({
-          authority: publicKey,
-          table: gameState.tablePDA,
-          handState: handPDA,
-          deckState: deckPDA,
-          oracleQueue: DEFAULT_QUEUE,
-          incoProgram: INCO_PROGRAM_ID,
-          systemProgram: SystemProgram.programId,
-        })
-        .remainingAccounts(seatAccounts)
-        .rpc();
-
-      await provider.connection.confirmTransaction(tx, "confirmed");
-
-      // Wait for VRF callback to complete shuffle + encrypt atomically
-      console.log("VRF shuffle requested, waiting for oracle callback (atomic shuffle + encrypt)...");
-      const shuffled = await waitForShuffle(provider.connection, deckPDA, 30000, 1000);
-
-      if (shuffled) {
-        console.log("ATOMIC shuffle + encrypt completed! Cards are now encrypted.");
-        console.log("SECURITY: VRF seed was NEVER stored - only used in callback memory!");
-
-        // ============================================================
-        // AUTO-GRANT ALLOWANCES: Streamlined UX
-        // After shuffle completes, automatically grant allowances to all players
-        // This removes the manual "Grant Allowances" button click
-        // ============================================================
-        console.log("Auto-granting decryption allowances for all players...");
-
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const accounts = program.account as any;
-
-        // Grant allowances for each occupied seat
-        for (const seatIndex of occupied) {
-          try {
-            const [seatPDA] = getSeatPDA(gameState.tablePDA!, seatIndex);
-            const seat = await accounts.playerSeat.fetch(seatPDA) as PlayerSeatAccount;
-
-            const handle1 = BigInt(seat.holeCard1.toString());
-            const handle2 = BigInt(seat.holeCard2.toString());
-
-            // Verify cards are encrypted (handles > 255)
-            if (handle1 <= BigInt(255) || handle2 <= BigInt(255)) {
-              console.log(`Seat ${seatIndex}: Cards not encrypted yet, skipping`);
-              continue;
-            }
-
-            // Derive allowance PDAs from the encrypted handles
-            const [allowancePDA1] = getAllowancePDA(handle1, seat.player);
-            const [allowancePDA2] = getAllowancePDA(handle2, seat.player);
-
-            console.log(`Granting allowances for seat ${seatIndex}...`);
-
-            const grantTx = await program.methods
-              .grantCardAllowance(seatIndex)
-              .accounts({
-                authority: publicKey,
-                table: gameState.tablePDA,
-                playerSeat: seatPDA,
-                allowanceCard1: allowancePDA1,
-                allowanceCard2: allowancePDA2,
-                player: seat.player,
-                incoProgram: INCO_PROGRAM_ID,
-                systemProgram: SystemProgram.programId,
-              })
-              .rpc();
-
-            await provider.connection.confirmTransaction(grantTx, "confirmed");
-            console.log(`Allowances granted for seat ${seatIndex}:`, grantTx);
-
-            // Small delay between grants to avoid rate limiting
-            await new Promise(resolve => setTimeout(resolve, 300));
-          } catch (e) {
-            console.error(`Failed to grant allowance for seat ${seatIndex}:`, e);
-            // Continue with other seats even if one fails
-          }
-        }
-
-        console.log("Hole card allowances granted! Now granting community card allowances...");
-
-        // ============================================================
-        // GRANT COMMUNITY CARD ALLOWANCES
-        // This enables any player to reveal community cards if authority is AFK
-        // ============================================================
-
-        // Fetch deck state to get community card handles
-        const deckStateForCommunity = await accounts.deckState.fetch(deckPDA) as DeckStateAccount;
-        const communityHandles = deckStateForCommunity.cards.slice(0, 5).map(bn => BigInt(bn.toString()));
-
-        // Check if community cards are encrypted
-        const communityEncrypted = communityHandles.every(h => h > BigInt(255));
-        if (communityEncrypted) {
-          console.log("Community card handles:", communityHandles.map(h => h.toString()));
-
-          // Grant community allowances for each player
-          for (const seatIndex of occupied) {
-            try {
-              const [seatPDA] = getSeatPDA(gameState.tablePDA!, seatIndex);
-              const seat = await accounts.playerSeat.fetch(seatPDA) as PlayerSeatAccount;
-
-              // Derive allowance PDAs for all 5 community cards
-              const communityAllowancePDAs = communityHandles.map(handle =>
-                getAllowancePDA(handle, seat.player)[0]
-              );
-
-              console.log(`Granting community allowances for seat ${seatIndex}...`);
-
-              const grantCommunityTx = await program.methods
-                .grantCommunityAllowances(seatIndex)
-                .accounts({
-                  authority: publicKey,
-                  table: gameState.tablePDA,
-                  handState: handPDA,
-                  deckState: deckPDA,
-                  playerSeat: seatPDA,
-                  player: seat.player, // The player receiving the allowance
-                  incoProgram: INCO_PROGRAM_ID,
-                  systemProgram: SystemProgram.programId,
-                })
-                .remainingAccounts(
-                  communityAllowancePDAs.map(pda => ({
-                    pubkey: pda,
-                    isSigner: false,
-                    isWritable: true,
-                  }))
-                )
-                .rpc();
-
-              await provider.connection.confirmTransaction(grantCommunityTx, "confirmed");
-              console.log(`Community allowances granted for seat ${seatIndex}:`, grantCommunityTx);
-
-              // Small delay between grants
-              await new Promise(resolve => setTimeout(resolve, 300));
-            } catch (e) {
-              console.error(`Failed to grant community allowances for seat ${seatIndex}:`, e);
-              // Continue with other seats
-            }
-          }
-
-          console.log("All community card allowances granted!");
-        } else {
-          console.log("Community cards not encrypted, skipping community allowance grants");
-        }
-
-        console.log("All allowances granted! Players can now decrypt their cards.");
-
-        // Update state to reflect completed shuffle AND allowances
-        const currentHandNumber = gameState.table!.handNumber.toNumber();
-        setGameState((prev) => ({
-          ...prev,
-          isShuffling: false,
-          isDeckShuffled: true,
-          areCardsEncrypted: true,
-          areAllowancesGranted: true,
-          allPlayersHaveAllowances: true,
-          encryptionHandNumber: currentHandNumber,
-        }));
-      } else {
-        console.warn("VRF shuffle timed out");
-        setGameState((prev) => ({ ...prev, isShuffling: false }));
-        throw new Error("VRF shuffle timed out. The oracle may be busy.");
-      }
-
-      await refreshState();
-      return tx;
-    } catch (e) {
-      setGameState((prev) => ({ ...prev, isShuffling: false }));
-      const message = parseAnchorError(e);
-      setError(message);
-      throw e;
-    } finally {
-      setLoading(false);
-    }
-  }, [program, provider, publicKey, gameState.tablePDA, gameState.table, refreshState]);
+  const requestShuffle = useCallback((): Promise<string> => doShuffle(), [doShuffle]);
 
   // ============================================================
-  // Inco TEE: Phase 1 - Encrypt hole cards (stores handles)
+  // Retired Inco encrypt/allowance steps. With Arcium MPC the deck is sealed
+  // by the shuffle circuit and each player decrypts their own hole cards from
+  // the HoleDealt event — there is nothing to encrypt or grant. These stubs
+  // keep the hook's public API stable for the existing table-page UI; they
+  // resolve immediately.
   // ============================================================
-  const encryptHoleCards = useCallback(async (seatIndex: number): Promise<string> => {
-    if (!program || !provider || !publicKey || !gameState.tablePDA || !gameState.table) {
-      throw new Error("Table not ready");
-    }
-
-    setLoading(true);
-    setError(null);
-
-    try {
-      const handNumber = BigInt(gameState.table.handNumber.toNumber());
-      const [handPDA] = getHandPDA(gameState.tablePDA, handNumber);
-      const [seatPDA] = getSeatPDA(gameState.tablePDA, seatIndex);
-
-      console.log(`Encrypting hole cards for seat ${seatIndex} via Inco TEE...`);
-
-      const tx = await program.methods
-        .encryptHoleCards(seatIndex)
-        .accounts({
-          authority: publicKey,
-          table: gameState.tablePDA,
-          handState: handPDA,
-          playerSeat: seatPDA,
-          incoProgram: INCO_PROGRAM_ID,
-          systemProgram: SystemProgram.programId,
-        })
-        .rpc();
-
-      await provider.connection.confirmTransaction(tx, "confirmed");
-      console.log("Phase 1 complete - cards encrypted:", tx);
-      // NOTE: Don't call refreshState() here - let encryptAllPlayersCards handle it at the end
-      // to avoid intermediate state confusion
-      return tx;
-    } catch (e) {
-      const message = parseAnchorError(e);
-      setError(message);
-      throw e;
-    } finally {
-      setLoading(false);
-    }
-  }, [program, provider, publicKey, gameState.tablePDA, gameState.table]);
+  const encryptHoleCards = useCallback(async (_seatIndex: number): Promise<string> => "", []);
+  const grantCardAllowance = useCallback(async (_seatIndex: number): Promise<string> => "", []);
+  const encryptAndGrantCards = useCallback(async (_seatIndex: number): Promise<void> => {}, []);
+  const encryptAllPlayersCards = useCallback(async (): Promise<void> => {}, []);
+  const grantAllPlayersAllowances = useCallback(async (): Promise<void> => {}, []);
 
   // ============================================================
-  // Inco TEE: Phase 2 - Grant decryption allowance
-  // Must be called AFTER encryptHoleCards to have valid handles
-  // ============================================================
-  const grantCardAllowance = useCallback(async (seatIndex: number): Promise<string> => {
-    if (!program || !provider || !publicKey || !gameState.tablePDA || !gameState.table) {
-      throw new Error("Table not ready");
-    }
-
-    setLoading(true);
-    setError(null);
-
-    try {
-      const [seatPDA] = getSeatPDA(gameState.tablePDA, seatIndex);
-
-      // Fetch the seat to get the encrypted handles
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const accounts = program.account as any;
-      const seat = await accounts.playerSeat.fetch(seatPDA) as PlayerSeatAccount;
-
-      const handle1 = BigInt(seat.holeCard1.toString());
-      const handle2 = BigInt(seat.holeCard2.toString());
-
-      // Verify cards are actually encrypted (handles > 51)
-      if (handle1 <= BigInt(51) || handle2 <= BigInt(51)) {
-        throw new Error("Cards not encrypted yet. Call encryptHoleCards first.");
-      }
-
-      // Derive allowance PDAs from the encrypted handles
-      const [allowancePDA1] = getAllowancePDA(handle1, seat.player);
-      const [allowancePDA2] = getAllowancePDA(handle2, seat.player);
-
-      console.log(`Granting decryption allowances for seat ${seatIndex}...`);
-      console.log(`  Handle 1: ${handle1.toString()}`);
-      console.log(`  Handle 2: ${handle2.toString()}`);
-      console.log(`  Allowance PDA 1: ${allowancePDA1.toString()}`);
-      console.log(`  Allowance PDA 2: ${allowancePDA2.toString()}`);
-
-      const tx = await program.methods
-        .grantCardAllowance(seatIndex)
-        .accounts({
-          authority: publicKey,
-          table: gameState.tablePDA,
-          playerSeat: seatPDA,
-          allowanceCard1: allowancePDA1,
-          allowanceCard2: allowancePDA2,
-          player: seat.player,
-          incoProgram: INCO_PROGRAM_ID,
-          systemProgram: SystemProgram.programId,
-        })
-        .rpc();
-
-      await provider.connection.confirmTransaction(tx, "confirmed");
-      console.log("Phase 2 complete - allowances granted:", tx);
-      // NOTE: Don't call refreshState() here - let encryptAllPlayersCards handle it at the end
-      // to avoid intermediate state confusion
-      return tx;
-    } catch (e) {
-      const message = parseAnchorError(e);
-      setError(message);
-      throw e;
-    } finally {
-      setLoading(false);
-    }
-  }, [program, provider, publicKey, gameState.tablePDA, gameState.table]);
-
-  // ============================================================
-  // Inco TEE: Combined helper - Encrypt + Grant in sequence
-  // ============================================================
-  const encryptAndGrantCards = useCallback(async (seatIndex: number): Promise<void> => {
-    console.log(`Starting Inco encryption for seat ${seatIndex}...`);
-
-    // Phase 1: Encrypt
-    await encryptHoleCards(seatIndex);
-
-    // Small delay to ensure state propagates
-    await new Promise(resolve => setTimeout(resolve, 1000));
-
-    // Phase 2: Grant allowance
-    await grantCardAllowance(seatIndex);
-
-    console.log(`Inco encryption complete for seat ${seatIndex}!`);
-  }, [encryptHoleCards, grantCardAllowance]);
-
-  // ============================================================
-  // Inco TEE: Encrypt all players' cards (after dealing)
-  // Called automatically when useIncoPrivacy is enabled
-  // ============================================================
-  const encryptAllPlayersCards = useCallback(async (): Promise<void> => {
-    if (!gameState.table || !gameState.tablePDA) {
-      throw new Error("Table not ready");
-    }
-
-    const occupied = getOccupiedSeats(gameState.table.occupiedSeats, gameState.table.maxPlayers);
-    console.log(`Encrypting cards for ${occupied.length} players via Inco TEE...`);
-
-    setGameState((prev) => ({ ...prev, isEncrypting: true }));
-
-    try {
-      // Encrypt each player's cards sequentially
-      for (const seatIndex of occupied) {
-        console.log(`Encrypting seat ${seatIndex}...`);
-        await encryptAndGrantCards(seatIndex);
-        // Small delay between players to avoid rate limiting
-        await new Promise(resolve => setTimeout(resolve, 500));
-      }
-
-      console.log("All cards encrypted successfully!");
-      // Track the hand number to prevent cross-hand state leakage
-      const handNumber = gameState.table.handNumber.toNumber();
-      setGameState((prev) => ({
-        ...prev,
-        isEncrypting: false,
-        areCardsEncrypted: true,
-        areAllowancesGranted: true,
-        encryptionHandNumber: handNumber,
-      }));
-
-      // Small delay then refresh to sync UI with on-chain state
-      await new Promise(resolve => setTimeout(resolve, 500));
-      await refreshState();
-    } catch (e) {
-      console.error("Failed to encrypt all cards:", e);
-      setGameState((prev) => ({ ...prev, isEncrypting: false }));
-      throw e;
-    }
-  }, [gameState.table, gameState.tablePDA, encryptAndGrantCards, refreshState]);
-
-  // ============================================================
-  // Inco TEE: Grant allowances only (for atomic encryption)
-  // When cards are encrypted during deal_cards_encrypted, we still need
-  // to grant allowances for players to decrypt their own cards
-  // ============================================================
-  const grantAllPlayersAllowances = useCallback(async (): Promise<void> => {
-    if (!gameState.table || !gameState.tablePDA) {
-      throw new Error("Table not ready");
-    }
-
-    const occupied = getOccupiedSeats(gameState.table.occupiedSeats, gameState.table.maxPlayers);
-    console.log(`Granting decryption allowances for ${occupied.length} players...`);
-
-    setGameState((prev) => ({ ...prev, isEncrypting: true })); // Reuse isEncrypting for progress
-
-    try {
-      // Grant allowance for each player's cards sequentially
-      for (const seatIndex of occupied) {
-        console.log(`Granting allowance for seat ${seatIndex}...`);
-        await grantCardAllowance(seatIndex);
-        // Small delay between players to avoid rate limiting
-        await new Promise(resolve => setTimeout(resolve, 500));
-      }
-
-      console.log("All allowances granted successfully!");
-      // Track the hand number to prevent cross-hand state leakage
-      const handNumber = gameState.table.handNumber.toNumber();
-      setGameState((prev) => ({
-        ...prev,
-        isEncrypting: false,
-        areAllowancesGranted: true,
-        allPlayersHaveAllowances: true,
-        encryptionHandNumber: handNumber,
-      }));
-
-      // Small delay then refresh to sync UI with on-chain state
-      await new Promise(resolve => setTimeout(resolve, 500));
-      await refreshState();
-    } catch (e) {
-      console.error("Failed to grant allowances:", e);
-      setGameState((prev) => ({ ...prev, isEncrypting: false }));
-      throw e;
-    }
-  }, [gameState.table, gameState.tablePDA, grantCardAllowance, refreshState]);
-
-  // ============================================================
-  // Inco TEE: Decrypt own cards (client-side)
-  // Uses Inco SDK to decrypt encrypted handles with wallet signing
-  // Also stores Ed25519 attestation instructions for on-chain verification
+  // Arcium MPC: "decrypt my cards" now means deal this player into the hand
+  // (deal_to_seat) and decrypt the sealed hole cards from the HoleDealt event.
   // ============================================================
   const decryptMyCards = useCallback(async (): Promise<void> => {
-    if (!program || !publicKey || !signMessage || !gameState.tablePDA || gameState.currentPlayerSeat === null) {
-      throw new Error("Not ready to decrypt - wallet not connected or not at table");
-    }
+    await dealToOwnSeat();
+  }, [dealToOwnSeat]);
 
-    // FAIRNESS CHECK: Don't allow decryption until ALL players have allowances
-    // This prevents authority from seeing their cards before granting allowances to others
-    if (!gameState.allPlayersHaveAllowances) {
-      throw new Error("Cannot decrypt until all players have been granted allowances - click 'Grant Allowances' first");
-    }
-
-    console.log("Starting Inco decryption for your cards...");
-    setGameState((prev) => ({ ...prev, isDecrypting: true }));
-
-    try {
-      // Fetch current player's seat to get encrypted handles
-      const [seatPDA] = getSeatPDA(gameState.tablePDA, gameState.currentPlayerSeat);
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const accounts = program.account as any;
-      const seat = await accounts.playerSeat.fetch(seatPDA) as PlayerSeatAccount;
-
-      // Get encrypted handles as BigInt
-      const handle1 = BigInt(seat.holeCard1.toString());
-      const handle2 = BigInt(seat.holeCard2.toString());
-
-      // Verify cards are encrypted (handles > 51)
-      if (handle1 <= BigInt(51) || handle2 <= BigInt(51)) {
-        throw new Error("Cards are not encrypted - nothing to decrypt");
-      }
-
-      console.log("Encrypted handles:", handle1.toString(), handle2.toString());
-      console.log("Calling Inco SDK to decrypt with attestation...");
-
-      // Call Inco SDK to decrypt with attestation (includes Ed25519 verification instructions)
-      const result = await decryptCardsWithAttestation(
-        [handle1, handle2],
-        { publicKey, signMessage }
-      );
-
-      // Validate we got both cards
-      if (result.plaintexts.length < 2) {
-        console.error(`Expected 2 decrypted cards, got ${result.plaintexts.length}`);
-      }
-
-      // Use null for missing cards (defensive coding)
-      const card1 = result.plaintexts[0] ?? null;
-      const card2 = result.plaintexts[1] ?? null;
-
-      // Validate decrypted card values are in valid range (0-51)
-      if (card1 !== null && (card1 < 0 || card1 > 51)) {
-        throw new Error(`Invalid decrypted card value: ${card1}. Expected 0-51.`);
-      }
-      if (card2 !== null && (card2 < 0 || card2 > 51)) {
-        throw new Error(`Invalid decrypted card value: ${card2}. Expected 0-51.`);
-      }
-
-      // Update state with decrypted cards AND Ed25519 instructions for later reveal
-      setGameState((prev) => ({
-        ...prev,
-        isDecrypting: false,
-        decryptedCards: [card1, card2],
-        ed25519Instructions: result.ed25519Instructions,
-      }));
-
-      console.log("Cards decrypted successfully:", card1, card2);
-    } catch (e) {
-      console.error("Failed to decrypt cards:", e);
-      setGameState((prev) => ({ ...prev, isDecrypting: false }));
-      throw e;
-    }
-  }, [program, publicKey, signMessage, gameState.tablePDA, gameState.currentPlayerSeat, gameState.allPlayersHaveAllowances]);
-
-  // Reveal cards for showdown (submits decrypted cards to blockchain)
-  // IMPORTANT: Includes Ed25519 verification instructions from Inco attestation
-  // The program verifies that Inco's covalidator signed the (handle, plaintext) pairs
+  // ============================================================
+  // Arcium MPC: reveal all non-folded hole cards at showdown in ONE batched
+  // round-trip (showdown_reveal). The callback writes each revealed seat's
+  // plaintext cards on-chain; polling then surfaces them via revealedCards.
+  // Replaces the old per-player Ed25519 reveal — any player can trigger it
+  // once at Showdown, and the circuit only reveals seats still in the hand.
+  // ============================================================
   const revealCards = useCallback(async (): Promise<string> => {
-    if (!program || !provider || !publicKey || !gameState.tablePDA || !gameState.table || gameState.currentPlayerSeat === null) {
-      throw new Error("Not ready to reveal - wallet not connected or not at table");
+    if (!program || !provider || !publicKey || !gameState.tablePDA || !gameState.table) {
+      throw new Error("Not ready to reveal");
     }
-
-    // Check if we have decrypted cards
-    const [card1, card2] = gameState.decryptedCards;
-    if (card1 === null || card2 === null) {
-      throw new Error("Must decrypt cards before revealing");
+    if (gameState.phase !== "Showdown") {
+      throw new Error("Reveal is only available at showdown");
     }
-
-    // Check if we have Ed25519 attestation instructions
-    // Program expects exactly 2 instructions at specific indices for verification
-    const ed25519Ixs = gameState.ed25519Instructions;
-    if (ed25519Ixs.length !== 2) {
-      throw new Error(`Expected exactly 2 Ed25519 instructions for card verification, got ${ed25519Ixs.length}. Cannot reveal cards safely - please decrypt your cards first.`);
-    }
-
-    console.log("Revealing cards for showdown:", card1, card2);
-    console.log(`Including ${ed25519Ixs.length} Ed25519 verification instruction(s)`);
+    if (showdownRevealInProgressRef.current) return "";
+    showdownRevealInProgressRef.current = true;
     setGameState((prev) => ({ ...prev, isRevealing: true }));
 
     try {
       const handNumber = BigInt(gameState.table.handNumber.toNumber());
-      const [seatPDA] = getSeatPDA(gameState.tablePDA, gameState.currentPlayerSeat);
       const [handPDA] = getHandPDA(gameState.tablePDA, handNumber);
+      const [deckPDA] = getDeckPDA(gameState.tablePDA, handNumber);
 
-      // Use session key signer when available, otherwise real wallet
-      const signerKey = sessionKey?.isActive ? sessionKey.signerPublicKey : publicKey;
-      const sessionTokenAccount = sessionKey?.isActive ? sessionKey.sessionTokenPDA : null;
+      // All occupied seats in ascending order. The circuit reveals only the
+      // non-folded ones (mask built on-chain from fold tracking) and writes
+      // their cards back via these same accounts in the callback.
+      const occupied = getOccupiedSeats(gameState.table.occupiedSeats, gameState.table.maxPlayers);
+      const seatMetas = occupied.map((seatIndex) => {
+        const [seatPDA] = getSeatPDA(gameState.tablePDA!, seatIndex);
+        return { pubkey: seatPDA, isSigner: false, isWritable: true };
+      });
 
-      // Build reveal_cards instruction (not sent yet)
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const revealAccounts: any = {
-        signer: signerKey,
-        table: gameState.tablePDA,
-        handState: handPDA,
-        playerSeat: seatPDA,
-        instructionsSysvar: new PublicKey("Sysvar1nstructions1111111111111111111111111"),
-      };
-      if (sessionTokenAccount) {
-        revealAccounts.sessionToken = sessionTokenAccount;
-      }
-      const revealIx = await program.methods
-        .revealCards(card1, card2)
-        .accountsPartial(revealAccounts)
-        .instruction();
+      const computationOffset = newComputationOffset();
+      const arcium = await buildQueueAccounts("showdown_reveal", computationOffset);
 
-      // Build transaction with Ed25519 instructions FIRST, then reveal_cards
-      // Order matters: Ed25519 instructions at indices 0 and 1, reveal_cards at index 2
-      // Program expects: card1 verification at (current_ix_index - 2), card2 at (current_ix_index - 1)
-      const tx = new Transaction();
+      const tx = await program.methods
+        .showdownReveal(computationOffset)
+        .accountsPartial({
+          payer: publicKey,
+          ...arcium,
+          table: gameState.tablePDA,
+          handState: handPDA,
+          deckState: deckPDA,
+        })
+        .remainingAccounts(seatMetas)
+        .rpc();
 
-      // Add Ed25519 verification instructions first
-      // These are pre-verified by Solana runtime before our program runs
-      for (const ed25519Ix of ed25519Ixs) {
-        tx.add(ed25519Ix);
-      }
+      await provider.connection.confirmTransaction(tx, "confirmed");
+      await awaitFinalization(provider, computationOffset, program.programId);
 
-      // Add reveal_cards instruction last
-      tx.add(revealIx);
-
-      let signature: string;
-      if (sessionKey?.isActive) {
-        // Session key signs — no wallet popup
-        signature = await sessionKey.sendWithSession(tx);
-      } else {
-        // Wallet signs — popup required
-        const { blockhash, lastValidBlockHeight } = await provider.connection.getLatestBlockhash();
-        tx.recentBlockhash = blockhash;
-        tx.feePayer = publicKey;
-        const signedTx = await provider.wallet.signTransaction(tx);
-        signature = await provider.connection.sendRawTransaction(signedTx.serialize());
-        await provider.connection.confirmTransaction({
-          signature,
-          blockhash,
-          lastValidBlockHeight,
-        }, "confirmed");
-      }
-
-      console.log("Cards revealed on-chain with Ed25519 verification:", signature);
       setGameState((prev) => ({ ...prev, isRevealing: false }));
-
-      // State will be refreshed by polling
-      return signature;
+      await refreshState();
+      return tx;
     } catch (e) {
-      console.error("Failed to reveal cards:", e);
+      const message = parseAnchorError(e);
+      setError(message);
       setGameState((prev) => ({ ...prev, isRevealing: false }));
       throw e;
+    } finally {
+      showdownRevealInProgressRef.current = false;
     }
-  }, [program, provider, publicKey, gameState.tablePDA, gameState.table, gameState.currentPlayerSeat, gameState.decryptedCards, gameState.ed25519Instructions, sessionKey]);
+  }, [program, provider, publicKey, gameState.tablePDA, gameState.table, gameState.phase, buildQueueAccounts, refreshState]);
 
   // ============================================================
-  // Community Card Reveal: Reveal encrypted community cards (authority only)
-  // Called automatically when awaitingCommunityReveal is true
+  // Arcium MPC: reveal the community board. Each street is its own circuit
+  // (reveal_flop <- PreFlop, reveal_turn <- Flop, reveal_river <- Turn); the
+  // callback re-feeds the sealed deck, writes the plaintext board on-chain, and
+  // advances the phase. The board is public — no client-side decryption. The
+  // authority can reveal immediately; anyone else after the on-chain AFK
+  // timeout. All-in runout is handled on-chain (awaitingCommunityReveal stays
+  // set so the next street fires automatically via the auto-reveal effect).
   // ============================================================
   const revealCommunityCards = useCallback(async (): Promise<string> => {
-    // Use ref to prevent duplicate reveal attempts (race condition)
     if (communityRevealInProgressRef.current) {
-      console.log("[Community Reveal] Already in progress, skipping duplicate attempt");
-      return ""; // Return empty string to indicate skipped
+      return ""; // already in progress
     }
-
-    if (!program || !provider || !publicKey || !gameState.tablePDA || !gameState.table || !gameState.deckState || !gameState.handState) {
+    if (!program || !provider || !publicKey || !gameState.tablePDA || !gameState.table || !gameState.handState) {
       throw new Error("Not ready to reveal community cards");
     }
-
-    // Authority can always reveal. Non-authority can reveal after timeout (60s).
-    // The on-chain program validates the timeout, so we just check if we should attempt it.
-    const isAuthority = gameState.isAuthority;
-    if (!isAuthority) {
-      // Check if timeout has passed for non-authority
-      // IMPORTANT: Use Solana cluster time, not local time, to avoid clock skew issues
-      const lastActionTimeBN = gameState.handState?.lastActionTime;
-      const lastActionTime = typeof lastActionTimeBN === 'number' ? lastActionTimeBN : lastActionTimeBN?.toNumber?.() ?? 0;
-
-      // Get Solana cluster time instead of local time
-      const slot = await provider.connection.getSlot();
-      const clusterTime = await provider.connection.getBlockTime(slot);
-      if (!clusterTime) {
-        throw new Error("Could not fetch Solana cluster time");
-      }
-
-      const elapsed = clusterTime - lastActionTime;
-      const COMMUNITY_REVEAL_TIMEOUT = 60;
-
-      if (elapsed < COMMUNITY_REVEAL_TIMEOUT) {
-        throw new Error(`Non-authority must wait ${Math.ceil(COMMUNITY_REVEAL_TIMEOUT - elapsed)}s more for timeout`);
-      }
-      console.log(`[Community Reveal] Non-authority proceeding after ${elapsed}s timeout (cluster time)`);
-    }
-
     if (!gameState.awaitingCommunityReveal) {
       throw new Error("Not awaiting community reveal");
     }
 
-    // Set ref immediately to prevent race conditions
+    // Pick the circuit for the current street.
+    const phase = gameState.phase;
+    let circuit: string;
+    if (phase === "PreFlop") circuit = "reveal_flop";
+    else if (phase === "Flop") circuit = "reveal_turn";
+    else if (phase === "Turn") circuit = "reveal_river";
+    else throw new Error(`Invalid phase for community reveal: ${phase}`);
+
+    // Non-authority must wait for the on-chain AFK timeout (the program also
+    // validates it); pre-check with cluster time to avoid a doomed tx.
+    if (!gameState.isAuthority) {
+      const lastActionTimeBN = gameState.handState?.lastActionTime;
+      const lastActionTime = typeof lastActionTimeBN === 'number' ? lastActionTimeBN : lastActionTimeBN?.toNumber?.() ?? 0;
+      const slot = await provider.connection.getSlot();
+      const clusterTime = await provider.connection.getBlockTime(slot);
+      if (!clusterTime) throw new Error("Could not fetch Solana cluster time");
+      const elapsed = clusterTime - lastActionTime;
+      const COMMUNITY_REVEAL_TIMEOUT = 60;
+      if (elapsed < COMMUNITY_REVEAL_TIMEOUT) {
+        throw new Error(`Non-authority must wait ${Math.ceil(COMMUNITY_REVEAL_TIMEOUT - elapsed)}s more for timeout`);
+      }
+    }
+
     communityRevealInProgressRef.current = true;
-    console.log("Starting community card reveal...");
     setGameState((prev) => ({ ...prev, isRevealingCommunity: true }));
 
     try {
@@ -1677,164 +1155,43 @@ export function usePokerGame(sessionKey?: SessionKeyParam | null): UsePokerGameR
       const [handPDA] = getHandPDA(gameState.tablePDA, handNumber);
       const [deckPDA] = getDeckPDA(gameState.tablePDA, handNumber);
 
-      // Determine which cards to reveal based on current phase
-      const phase = gameState.phase;
+      const computationOffset = newComputationOffset();
+      const arcium = await buildQueueAccounts(circuit, computationOffset);
 
-      // Check if all players are all-in (no more betting possible)
-      // In this case, we reveal all remaining community cards at once
-      // Logic matches Rust can_anyone_bet(): active_players & !all_in_players >= 2
-      const activePlayers = gameState.handState.activePlayers ?? 0;
-      const allInPlayers = gameState.handState.allInPlayers ?? 0;
-      const canBetBitmap = activePlayers & ~allInPlayers;
-      // Count bits set (players who can still bet)
-      const playersWhoCanBet = canBetBitmap.toString(2).split('1').length - 1;
-      const allInRunout = playersWhoCanBet < 2;
+      const builder =
+        circuit === "reveal_flop"
+          ? program.methods.revealFlop(computationOffset)
+          : circuit === "reveal_turn"
+          ? program.methods.revealTurn(computationOffset)
+          : program.methods.revealRiver(computationOffset);
 
-      console.log(`[Community Reveal] activePlayers=${activePlayers}, allInPlayers=${allInPlayers}, canBet=${playersWhoCanBet}, allInRunout=${allInRunout}`);
+      const tx = await builder
+        .accountsPartial({
+          payer: publicKey,
+          caller: publicKey,
+          ...arcium,
+          table: gameState.tablePDA,
+          handState: handPDA,
+          deckState: deckPDA,
+        })
+        .rpc();
 
-      let startIdx: number;
-      let cardCount: number;
+      await provider.connection.confirmTransaction(tx, "confirmed");
+      // Callback writes the board on-chain and advances the phase.
+      await awaitFinalization(provider, computationOffset, program.programId);
 
-      if (phase === "PreFlop") {
-        if (allInRunout) {
-          startIdx = 0;
-          cardCount = 5; // All 5 community cards
-        } else {
-          startIdx = 0;
-          cardCount = 3; // Flop: cards 0, 1, 2
-        }
-      } else if (phase === "Flop") {
-        if (allInRunout) {
-          startIdx = 3;
-          cardCount = 2; // Turn + River: cards 3, 4
-        } else {
-          startIdx = 3;
-          cardCount = 1; // Turn: card 3
-        }
-      } else if (phase === "Turn") {
-        startIdx = 4;
-        cardCount = 1; // River: card 4
-      } else {
-        throw new Error(`Invalid phase for community reveal: ${phase}`);
-      }
-
-      console.log(`Revealing ${cardCount} community card(s) starting at index ${startIdx} for phase ${phase}`);
-
-      // Get encrypted handles from deck state (cards 0-4 are community cards)
-      const handles: bigint[] = [];
-      for (let i = startIdx; i < startIdx + cardCount; i++) {
-        const handle = BigInt(gameState.deckState.cards[i].toString());
-        handles.push(handle);
-        console.log(`  Card ${i}: handle ${handle.toString()}`);
-      }
-
-      // Decrypt community cards with attestation (authority has allowance for all cards)
-      console.log("Decrypting community cards via Inco...");
-      const { decrypt } = await import("@inco/solana-sdk");
-      const handleStrings = handles.map((h) => h.toString(10));
-
-      // Caller uses their wallet to decrypt (any player with allowance can decrypt)
-      const result = await decrypt(handleStrings, {
-        address: publicKey,
-        signMessage: signMessage!,
-      });
-
-      // Parse decrypted values
-      const cardValues: number[] = result.plaintexts.map((pt: string) => parseInt(pt, 10));
-      console.log("Decrypted community cards:", cardValues);
-
-      // Validate card values
-      for (const card of cardValues) {
-        if (card < 0 || card > 51) {
-          throw new Error(`Invalid community card value: ${card}`);
-        }
-      }
-
-      // Get Ed25519 instructions for verification
-      const ed25519Ixs = result.ed25519Instructions || [];
-      if (ed25519Ixs.length !== cardCount) {
-        throw new Error(`Expected ${cardCount} Ed25519 instructions, got ${ed25519Ixs.length}`);
-      }
-
-      console.log(`Building reveal_community transaction with ${cardCount} Ed25519 verification instruction(s)`);
-
-      // Use session key signer when available (authority only), otherwise real wallet
-      const signerKey = sessionKey?.isActive ? sessionKey.signerPublicKey : publicKey;
-      const sessionTokenAccount = sessionKey?.isActive ? sessionKey.sessionTokenPDA : null;
-
-      // Build reveal_community instruction
-      // Convert to Buffer for Anchor's Vec<u8> serialization
-      const cardsBuffer = Buffer.from(cardValues);
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const communityAccounts: any = {
-        caller: signerKey,
-        table: gameState.tablePDA,
-        handState: handPDA,
-        deckState: deckPDA,
-        instructionsSysvar: new PublicKey("Sysvar1nstructions1111111111111111111111111"),
-      };
-      if (sessionTokenAccount) {
-        communityAccounts.sessionToken = sessionTokenAccount;
-      }
-      const revealIx = await program.methods
-        .revealCommunity(cardsBuffer)
-        .accountsPartial(communityAccounts)
-        .instruction();
-
-      // Build transaction: Ed25519 instructions first, then reveal_community
-      const tx = new Transaction();
-
-      // Add Ed25519 verification instructions
-      for (const ed25519Ix of ed25519Ixs) {
-        tx.add(ed25519Ix);
-      }
-
-      // Add reveal_community instruction last
-      tx.add(revealIx);
-
-      let signature: string;
-      if (sessionKey?.isActive) {
-        // Session key signs — no wallet popup
-        signature = await sessionKey.sendWithSession(tx);
-      } else {
-        // Wallet signs — popup required
-        const { blockhash, lastValidBlockHeight } = await provider.connection.getLatestBlockhash();
-        tx.recentBlockhash = blockhash;
-        tx.feePayer = publicKey;
-        const signedTx = await provider.wallet.signTransaction(tx);
-        signature = await provider.connection.sendRawTransaction(signedTx.serialize());
-        await provider.connection.confirmTransaction({
-          signature,
-          blockhash,
-          lastValidBlockHeight,
-        }, "confirmed");
-      }
-
-      console.log("Community cards revealed on-chain:", signature);
-      setGameState((prev) => ({
-        ...prev,
-        isRevealingCommunity: false,
-        awaitingCommunityReveal: false, // Will be updated by refresh anyway
-      }));
-
-      // Refresh state to get updated phase and community cards
+      setGameState((prev) => ({ ...prev, isRevealingCommunity: false, awaitingCommunityReveal: false }));
       await refreshState();
-
-      // Delay ref reset to allow React state to propagate and prevent race conditions
-      // The useEffect checks both awaitingCommunityReveal AND the ref, so this prevents
-      // duplicate triggers while React batches and processes state updates
-      setTimeout(() => {
-        communityRevealInProgressRef.current = false;
-      }, 1000);
-
-      return signature;
+      setTimeout(() => { communityRevealInProgressRef.current = false; }, 1000);
+      return tx;
     } catch (e) {
-      console.error("Failed to reveal community cards:", e);
-      communityRevealInProgressRef.current = false; // Reset ref on error
+      communityRevealInProgressRef.current = false;
       setGameState((prev) => ({ ...prev, isRevealingCommunity: false }));
+      const message = parseAnchorError(e);
+      setError(message);
       throw e;
     }
-  }, [program, provider, publicKey, signMessage, gameState.tablePDA, gameState.table, gameState.deckState, gameState.handState, gameState.phase, gameState.isAuthority, gameState.awaitingCommunityReveal, refreshState, sessionKey]);
+  }, [program, provider, publicKey, gameState.tablePDA, gameState.table, gameState.handState, gameState.phase, gameState.isAuthority, gameState.awaitingCommunityReveal, buildQueueAccounts, refreshState]);
 
   // ============================================================
   // Auto-reveal community cards:
@@ -1929,117 +1286,14 @@ export function usePokerGame(sessionKey?: SessionKeyParam | null): UsePokerGameR
   }, [gameState.isAuthority, gameState.awaitingCommunityReveal, gameState.isRevealingCommunity, gameState.handState?.lastActionTime, revealCommunityCards]);
 
   // ============================================================
-  // Game Liveness: Self-grant allowance after timeout
+  // Retired liveness instructions. Under Arcium MPC there are no per-card
+  // allowances (grant_own_allowance) and showdown reveal is a single batched
+  // MPC call driven by revealCards() rather than a per-player Ed25519 reveal
+  // that could time out (timeout_reveal). These stubs keep the public API
+  // stable for the table page; they resolve immediately.
   // ============================================================
-  const grantOwnAllowance = useCallback(async (): Promise<string> => {
-    if (!program || !provider || !publicKey || !gameState.tablePDA || !gameState.table || gameState.currentPlayerSeat === null) {
-      throw new Error("Not ready - wallet not connected or not at table");
-    }
-
-    setLoading(true);
-    setError(null);
-
-    try {
-      const handNumber = BigInt(gameState.table.handNumber.toNumber());
-      const [handPDA] = getHandPDA(gameState.tablePDA, handNumber);
-      const [seatPDA] = getSeatPDA(gameState.tablePDA, gameState.currentPlayerSeat);
-
-      // Fetch seat to get encrypted handles
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const accounts = program.account as any;
-      const seat = await accounts.playerSeat.fetch(seatPDA) as PlayerSeatAccount;
-
-      const handle1 = BigInt(seat.holeCard1.toString());
-      const handle2 = BigInt(seat.holeCard2.toString());
-
-      // Verify cards are encrypted
-      if (handle1 <= BigInt(255) || handle2 <= BigInt(255)) {
-        throw new Error("Cards not encrypted - nothing to grant allowance for");
-      }
-
-      // Derive allowance PDAs
-      const [allowancePDA1] = getAllowancePDA(handle1, publicKey);
-      const [allowancePDA2] = getAllowancePDA(handle2, publicKey);
-
-      console.log("Self-granting allowance after timeout...");
-
-      const tx = await program.methods
-        .grantOwnAllowance(gameState.currentPlayerSeat)
-        .accounts({
-          player: publicKey,
-          table: gameState.tablePDA,
-          handState: handPDA,
-          playerSeat: seatPDA,
-          allowanceCard1: allowancePDA1,
-          allowanceCard2: allowancePDA2,
-          incoProgram: INCO_PROGRAM_ID,
-          systemProgram: SystemProgram.programId,
-        })
-        .rpc();
-
-      await provider.connection.confirmTransaction(tx, "confirmed");
-      console.log("Self-granted allowance:", tx);
-
-      // Update state
-      setGameState((prev) => ({
-        ...prev,
-        areAllowancesGranted: true,
-        encryptionHandNumber: gameState.table!.handNumber.toNumber(),
-      }));
-
-      await refreshState();
-      return tx;
-    } catch (e) {
-      const message = parseAnchorError(e);
-      setError(message);
-      throw e;
-    } finally {
-      setLoading(false);
-    }
-  }, [program, provider, publicKey, gameState.tablePDA, gameState.table, gameState.currentPlayerSeat, refreshState]);
-
-  // ============================================================
-  // Game Liveness: Timeout reveal - muck non-revealing player
-  // ============================================================
-  const timeoutReveal = useCallback(async (targetSeat: number): Promise<string> => {
-    if (!program || !provider || !publicKey || !gameState.tablePDA || !gameState.table) {
-      throw new Error("Not ready - wallet not connected or no table");
-    }
-
-    setLoading(true);
-    setError(null);
-
-    try {
-      const handNumber = BigInt(gameState.table.handNumber.toNumber());
-      const [handPDA] = getHandPDA(gameState.tablePDA, handNumber);
-      const [targetSeatPDA] = getSeatPDA(gameState.tablePDA, targetSeat);
-
-      console.log(`Timing out player at seat ${targetSeat} for not revealing cards...`);
-
-      const tx = await program.methods
-        .timeoutReveal(targetSeat)
-        .accounts({
-          caller: publicKey,
-          table: gameState.tablePDA,
-          handState: handPDA,
-          targetPlayer: targetSeatPDA,
-          systemProgram: SystemProgram.programId,
-        })
-        .rpc();
-
-      await provider.connection.confirmTransaction(tx, "confirmed");
-      console.log("Player timed out and mucked:", tx);
-
-      await refreshState();
-      return tx;
-    } catch (e) {
-      const message = parseAnchorError(e);
-      setError(message);
-      throw e;
-    } finally {
-      setLoading(false);
-    }
-  }, [program, provider, publicKey, gameState.tablePDA, gameState.table, refreshState]);
+  const grantOwnAllowance = useCallback(async (): Promise<string> => "", []);
+  const timeoutReveal = useCallback(async (_targetSeat: number): Promise<string> => "", []);
 
   // ============================================================
   // Game Liveness: Close inactive table and return funds

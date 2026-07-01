@@ -5,6 +5,7 @@ node_modules/
 target/
 .anchor/
 .next/
+build/
 
 # IDL outputs
 idl/

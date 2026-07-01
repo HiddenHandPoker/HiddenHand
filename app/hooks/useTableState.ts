@@ -194,30 +194,15 @@ export function useTableState(tableId: string): UseTableStateResult {
             const [seatPDA] = getSeatPDA(tblPDA, i);
             const seat = await accounts.playerSeat.fetch(seatPDA);
 
-            const isCurrentPlayer = publicKey?.equals(seat.player) ?? false;
+            // Arcium MPC: hole cards are NEVER on-chain. The spectator/read-only
+            // view only ever knows a seat's status and — after showdown — its
+            // publicly revealed cards. Live hole cards are held client-side by
+            // the seat owner alone (usePokerGame), so here they are always
+            // [null, null]. This preserves the core privacy invariant.
+            const status = mapPlayerStatus(seat.status);
+            const inHand = status !== "sitting";
 
-            // PRIVACY: Check if cards are encrypted or plaintext
-            const holeCard1BigInt = BigInt(seat.holeCard1.toString());
-            const holeCard2BigInt = BigInt(seat.holeCard2.toString());
-            const isCard1Encrypted = holeCard1BigInt > BigInt(255);
-            const isCard2Encrypted = holeCard2BigInt > BigInt(255);
-            const areCardsEncrypted = isCard1Encrypted || isCard2Encrypted;
-            const hasDealtCards =
-              holeCard1BigInt !== BigInt(255) && holeCard2BigInt !== BigInt(255);
-
-            // PRIVACY INVARIANT: Only the connected player sees their own
-            // plaintext cards. Everyone else gets [null, null]. NEVER expose
-            // encrypted u128 handles.
-            let holeCards: [number | null, number | null] = [null, null];
-            if (isCurrentPlayer && !areCardsEncrypted && hasDealtCards) {
-              const c1 = Number(holeCard1BigInt);
-              const c2 = Number(holeCard2BigInt);
-              if (c1 >= 0 && c1 <= 51 && c2 >= 0 && c2 <= 51) {
-                holeCards = [c1, c2];
-              }
-            }
-
-            // Revealed cards at showdown — these are public, safe to show
+            // Revealed cards at showdown — these are public, safe to show.
             const revealedCard1 = seat.revealedCard1;
             const revealedCard2 = seat.revealedCard2;
             const hasRevealedCards =
@@ -234,10 +219,10 @@ export function useTableState(tableId: string): UseTableStateResult {
               player: seat.player.toString(),
               chips: seat.chips.toNumber(),
               currentBet: seat.totalBetThisHand.toNumber(),
-              holeCards,
-              status: mapPlayerStatus(seat.status),
-              isActive: hasDealtCards,
-              isEncrypted: areCardsEncrypted,
+              holeCards: [null, null],
+              status,
+              isActive: inHand,
+              isEncrypted: inHand && !hasRevealedCards,
               cardsRevealed: seat.cardsRevealed ?? false,
               revealedCards: hasRevealedCards
                 ? [revealedCard1, revealedCard2]

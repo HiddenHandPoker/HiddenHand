@@ -1,8 +1,8 @@
 import { PublicKey } from "@solana/web3.js";
 
-// Program ID from Anchor.toml - synced with keypair
+// Program ID from Anchor.toml - synced with keypair (Arcium MPC build, Phase 3b)
 export const PROGRAM_ID = new PublicKey(
-  "5fcckjDn8wzRSodJbQVpHeuWZ8x4B3htKv1WEMx36XJe"
+  "9chPz3vJDeU7gr4zBtDreJUpVLKbqwrKoQBQQjT1SF5X"
 );
 
 // PDA Seeds

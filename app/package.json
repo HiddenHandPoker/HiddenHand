@@ -10,16 +10,21 @@
   },
   "dependencies": {
     "@anchor-lang/core": "^1.0.2",
-    "@inco/solana-sdk": "^0.0.2",
+    "@arcium-hq/client": "^0.11.2",
+    "@noble/curves": "^1.9.7",
+    "@noble/hashes": "^1.8.0",
     "@solana/spl-token": "^0.4.14",
     "@solana/wallet-adapter-base": "^0.9.27",
     "@solana/wallet-adapter-react": "^0.15.39",
     "@solana/wallet-adapter-react-ui": "^0.9.39",
     "@solana/wallet-adapter-wallets": "^0.19.37",
     "@solana/web3.js": "^1.98.4",
+    "crypto-browserify": "^3.12.1",
     "next": "16.1.1",
     "react": "19.2.3",
-    "react-dom": "19.2.3"
+    "react-dom": "19.2.3",
+    "stream-browserify": "^3.0.0",
+    "vm-browserify": "^1.1.2"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",

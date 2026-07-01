@@ -5,7 +5,7 @@
  * IDL can be found at `target/idl/hiddenhand.json`.
  */
 export type Hiddenhand = {
-  "address": "5fcckjDn8wzRSodJbQVpHeuWZ8x4B3htKv1WEMx36XJe",
+  "address": "9chPz3vJDeU7gr4zBtDreJUpVLKbqwrKoQBQQjT1SF5X",
   "metadata": {
     "name": "hiddenhand",
     "version": "0.1.0",
@@ -14,130 +14,17 @@ export type Hiddenhand = {
   },
   "docs": [
     "HiddenHand - Privacy Poker on Solana",
-    "Using MagicBlock VRF for provably fair shuffling and",
-    "Inco TEE for cryptographic card privacy"
+    "Card shuffle, deal, and reveal run as Arcium MPC circuits (Phase 3b):",
+    "the deck is shuffled in-MPC, stored on-chain as opaque ciphertext, and",
+    "re-fed into every later circuit. All betting/pot/showdown-eval logic stays",
+    "on the public Solana path."
   ],
   "instructions": [
-    {
-      "name": "callbackShuffle",
-      "docs": [
-        "VRF callback - ATOMIC shuffle + encrypt",
-        "Called by VRF oracle, not directly by users",
-        "",
-        "SECURITY: The VRF seed is NEVER stored in account state!",
-        "Shuffle and encryption happen atomically in this single transaction."
-      ],
-      "discriminator": [
-        61,
-        96,
-        191,
-        76,
-        226,
-        182,
-        70,
-        95
-      ],
-      "accounts": [
-        {
-          "name": "vrfProgramIdentity",
-          "signer": true,
-          "address": "9irBy75QS2BN81FUgXuHcjqceJJRuc9oDkAe8TKVvvAw"
-        },
-        {
-          "name": "table",
-          "writable": true,
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  116,
-                  97,
-                  98,
-                  108,
-                  101
-                ]
-              },
-              {
-                "kind": "account",
-                "path": "table.table_id",
-                "account": "table"
-              }
-            ]
-          }
-        },
-        {
-          "name": "handState",
-          "writable": true,
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  104,
-                  97,
-                  110,
-                  100
-                ]
-              },
-              {
-                "kind": "account",
-                "path": "table"
-              },
-              {
-                "kind": "account",
-                "path": "table.hand_number",
-                "account": "table"
-              }
-            ]
-          }
-        },
-        {
-          "name": "deckState",
-          "writable": true,
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  100,
-                  101,
-                  99,
-                  107
-                ]
-              },
-              {
-                "kind": "account",
-                "path": "table"
-              },
-              {
-                "kind": "account",
-                "path": "table.hand_number",
-                "account": "table"
-              }
-            ]
-          }
-        }
-      ],
-      "args": [
-        {
-          "name": "randomness",
-          "type": {
-            "array": [
-              "u8",
-              32
-            ]
-          }
-        }
-      ]
-    },
     {
       "name": "closeInactiveTable",
       "docs": [
         "Close an inactive table and return all funds to players",
-        "Can be called by anyone after 1 hour of inactivity",
-        "Table must be in Waiting status (not mid-hand)",
-        "All seated players receive their chips back"
+        "Can be called by anyone after 1 hour of inactivity"
       ],
       "discriminator": [
         53,
@@ -439,230 +326,94 @@ export type Hiddenhand = {
       ]
     },
     {
-      "name": "encryptHoleCards",
-      "docs": [
-        "Phase 1: Encrypt hole cards using Inco TEE",
-        "Called via Magic Actions after ER commit",
-        "Encrypts plaintext cards and stores handles in PlayerSeat",
-        "Call once per player with their seat_index",
-        "IMPORTANT: After this, call grant_card_allowance to enable decryption"
-      ],
+      "name": "dealToSeat",
       "discriminator": [
-        40,
-        216,
-        64,
-        170,
-        117,
-        35,
-        224,
-        127
+        252,
+        146,
+        205,
+        23,
+        80,
+        48,
+        167,
+        187
       ],
       "accounts": [
         {
-          "name": "authority",
-          "docs": [
-            "The table authority"
-          ],
+          "name": "payer",
           "writable": true,
           "signer": true
         },
         {
-          "name": "table",
+          "name": "signPdaAccount",
+          "writable": true,
           "pda": {
             "seeds": [
               {
                 "kind": "const",
                 "value": [
-                  116,
-                  97,
-                  98,
-                  108,
-                  101
-                ]
-              },
-              {
-                "kind": "account",
-                "path": "table.table_id",
-                "account": "table"
-              }
-            ]
-          }
-        },
-        {
-          "name": "handState",
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  104,
-                  97,
+                  65,
+                  114,
+                  99,
+                  105,
+                  117,
+                  109,
+                  83,
+                  105,
+                  103,
                   110,
-                  100
+                  101,
+                  114,
+                  65,
+                  99,
+                  99,
+                  111,
+                  117,
+                  110,
+                  116
                 ]
-              },
-              {
-                "kind": "account",
-                "path": "table"
-              },
-              {
-                "kind": "account",
-                "path": "table.hand_number",
-                "account": "table"
               }
             ]
           }
         },
         {
-          "name": "playerSeat",
-          "docs": [
-            "The player seat to encrypt cards for"
-          ],
+          "name": "mxeAccount"
+        },
+        {
+          "name": "mempoolAccount",
           "writable": true
         },
         {
-          "name": "incoProgram",
-          "docs": [
-            "The Inco Lightning program for encryption"
-          ],
-          "address": "5sjEbPiqgZrYwR31ahR6Uk9wf5awoX61YGg7jExQSwaj"
+          "name": "executingPool",
+          "writable": true
+        },
+        {
+          "name": "computationAccount",
+          "writable": true
+        },
+        {
+          "name": "compDefAccount"
+        },
+        {
+          "name": "clusterAccount",
+          "writable": true
+        },
+        {
+          "name": "poolAccount",
+          "writable": true,
+          "address": "G2sRWJvi3xoyh5k2gY49eG9L8YhAEWQPtNb1zb1GXTtC"
+        },
+        {
+          "name": "clockAccount",
+          "writable": true,
+          "address": "7EbMUTLo5DjdzbN7s8BXeZwXzEwNQb1hScfRvWg8a6ot"
         },
         {
           "name": "systemProgram",
           "address": "11111111111111111111111111111111"
-        }
-      ],
-      "args": [
-        {
-          "name": "seatIndex",
-          "type": "u8"
-        }
-      ]
-    },
-    {
-      "name": "grantCardAllowance",
-      "docs": [
-        "Phase 2: Grant decryption allowance for encrypted cards",
-        "Must be called AFTER encrypt_hole_cards",
-        "Client should derive allowance PDAs from stored handles:",
-        "PDA = [\"allowance\", handle.to_le_bytes(), player_pubkey]"
-      ],
-      "discriminator": [
-        185,
-        114,
-        158,
-        112,
-        132,
-        195,
-        242,
-        109
-      ],
-      "accounts": [
-        {
-          "name": "authority",
-          "docs": [
-            "The table authority - only authority can grant allowances"
-          ],
-          "writable": true,
-          "signer": true
         },
         {
-          "name": "table",
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  116,
-                  97,
-                  98,
-                  108,
-                  101
-                ]
-              },
-              {
-                "kind": "account",
-                "path": "table.table_id",
-                "account": "table"
-              }
-            ]
-          }
-        },
-        {
-          "name": "playerSeat",
-          "docs": [
-            "The player seat with encrypted cards"
-          ]
-        },
-        {
-          "name": "allowanceCard1",
-          "docs": [
-            "Allowance account for card 1",
-            "Must be PDA: [\"allowance\", hole_card_1.to_le_bytes(), player_pubkey]"
-          ],
-          "writable": true
-        },
-        {
-          "name": "allowanceCard2",
-          "docs": [
-            "Allowance account for card 2",
-            "Must be PDA: [\"allowance\", hole_card_2.to_le_bytes(), player_pubkey]"
-          ],
-          "writable": true
-        },
-        {
-          "name": "player",
-          "docs": [
-            "The player who should be able to decrypt"
-          ]
-        },
-        {
-          "name": "incoProgram",
-          "docs": [
-            "The Inco Lightning program"
-          ],
-          "address": "5sjEbPiqgZrYwR31ahR6Uk9wf5awoX61YGg7jExQSwaj"
-        },
-        {
-          "name": "systemProgram",
-          "address": "11111111111111111111111111111111"
-        }
-      ],
-      "args": [
-        {
-          "name": "seatIndex",
-          "type": "u8"
-        }
-      ]
-    },
-    {
-      "name": "grantCommunityAllowances",
-      "docs": [
-        "Grant community card allowances to a player",
-        "This enables the player to decrypt community cards via Inco, which is needed",
-        "if they want to reveal community cards when authority is AFK",
-        "",
-        "Called by authority after VRF shuffle for each active player.",
-        "remaining_accounts: 5 allowance PDAs for community cards [card0-card4]"
-      ],
-      "discriminator": [
-        96,
-        96,
-        218,
-        243,
-        156,
-        151,
-        51,
-        191
-      ],
-      "accounts": [
-        {
-          "name": "authority",
-          "docs": [
-            "Authority granting allowances (only authority can grant)"
-          ],
-          "writable": true,
-          "signer": true
+          "name": "arciumProgram",
+          "address": "Arcj82pX7HxYKLR92qvgZUAd7vGS1k4hQvAFcPATFdEQ"
         },
         {
           "name": "table",
@@ -688,6 +439,7 @@ export type Hiddenhand = {
         },
         {
           "name": "handState",
+          "writable": true,
           "pda": {
             "seeds": [
               {
@@ -738,144 +490,357 @@ export type Hiddenhand = {
         },
         {
           "name": "playerSeat",
-          "docs": [
-            "The player seat to grant allowances for"
-          ]
-        },
-        {
-          "name": "player",
-          "docs": [
-            "The player who should be able to decrypt"
-          ]
-        },
-        {
-          "name": "incoProgram",
-          "docs": [
-            "The Inco Lightning program"
-          ],
-          "address": "5sjEbPiqgZrYwR31ahR6Uk9wf5awoX61YGg7jExQSwaj"
-        },
-        {
-          "name": "systemProgram",
-          "address": "11111111111111111111111111111111"
+          "writable": true
         }
       ],
       "args": [
         {
+          "name": "computationOffset",
+          "type": "u64"
+        },
+        {
           "name": "seatIndex",
           "type": "u8"
+        },
+        {
+          "name": "seatPubkey",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
+        },
+        {
+          "name": "seatNonce",
+          "type": "u128"
         }
       ]
     },
     {
-      "name": "grantOwnAllowance",
-      "docs": [
-        "Allow player to grant their OWN decryption allowance after timeout",
-        "If authority doesn't grant allowances within 60 seconds, players can self-grant",
-        "This prevents the game from getting stuck if authority is AFK"
-      ],
+      "name": "dealToSeatCallback",
       "discriminator": [
-        89,
-        131,
-        35,
-        202,
-        197,
-        228,
-        1,
-        16
+        12,
+        177,
+        21,
+        174,
+        146,
+        209,
+        175,
+        50
       ],
       "accounts": [
         {
-          "name": "player",
-          "docs": [
-            "The player granting their own allowance (must be the seat owner)"
-          ],
+          "name": "arciumProgram",
+          "address": "Arcj82pX7HxYKLR92qvgZUAd7vGS1k4hQvAFcPATFdEQ"
+        },
+        {
+          "name": "compDefAccount"
+        },
+        {
+          "name": "mxeAccount"
+        },
+        {
+          "name": "computationAccount"
+        },
+        {
+          "name": "clusterAccount"
+        },
+        {
+          "name": "instructionsSysvar",
+          "address": "Sysvar1nstructions1111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "output",
+          "type": {
+            "defined": {
+              "name": "signedComputationOutputs",
+              "generics": [
+                {
+                  "kind": "type",
+                  "type": {
+                    "defined": {
+                      "name": "dealToSeatOutput"
+                    }
+                  }
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "initDealToSeatCompDef",
+      "discriminator": [
+        117,
+        227,
+        118,
+        151,
+        147,
+        154,
+        94,
+        175
+      ],
+      "accounts": [
+        {
+          "name": "payer",
           "writable": true,
           "signer": true
         },
         {
-          "name": "table",
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  116,
-                  97,
-                  98,
-                  108,
-                  101
-                ]
-              },
-              {
-                "kind": "account",
-                "path": "table.table_id",
-                "account": "table"
-              }
-            ]
-          }
-        },
-        {
-          "name": "handState",
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  104,
-                  97,
-                  110,
-                  100
-                ]
-              },
-              {
-                "kind": "account",
-                "path": "table"
-              },
-              {
-                "kind": "account",
-                "path": "table.hand_number",
-                "account": "table"
-              }
-            ]
-          }
-        },
-        {
-          "name": "playerSeat",
+          "name": "mxeAccount",
           "writable": true
         },
         {
-          "name": "allowanceCard1",
-          "docs": [
-            "Allowance account for card 1 (will be created by Inco CPI)"
-          ],
+          "name": "compDefAccount",
           "writable": true
         },
         {
-          "name": "allowanceCard2",
-          "docs": [
-            "Allowance account for card 2 (will be created by Inco CPI)"
-          ],
+          "name": "addressLookupTable",
           "writable": true
         },
         {
-          "name": "incoProgram",
-          "docs": [
-            "The Inco Lightning program"
-          ],
-          "address": "5sjEbPiqgZrYwR31ahR6Uk9wf5awoX61YGg7jExQSwaj"
+          "name": "lutProgram",
+          "address": "AddressLookupTab1e1111111111111111111111111"
+        },
+        {
+          "name": "arciumProgram",
+          "address": "Arcj82pX7HxYKLR92qvgZUAd7vGS1k4hQvAFcPATFdEQ"
         },
         {
           "name": "systemProgram",
           "address": "11111111111111111111111111111111"
         }
       ],
-      "args": [
+      "args": []
+    },
+    {
+      "name": "initRevealFlopCompDef",
+      "discriminator": [
+        75,
+        43,
+        20,
+        47,
+        60,
+        46,
+        223,
+        131
+      ],
+      "accounts": [
         {
-          "name": "seatIndex",
-          "type": "u8"
+          "name": "payer",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "mxeAccount",
+          "writable": true
+        },
+        {
+          "name": "compDefAccount",
+          "writable": true
+        },
+        {
+          "name": "addressLookupTable",
+          "writable": true
+        },
+        {
+          "name": "lutProgram",
+          "address": "AddressLookupTab1e1111111111111111111111111"
+        },
+        {
+          "name": "arciumProgram",
+          "address": "Arcj82pX7HxYKLR92qvgZUAd7vGS1k4hQvAFcPATFdEQ"
+        },
+        {
+          "name": "systemProgram",
+          "address": "11111111111111111111111111111111"
         }
-      ]
+      ],
+      "args": []
+    },
+    {
+      "name": "initRevealRiverCompDef",
+      "discriminator": [
+        90,
+        9,
+        148,
+        19,
+        162,
+        62,
+        45,
+        152
+      ],
+      "accounts": [
+        {
+          "name": "payer",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "mxeAccount",
+          "writable": true
+        },
+        {
+          "name": "compDefAccount",
+          "writable": true
+        },
+        {
+          "name": "addressLookupTable",
+          "writable": true
+        },
+        {
+          "name": "lutProgram",
+          "address": "AddressLookupTab1e1111111111111111111111111"
+        },
+        {
+          "name": "arciumProgram",
+          "address": "Arcj82pX7HxYKLR92qvgZUAd7vGS1k4hQvAFcPATFdEQ"
+        },
+        {
+          "name": "systemProgram",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "initRevealTurnCompDef",
+      "discriminator": [
+        77,
+        150,
+        125,
+        27,
+        232,
+        214,
+        120,
+        189
+      ],
+      "accounts": [
+        {
+          "name": "payer",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "mxeAccount",
+          "writable": true
+        },
+        {
+          "name": "compDefAccount",
+          "writable": true
+        },
+        {
+          "name": "addressLookupTable",
+          "writable": true
+        },
+        {
+          "name": "lutProgram",
+          "address": "AddressLookupTab1e1111111111111111111111111"
+        },
+        {
+          "name": "arciumProgram",
+          "address": "Arcj82pX7HxYKLR92qvgZUAd7vGS1k4hQvAFcPATFdEQ"
+        },
+        {
+          "name": "systemProgram",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "initShowdownRevealCompDef",
+      "discriminator": [
+        190,
+        195,
+        19,
+        8,
+        179,
+        28,
+        67,
+        228
+      ],
+      "accounts": [
+        {
+          "name": "payer",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "mxeAccount",
+          "writable": true
+        },
+        {
+          "name": "compDefAccount",
+          "writable": true
+        },
+        {
+          "name": "addressLookupTable",
+          "writable": true
+        },
+        {
+          "name": "lutProgram",
+          "address": "AddressLookupTab1e1111111111111111111111111"
+        },
+        {
+          "name": "arciumProgram",
+          "address": "Arcj82pX7HxYKLR92qvgZUAd7vGS1k4hQvAFcPATFdEQ"
+        },
+        {
+          "name": "systemProgram",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "initShuffleCompDef",
+      "discriminator": [
+        194,
+        175,
+        67,
+        37,
+        158,
+        107,
+        165,
+        180
+      ],
+      "accounts": [
+        {
+          "name": "payer",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "mxeAccount",
+          "writable": true
+        },
+        {
+          "name": "compDefAccount",
+          "writable": true
+        },
+        {
+          "name": "addressLookupTable",
+          "writable": true
+        },
+        {
+          "name": "lutProgram",
+          "address": "AddressLookupTab1e1111111111111111111111111"
+        },
+        {
+          "name": "arciumProgram",
+          "address": "Arcj82pX7HxYKLR92qvgZUAd7vGS1k4hQvAFcPATFdEQ"
+        },
+        {
+          "name": "systemProgram",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": []
     },
     {
       "name": "joinTable",
@@ -1202,297 +1167,105 @@ export type Hiddenhand = {
       ]
     },
     {
-      "name": "requestShuffle",
-      "docs": [
-        "Request VRF randomness for card shuffling",
-        "This initiates the shuffle - VRF oracle will callback with randomness",
-        "",
-        "IMPORTANT: Pass all player seat accounts as remaining_accounts!",
-        "The callback will shuffle + encrypt cards atomically."
-      ],
+      "name": "revealFlop",
       "discriminator": [
-        130,
-        20,
-        53,
-        22,
-        23,
-        102,
-        225,
-        135
+        187,
+        231,
+        36,
+        222,
+        69,
+        4,
+        1,
+        182
       ],
       "accounts": [
         {
-          "name": "authority",
+          "name": "payer",
           "writable": true,
           "signer": true
         },
         {
-          "name": "table",
-          "writable": true,
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  116,
-                  97,
-                  98,
-                  108,
-                  101
-                ]
-              },
-              {
-                "kind": "account",
-                "path": "table.table_id",
-                "account": "table"
-              }
-            ]
-          }
-        },
-        {
-          "name": "handState",
-          "writable": true,
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  104,
-                  97,
-                  110,
-                  100
-                ]
-              },
-              {
-                "kind": "account",
-                "path": "table"
-              },
-              {
-                "kind": "account",
-                "path": "table.hand_number",
-                "account": "table"
-              }
-            ]
-          }
-        },
-        {
-          "name": "deckState",
-          "writable": true,
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  100,
-                  101,
-                  99,
-                  107
-                ]
-              },
-              {
-                "kind": "account",
-                "path": "table"
-              },
-              {
-                "kind": "account",
-                "path": "table.hand_number",
-                "account": "table"
-              }
-            ]
-          }
-        },
-        {
-          "name": "oracleQueue",
-          "writable": true,
-          "address": "Cuj97ggrhhidhbu39TijNVqE74xvKJ69gDervRUXAxGh"
-        },
-        {
-          "name": "incoProgram",
+          "name": "caller",
           "docs": [
-            "The Inco Lightning program for encryption (passed to callback)"
+            "The account whose authority/timeout is checked to reveal."
           ],
-          "address": "5sjEbPiqgZrYwR31ahR6Uk9wf5awoX61YGg7jExQSwaj"
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "signPdaAccount",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  65,
+                  114,
+                  99,
+                  105,
+                  117,
+                  109,
+                  83,
+                  105,
+                  103,
+                  110,
+                  101,
+                  114,
+                  65,
+                  99,
+                  99,
+                  111,
+                  117,
+                  110,
+                  116
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "mxeAccount"
+        },
+        {
+          "name": "mempoolAccount",
+          "writable": true
+        },
+        {
+          "name": "executingPool",
+          "writable": true
+        },
+        {
+          "name": "computationAccount",
+          "writable": true
+        },
+        {
+          "name": "compDefAccount"
+        },
+        {
+          "name": "clusterAccount",
+          "writable": true
+        },
+        {
+          "name": "poolAccount",
+          "writable": true,
+          "address": "G2sRWJvi3xoyh5k2gY49eG9L8YhAEWQPtNb1zb1GXTtC"
+        },
+        {
+          "name": "clockAccount",
+          "writable": true,
+          "address": "7EbMUTLo5DjdzbN7s8BXeZwXzEwNQb1hScfRvWg8a6ot"
         },
         {
           "name": "systemProgram",
           "address": "11111111111111111111111111111111"
         },
         {
-          "name": "programIdentity",
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  105,
-                  100,
-                  101,
-                  110,
-                  116,
-                  105,
-                  116,
-                  121
-                ]
-              }
-            ]
-          }
-        },
-        {
-          "name": "vrfProgram",
-          "address": "Vrf1RNUjXmQGjmQrQLvJHs9SNkvDJEsRVFPkfSQUwGz"
-        },
-        {
-          "name": "slotHashes",
-          "address": "SysvarS1otHashes111111111111111111111111111"
-        }
-      ],
-      "args": []
-    },
-    {
-      "name": "revealCards",
-      "docs": [
-        "Reveal cards at showdown with Ed25519 signature verification",
-        "",
-        "Players call this at Showdown phase to reveal their decrypted cards.",
-        "The transaction must include Ed25519 verification instructions from",
-        "Inco's attested decryption to prove the revealed values are correct."
-      ],
-      "discriminator": [
-        49,
-        29,
-        188,
-        98,
-        30,
-        81,
-        141,
-        168
-      ],
-      "accounts": [
-        {
-          "name": "signer",
-          "docs": [
-            "The signer — either the player's real wallet or their session key"
-          ],
-          "writable": true,
-          "signer": true
+          "name": "arciumProgram",
+          "address": "Arcj82pX7HxYKLR92qvgZUAd7vGS1k4hQvAFcPATFdEQ"
         },
         {
           "name": "table",
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  116,
-                  97,
-                  98,
-                  108,
-                  101
-                ]
-              },
-              {
-                "kind": "account",
-                "path": "table.table_id",
-                "account": "table"
-              }
-            ]
-          }
-        },
-        {
-          "name": "handState",
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  104,
-                  97,
-                  110,
-                  100
-                ]
-              },
-              {
-                "kind": "account",
-                "path": "table"
-              },
-              {
-                "kind": "account",
-                "path": "table.hand_number",
-                "account": "table"
-              }
-            ]
-          }
-        },
-        {
-          "name": "playerSeat",
-          "writable": true
-        },
-        {
-          "name": "sessionToken",
-          "docs": [
-            "Session token account — optional. Validates session key authorization."
-          ],
-          "optional": true
-        },
-        {
-          "name": "instructionsSysvar",
-          "docs": [
-            "Instructions sysvar for Ed25519 signature verification"
-          ],
-          "address": "Sysvar1nstructions1111111111111111111111111"
-        }
-      ],
-      "args": [
-        {
-          "name": "card1",
-          "type": "u8"
-        },
-        {
-          "name": "card2",
-          "type": "u8"
-        }
-      ]
-    },
-    {
-      "name": "revealCommunity",
-      "docs": [
-        "Reveal community cards (flop/turn/river) with Ed25519 signature verification",
-        "",
-        "Authority calls this when betting round completes and community cards need to be revealed.",
-        "Community cards are encrypted during VRF shuffle for privacy - this reveals them.",
-        "",
-        "The transaction must include Ed25519 verification instructions for each card from",
-        "Inco's attested decryption to prove the revealed values are correct.",
-        "",
-        "Card count depends on phase:",
-        "- PreFlop -> Flop: 3 cards (or 5 if all-in runout)",
-        "- Flop -> Turn: 1 card (or 2 if all-in runout)",
-        "- Turn -> River: 1 card"
-      ],
-      "discriminator": [
-        197,
-        172,
-        51,
-        186,
-        18,
-        152,
-        175,
-        87
-      ],
-      "accounts": [
-        {
-          "name": "caller",
-          "docs": [
-            "Caller revealing the community cards",
-            "Authority can call immediately (with or without session key),",
-            "others must wait for timeout"
-          ],
-          "writable": true,
-          "signer": true
-        },
-        {
-          "name": "table",
-          "writable": true,
           "pda": {
             "seeds": [
               {
@@ -1567,22 +1340,561 @@ export type Hiddenhand = {
         {
           "name": "sessionToken",
           "docs": [
-            "Session token account — optional. Validates session key for authority."
+            "Session token — optional. Lets the table authority reveal popup-free."
           ],
           "optional": true
-        },
-        {
-          "name": "instructionsSysvar",
-          "docs": [
-            "Instructions sysvar for Ed25519 signature verification"
-          ],
-          "address": "Sysvar1nstructions1111111111111111111111111"
         }
       ],
       "args": [
         {
-          "name": "cards",
-          "type": "bytes"
+          "name": "computationOffset",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "revealFlopCallback",
+      "discriminator": [
+        119,
+        102,
+        45,
+        183,
+        30,
+        8,
+        54,
+        144
+      ],
+      "accounts": [
+        {
+          "name": "arciumProgram",
+          "address": "Arcj82pX7HxYKLR92qvgZUAd7vGS1k4hQvAFcPATFdEQ"
+        },
+        {
+          "name": "compDefAccount"
+        },
+        {
+          "name": "mxeAccount"
+        },
+        {
+          "name": "computationAccount"
+        },
+        {
+          "name": "clusterAccount"
+        },
+        {
+          "name": "instructionsSysvar",
+          "address": "Sysvar1nstructions1111111111111111111111111"
+        },
+        {
+          "name": "table"
+        },
+        {
+          "name": "handState",
+          "writable": true
+        }
+      ],
+      "args": [
+        {
+          "name": "output",
+          "type": {
+            "defined": {
+              "name": "signedComputationOutputs",
+              "generics": [
+                {
+                  "kind": "type",
+                  "type": {
+                    "defined": {
+                      "name": "revealFlopOutput"
+                    }
+                  }
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "revealRiver",
+      "discriminator": [
+        137,
+        134,
+        105,
+        111,
+        92,
+        111,
+        253,
+        16
+      ],
+      "accounts": [
+        {
+          "name": "payer",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "caller",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "signPdaAccount",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  65,
+                  114,
+                  99,
+                  105,
+                  117,
+                  109,
+                  83,
+                  105,
+                  103,
+                  110,
+                  101,
+                  114,
+                  65,
+                  99,
+                  99,
+                  111,
+                  117,
+                  110,
+                  116
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "mxeAccount"
+        },
+        {
+          "name": "mempoolAccount",
+          "writable": true
+        },
+        {
+          "name": "executingPool",
+          "writable": true
+        },
+        {
+          "name": "computationAccount",
+          "writable": true
+        },
+        {
+          "name": "compDefAccount"
+        },
+        {
+          "name": "clusterAccount",
+          "writable": true
+        },
+        {
+          "name": "poolAccount",
+          "writable": true,
+          "address": "G2sRWJvi3xoyh5k2gY49eG9L8YhAEWQPtNb1zb1GXTtC"
+        },
+        {
+          "name": "clockAccount",
+          "writable": true,
+          "address": "7EbMUTLo5DjdzbN7s8BXeZwXzEwNQb1hScfRvWg8a6ot"
+        },
+        {
+          "name": "systemProgram",
+          "address": "11111111111111111111111111111111"
+        },
+        {
+          "name": "arciumProgram",
+          "address": "Arcj82pX7HxYKLR92qvgZUAd7vGS1k4hQvAFcPATFdEQ"
+        },
+        {
+          "name": "table",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  116,
+                  97,
+                  98,
+                  108,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "table.table_id",
+                "account": "table"
+              }
+            ]
+          }
+        },
+        {
+          "name": "handState",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  104,
+                  97,
+                  110,
+                  100
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "table"
+              },
+              {
+                "kind": "account",
+                "path": "table.hand_number",
+                "account": "table"
+              }
+            ]
+          }
+        },
+        {
+          "name": "deckState",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  100,
+                  101,
+                  99,
+                  107
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "table"
+              },
+              {
+                "kind": "account",
+                "path": "table.hand_number",
+                "account": "table"
+              }
+            ]
+          }
+        },
+        {
+          "name": "sessionToken",
+          "optional": true
+        }
+      ],
+      "args": [
+        {
+          "name": "computationOffset",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "revealRiverCallback",
+      "discriminator": [
+        59,
+        241,
+        139,
+        16,
+        109,
+        254,
+        156,
+        29
+      ],
+      "accounts": [
+        {
+          "name": "arciumProgram",
+          "address": "Arcj82pX7HxYKLR92qvgZUAd7vGS1k4hQvAFcPATFdEQ"
+        },
+        {
+          "name": "compDefAccount"
+        },
+        {
+          "name": "mxeAccount"
+        },
+        {
+          "name": "computationAccount"
+        },
+        {
+          "name": "clusterAccount"
+        },
+        {
+          "name": "instructionsSysvar",
+          "address": "Sysvar1nstructions1111111111111111111111111"
+        },
+        {
+          "name": "table"
+        },
+        {
+          "name": "handState",
+          "writable": true
+        }
+      ],
+      "args": [
+        {
+          "name": "output",
+          "type": {
+            "defined": {
+              "name": "signedComputationOutputs",
+              "generics": [
+                {
+                  "kind": "type",
+                  "type": {
+                    "defined": {
+                      "name": "revealRiverOutput"
+                    }
+                  }
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "revealTurn",
+      "discriminator": [
+        51,
+        190,
+        29,
+        5,
+        57,
+        93,
+        210,
+        137
+      ],
+      "accounts": [
+        {
+          "name": "payer",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "caller",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "signPdaAccount",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  65,
+                  114,
+                  99,
+                  105,
+                  117,
+                  109,
+                  83,
+                  105,
+                  103,
+                  110,
+                  101,
+                  114,
+                  65,
+                  99,
+                  99,
+                  111,
+                  117,
+                  110,
+                  116
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "mxeAccount"
+        },
+        {
+          "name": "mempoolAccount",
+          "writable": true
+        },
+        {
+          "name": "executingPool",
+          "writable": true
+        },
+        {
+          "name": "computationAccount",
+          "writable": true
+        },
+        {
+          "name": "compDefAccount"
+        },
+        {
+          "name": "clusterAccount",
+          "writable": true
+        },
+        {
+          "name": "poolAccount",
+          "writable": true,
+          "address": "G2sRWJvi3xoyh5k2gY49eG9L8YhAEWQPtNb1zb1GXTtC"
+        },
+        {
+          "name": "clockAccount",
+          "writable": true,
+          "address": "7EbMUTLo5DjdzbN7s8BXeZwXzEwNQb1hScfRvWg8a6ot"
+        },
+        {
+          "name": "systemProgram",
+          "address": "11111111111111111111111111111111"
+        },
+        {
+          "name": "arciumProgram",
+          "address": "Arcj82pX7HxYKLR92qvgZUAd7vGS1k4hQvAFcPATFdEQ"
+        },
+        {
+          "name": "table",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  116,
+                  97,
+                  98,
+                  108,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "table.table_id",
+                "account": "table"
+              }
+            ]
+          }
+        },
+        {
+          "name": "handState",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  104,
+                  97,
+                  110,
+                  100
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "table"
+              },
+              {
+                "kind": "account",
+                "path": "table.hand_number",
+                "account": "table"
+              }
+            ]
+          }
+        },
+        {
+          "name": "deckState",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  100,
+                  101,
+                  99,
+                  107
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "table"
+              },
+              {
+                "kind": "account",
+                "path": "table.hand_number",
+                "account": "table"
+              }
+            ]
+          }
+        },
+        {
+          "name": "sessionToken",
+          "optional": true
+        }
+      ],
+      "args": [
+        {
+          "name": "computationOffset",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "revealTurnCallback",
+      "discriminator": [
+        170,
+        33,
+        15,
+        121,
+        7,
+        59,
+        114,
+        82
+      ],
+      "accounts": [
+        {
+          "name": "arciumProgram",
+          "address": "Arcj82pX7HxYKLR92qvgZUAd7vGS1k4hQvAFcPATFdEQ"
+        },
+        {
+          "name": "compDefAccount"
+        },
+        {
+          "name": "mxeAccount"
+        },
+        {
+          "name": "computationAccount"
+        },
+        {
+          "name": "clusterAccount"
+        },
+        {
+          "name": "instructionsSysvar",
+          "address": "Sysvar1nstructions1111111111111111111111111"
+        },
+        {
+          "name": "table"
+        },
+        {
+          "name": "handState",
+          "writable": true
+        }
+      ],
+      "args": [
+        {
+          "name": "output",
+          "type": {
+            "defined": {
+              "name": "signedComputationOutputs",
+              "generics": [
+                {
+                  "kind": "type",
+                  "type": {
+                    "defined": {
+                      "name": "revealTurnOutput"
+                    }
+                  }
+                }
+              ]
+            }
+          }
         }
       ]
     },
@@ -1662,6 +1974,469 @@ export type Hiddenhand = {
         }
       ],
       "args": []
+    },
+    {
+      "name": "showdownReveal",
+      "discriminator": [
+        137,
+        41,
+        46,
+        91,
+        79,
+        87,
+        115,
+        245
+      ],
+      "accounts": [
+        {
+          "name": "payer",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "signPdaAccount",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  65,
+                  114,
+                  99,
+                  105,
+                  117,
+                  109,
+                  83,
+                  105,
+                  103,
+                  110,
+                  101,
+                  114,
+                  65,
+                  99,
+                  99,
+                  111,
+                  117,
+                  110,
+                  116
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "mxeAccount"
+        },
+        {
+          "name": "mempoolAccount",
+          "writable": true
+        },
+        {
+          "name": "executingPool",
+          "writable": true
+        },
+        {
+          "name": "computationAccount",
+          "writable": true
+        },
+        {
+          "name": "compDefAccount"
+        },
+        {
+          "name": "clusterAccount",
+          "writable": true
+        },
+        {
+          "name": "poolAccount",
+          "writable": true,
+          "address": "G2sRWJvi3xoyh5k2gY49eG9L8YhAEWQPtNb1zb1GXTtC"
+        },
+        {
+          "name": "clockAccount",
+          "writable": true,
+          "address": "7EbMUTLo5DjdzbN7s8BXeZwXzEwNQb1hScfRvWg8a6ot"
+        },
+        {
+          "name": "systemProgram",
+          "address": "11111111111111111111111111111111"
+        },
+        {
+          "name": "arciumProgram",
+          "address": "Arcj82pX7HxYKLR92qvgZUAd7vGS1k4hQvAFcPATFdEQ"
+        },
+        {
+          "name": "table",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  116,
+                  97,
+                  98,
+                  108,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "table.table_id",
+                "account": "table"
+              }
+            ]
+          }
+        },
+        {
+          "name": "handState",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  104,
+                  97,
+                  110,
+                  100
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "table"
+              },
+              {
+                "kind": "account",
+                "path": "table.hand_number",
+                "account": "table"
+              }
+            ]
+          }
+        },
+        {
+          "name": "deckState",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  100,
+                  101,
+                  99,
+                  107
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "table"
+              },
+              {
+                "kind": "account",
+                "path": "table.hand_number",
+                "account": "table"
+              }
+            ]
+          }
+        }
+      ],
+      "args": [
+        {
+          "name": "computationOffset",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "showdownRevealCallback",
+      "discriminator": [
+        17,
+        171,
+        8,
+        53,
+        156,
+        107,
+        21,
+        236
+      ],
+      "accounts": [
+        {
+          "name": "arciumProgram",
+          "address": "Arcj82pX7HxYKLR92qvgZUAd7vGS1k4hQvAFcPATFdEQ"
+        },
+        {
+          "name": "compDefAccount"
+        },
+        {
+          "name": "mxeAccount"
+        },
+        {
+          "name": "computationAccount"
+        },
+        {
+          "name": "clusterAccount"
+        },
+        {
+          "name": "instructionsSysvar",
+          "address": "Sysvar1nstructions1111111111111111111111111"
+        },
+        {
+          "name": "table"
+        },
+        {
+          "name": "handState",
+          "writable": true
+        }
+      ],
+      "args": [
+        {
+          "name": "output",
+          "type": {
+            "defined": {
+              "name": "signedComputationOutputs",
+              "generics": [
+                {
+                  "kind": "type",
+                  "type": {
+                    "defined": {
+                      "name": "showdownRevealOutput"
+                    }
+                  }
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "shuffle",
+      "discriminator": [
+        179,
+        228,
+        145,
+        133,
+        78,
+        16,
+        250,
+        235
+      ],
+      "accounts": [
+        {
+          "name": "payer",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "signPdaAccount",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  65,
+                  114,
+                  99,
+                  105,
+                  117,
+                  109,
+                  83,
+                  105,
+                  103,
+                  110,
+                  101,
+                  114,
+                  65,
+                  99,
+                  99,
+                  111,
+                  117,
+                  110,
+                  116
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "mxeAccount"
+        },
+        {
+          "name": "mempoolAccount",
+          "writable": true
+        },
+        {
+          "name": "executingPool",
+          "writable": true
+        },
+        {
+          "name": "computationAccount",
+          "writable": true
+        },
+        {
+          "name": "compDefAccount"
+        },
+        {
+          "name": "clusterAccount",
+          "writable": true
+        },
+        {
+          "name": "poolAccount",
+          "writable": true,
+          "address": "G2sRWJvi3xoyh5k2gY49eG9L8YhAEWQPtNb1zb1GXTtC"
+        },
+        {
+          "name": "clockAccount",
+          "writable": true,
+          "address": "7EbMUTLo5DjdzbN7s8BXeZwXzEwNQb1hScfRvWg8a6ot"
+        },
+        {
+          "name": "systemProgram",
+          "address": "11111111111111111111111111111111"
+        },
+        {
+          "name": "arciumProgram",
+          "address": "Arcj82pX7HxYKLR92qvgZUAd7vGS1k4hQvAFcPATFdEQ"
+        },
+        {
+          "name": "table",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  116,
+                  97,
+                  98,
+                  108,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "table.table_id",
+                "account": "table"
+              }
+            ]
+          }
+        },
+        {
+          "name": "handState",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  104,
+                  97,
+                  110,
+                  100
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "table"
+              },
+              {
+                "kind": "account",
+                "path": "table.hand_number",
+                "account": "table"
+              }
+            ]
+          }
+        },
+        {
+          "name": "deckState",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  100,
+                  101,
+                  99,
+                  107
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "table"
+              },
+              {
+                "kind": "account",
+                "path": "table.hand_number",
+                "account": "table"
+              }
+            ]
+          }
+        }
+      ],
+      "args": [
+        {
+          "name": "computationOffset",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "shuffleCallback",
+      "discriminator": [
+        194,
+        63,
+        246,
+        15,
+        138,
+        108,
+        43,
+        64
+      ],
+      "accounts": [
+        {
+          "name": "arciumProgram",
+          "address": "Arcj82pX7HxYKLR92qvgZUAd7vGS1k4hQvAFcPATFdEQ"
+        },
+        {
+          "name": "compDefAccount"
+        },
+        {
+          "name": "mxeAccount"
+        },
+        {
+          "name": "computationAccount"
+        },
+        {
+          "name": "clusterAccount"
+        },
+        {
+          "name": "instructionsSysvar",
+          "address": "Sysvar1nstructions1111111111111111111111111"
+        },
+        {
+          "name": "deckState",
+          "writable": true
+        }
+      ],
+      "args": [
+        {
+          "name": "output",
+          "type": {
+            "defined": {
+              "name": "signedComputationOutputs",
+              "generics": [
+                {
+                  "kind": "type",
+                  "type": {
+                    "defined": {
+                      "name": "shuffleOutput"
+                    }
+                  }
+                }
+              ]
+            }
+          }
+        }
+      ]
     },
     {
       "name": "startHand",
@@ -1832,99 +2607,22 @@ export type Hiddenhand = {
         }
       ],
       "args": []
-    },
-    {
-      "name": "timeoutReveal",
-      "docs": [
-        "Timeout a player who hasn't revealed cards at showdown",
-        "After 3 minutes without revealing, any player can call this to \"muck\" the non-revealer",
-        "Mucked players forfeit their claim to the pot (standard poker rules)"
-      ],
-      "discriminator": [
-        121,
-        66,
-        126,
-        106,
-        105,
-        217,
-        15,
-        105
-      ],
-      "accounts": [
-        {
-          "name": "caller",
-          "docs": [
-            "Anyone can call this after timeout"
-          ],
-          "writable": true,
-          "signer": true
-        },
-        {
-          "name": "table",
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  116,
-                  97,
-                  98,
-                  108,
-                  101
-                ]
-              },
-              {
-                "kind": "account",
-                "path": "table.table_id",
-                "account": "table"
-              }
-            ]
-          }
-        },
-        {
-          "name": "handState",
-          "writable": true,
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  104,
-                  97,
-                  110,
-                  100
-                ]
-              },
-              {
-                "kind": "account",
-                "path": "table"
-              },
-              {
-                "kind": "account",
-                "path": "table.hand_number",
-                "account": "table"
-              }
-            ]
-          }
-        },
-        {
-          "name": "targetPlayer",
-          "writable": true
-        },
-        {
-          "name": "systemProgram",
-          "address": "11111111111111111111111111111111"
-        }
-      ],
-      "args": [
-        {
-          "name": "targetSeat",
-          "type": "u8"
-        }
-      ]
     }
   ],
   "accounts": [
+    {
+      "name": "arciumSignerAccount",
+      "discriminator": [
+        214,
+        157,
+        122,
+        114,
+        117,
+        44,
+        214,
+        74
+      ]
+    },
     {
       "name": "deckState",
       "discriminator": [
@@ -2006,6 +2704,19 @@ export type Hiddenhand = {
       ]
     },
     {
+      "name": "deckShuffled",
+      "discriminator": [
+        34,
+        1,
+        216,
+        81,
+        108,
+        223,
+        225,
+        81
+      ]
+    },
+    {
       "name": "handCompleted",
       "discriminator": [
         84,
@@ -2029,6 +2740,19 @@ export type Hiddenhand = {
         169,
         143,
         43
+      ]
+    },
+    {
+      "name": "holeDealt",
+      "discriminator": [
+        23,
+        253,
+        185,
+        139,
+        35,
+        189,
+        172,
+        218
       ]
     },
     {
@@ -2295,6 +3019,26 @@ export type Hiddenhand = {
       "code": 6049,
       "name": "invalidTokenMint",
       "msg": "Token mint does not match table's configured token"
+    },
+    {
+      "code": 6050,
+      "name": "abortedComputation",
+      "msg": "The MPC computation was aborted"
+    },
+    {
+      "code": 6051,
+      "name": "invalidSeat",
+      "msg": "Seat index does not match the player seat account"
+    },
+    {
+      "code": 6052,
+      "name": "playerNotInHand",
+      "msg": "Player was not dealt into this hand"
+    },
+    {
+      "code": 6053,
+      "name": "alreadyDealt",
+      "msg": "This seat has already been dealt its hole cards"
     }
   ],
   "types": [
@@ -2407,6 +3151,252 @@ export type Hiddenhand = {
       }
     },
     {
+      "name": "activation",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "activationEpoch",
+            "type": {
+              "defined": {
+                "name": "epoch"
+              }
+            }
+          },
+          {
+            "name": "deactivationEpoch",
+            "type": {
+              "defined": {
+                "name": "epoch"
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "arciumSignerAccount",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "bn254g2blsPublicKey",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "array": [
+              "u8",
+              64
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "circuitSource",
+      "type": {
+        "kind": "enum",
+        "variants": [
+          {
+            "name": "local",
+            "fields": [
+              {
+                "defined": {
+                  "name": "localCircuitSource"
+                }
+              }
+            ]
+          },
+          {
+            "name": "onChain",
+            "fields": [
+              {
+                "defined": {
+                  "name": "onChainCircuitSource"
+                }
+              }
+            ]
+          },
+          {
+            "name": "offChain",
+            "fields": [
+              {
+                "defined": {
+                  "name": "offChainCircuitSource"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "clockAccount",
+      "docs": [
+        "An account storing the current network epoch"
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "startEpoch",
+            "type": {
+              "defined": {
+                "name": "epoch"
+              }
+            }
+          },
+          {
+            "name": "currentEpoch",
+            "type": {
+              "defined": {
+                "name": "epoch"
+              }
+            }
+          },
+          {
+            "name": "startEpochTimestamp",
+            "type": {
+              "defined": {
+                "name": "timestamp"
+              }
+            }
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "cluster",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "tdInfo",
+            "type": {
+              "option": {
+                "defined": {
+                  "name": "nodeMetadata"
+                }
+              }
+            }
+          },
+          {
+            "name": "authority",
+            "type": {
+              "option": "pubkey"
+            }
+          },
+          {
+            "name": "clusterSize",
+            "type": "u16"
+          },
+          {
+            "name": "activation",
+            "type": {
+              "defined": {
+                "name": "activation"
+              }
+            }
+          },
+          {
+            "name": "maxCapacity",
+            "type": "u64"
+          },
+          {
+            "name": "cuPrice",
+            "type": "u64"
+          },
+          {
+            "name": "cuPriceProposals",
+            "type": {
+              "array": [
+                "u64",
+                32
+              ]
+            }
+          },
+          {
+            "name": "lastUpdatedEpoch",
+            "type": {
+              "defined": {
+                "name": "epoch"
+              }
+            }
+          },
+          {
+            "name": "nodes",
+            "type": {
+              "vec": {
+                "defined": {
+                  "name": "nodeRef"
+                }
+              }
+            }
+          },
+          {
+            "name": "pendingNodes",
+            "type": {
+              "vec": "u32"
+            }
+          },
+          {
+            "name": "blsPublicKey",
+            "type": {
+              "defined": {
+                "name": "setUnset",
+                "generics": [
+                  {
+                    "kind": "type",
+                    "type": {
+                      "defined": {
+                        "name": "bn254g2blsPublicKey"
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          },
+          {
+            "name": "currentEpochTotalRewards",
+            "type": "u64"
+          },
+          {
+            "name": "rewardsEpoch",
+            "type": {
+              "defined": {
+                "name": "epoch"
+              }
+            }
+          },
+          {
+            "name": "leaderSelector",
+            "type": {
+              "defined": {
+                "name": "leaderSelector"
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
       "name": "communityCardsRevealed",
       "docs": [
         "Emitted when community cards are revealed (flop/turn/river)"
@@ -2465,73 +3455,248 @@ export type Hiddenhand = {
       }
     },
     {
-      "name": "deckState",
+      "name": "computationDefinitionAccount",
       "docs": [
-        "Encrypted deck state for a hand",
-        "Cards are stored as Inco encrypted handles",
-        "",
-        "SECURITY NOTE: The VRF seed is NEVER stored here!",
-        "It only exists in memory during the atomic shuffle+encrypt in callback_shuffle.",
-        "This eliminates the account state leak vector."
+        "An account representing a [ComputationDefinition] in a MXE."
       ],
       "type": {
         "kind": "struct",
         "fields": [
           {
-            "name": "hand",
-            "docs": [
-              "Reference to hand"
-            ],
-            "type": "pubkey"
+            "name": "deactivationSlot",
+            "type": {
+              "option": "u64"
+            }
           },
           {
-            "name": "cards",
+            "name": "cuAmount",
+            "type": "u64"
+          },
+          {
+            "name": "definition",
+            "type": {
+              "defined": {
+                "name": "computationDefinitionMeta"
+              }
+            }
+          },
+          {
+            "name": "circuitSource",
+            "type": {
+              "defined": {
+                "name": "circuitSource"
+              }
+            }
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          },
+          {
+            "name": "padding",
+            "type": {
+              "array": [
+                "u8",
+                24
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "computationDefinitionMeta",
+      "docs": [
+        "A computation definition for execution in a MXE."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "circuitLen",
+            "type": "u32"
+          },
+          {
+            "name": "signature",
+            "type": {
+              "defined": {
+                "name": "computationSignature"
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "computationSignature",
+      "docs": [
+        "The signature of a computation defined in a [ComputationDefinition]."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "parameters",
+            "type": {
+              "vec": {
+                "defined": {
+                  "name": "parameter"
+                }
+              }
+            }
+          },
+          {
+            "name": "outputs",
+            "type": {
+              "vec": {
+                "defined": {
+                  "name": "output"
+                }
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "dealToSeatOutput",
+      "docs": [
+        "The output of the callback instruction. Provided as a struct with ordered fields",
+        "as anchor does not support tuples and tuple structs yet."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "field0",
+            "type": {
+              "defined": {
+                "name": "sharedEncryptedStruct",
+                "generics": [
+                  {
+                    "kind": "const",
+                    "value": "2"
+                  }
+                ]
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "deckShuffled",
+      "docs": [
+        "Emitted when the MPC `shuffle` circuit finishes and the encrypted deck is",
+        "persisted on-chain. Signals the frontend that seats can now be dealt."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "handNumber",
             "docs": [
-              "Shuffled encrypted cards (Inco handles)",
-              "Each u128 is a handle to an encrypted card value (0-51)",
-              "First 5 cards (indices 0-4) are community cards (plaintext until revealed)",
-              "Remaining cards are encrypted hole cards"
+              "Sequential hand number"
+            ],
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "deckState",
+      "docs": [
+        "Deck state for a hand — Arcium MPC edition.",
+        "",
+        "The whole 52-card deck is shuffled once in-MPC (`shuffle` circuit) and stored",
+        "here as an opaque `Enc<Mxe, Pack<[u8;52]>>` ciphertext (`deck` + `deck_nonce`).",
+        "No party — not even a chain observer — can read it. It is re-fed unchanged into",
+        "every later circuit (`deal_to_seat`, `reveal_flop/turn/river`, `showdown_reveal`)",
+        "via `.account(deck_state.key(), 8, 64)` + `deck_nonce`.",
+        "",
+        "`deck` is the FIRST field so it sits at byte offset 8 (right after the 8-byte",
+        "discriminator), which the `.account()` re-feed requires."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "deck",
+            "docs": [
+              "Enc<Mxe, Pack<[u8;52]>> — the whole shuffled deck as opaque ciphertext.",
+              "52 bytes pack into 2 field elements (`[[u8;32];2]`, 64 bytes on-chain).",
+              "MUST be the first field (byte offset 8) for the `.account()` re-feed."
             ],
             "type": {
               "array": [
-                "u128",
-                52
+                {
+                  "array": [
+                    "u8",
+                    32
+                  ]
+                },
+                2
               ]
             }
           },
           {
-            "name": "dealIndex",
+            "name": "deckNonce",
             "docs": [
-              "Next card index to deal"
+              "Nonce the deck was sealed with (re-fed on every read; never changes here)."
             ],
-            "type": "u8"
+            "type": "u128"
+          },
+          {
+            "name": "hand",
+            "docs": [
+              "Reference to the hand this deck belongs to."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "handNumber",
+            "docs": [
+              "Hand number (mirrors HandState.hand_number; used in DeckShuffled event)."
+            ],
+            "type": "u64"
           },
           {
             "name": "isShuffled",
             "docs": [
-              "Whether deck has been shuffled and cards encrypted"
+              "Whether the MPC shuffle has completed and `deck` is populated."
             ],
             "type": "bool"
           },
           {
             "name": "bump",
             "docs": [
-              "PDA bump"
+              "PDA bump."
             ],
             "type": "u8"
-          },
+          }
+        ]
+      }
+    },
+    {
+      "name": "epoch",
+      "docs": [
+        "The network epoch"
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          "u64"
+        ]
+      }
+    },
+    {
+      "name": "feePool",
+      "type": {
+        "kind": "struct",
+        "fields": [
           {
-            "name": "reserved",
-            "docs": [
-              "Reserved space for future use (maintains account size compatibility)",
-              "Previously: vrf_seed [u8; 32] + seed_received bool = 33 bytes"
-            ],
-            "type": {
-              "array": [
-                "u8",
-                33
-              ]
-            }
+            "name": "bump",
+            "type": "u8"
           }
         ]
       }
@@ -2872,11 +4037,539 @@ export type Hiddenhand = {
             "type": "bool"
           },
           {
+            "name": "dealtPlayers",
+            "docs": [
+              "Bitmap of players whose hole cards have been dealt this hand.",
+              "Set per seat by `deal_to_seat`; when it equals `active_players`,",
+              "dealing is complete and the phase advances to PreFlop."
+            ],
+            "type": "u8"
+          },
+          {
             "name": "bump",
             "docs": [
               "PDA bump"
             ],
             "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "holeDealt",
+      "docs": [
+        "Emitted per seat by the `deal_to_seat` MPC callback. The sealed hole cards are",
+        "addressed to a single client key; only the seat that owns `enc_pubkey` can",
+        "decrypt `card0`/`card1` (via the Arcium client RescueCipher)."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "encPubkey",
+            "docs": [
+              "The client x25519 public key the cards were sealed to."
+            ],
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "nonce",
+            "docs": [
+              "Nonce used for the sealed ciphertext (little-endian u128)."
+            ],
+            "type": {
+              "array": [
+                "u8",
+                16
+              ]
+            }
+          },
+          {
+            "name": "card0",
+            "docs": [
+              "Sealed first hole card (one field element)."
+            ],
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "card1",
+            "docs": [
+              "Sealed second hole card (one field element)."
+            ],
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "leaderChoice",
+      "docs": [
+        "The computation chosen by a node to be executed when the node is leader."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "offset",
+            "type": "u64"
+          },
+          {
+            "name": "slotIdx",
+            "type": "u16"
+          }
+        ]
+      }
+    },
+    {
+      "name": "leaderInfo",
+      "docs": [
+        "The information about a node."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "stake",
+            "type": "u64"
+          },
+          {
+            "name": "count",
+            "type": "u64"
+          },
+          {
+            "name": "lastCounterPlusOne",
+            "type": "u64"
+          },
+          {
+            "name": "choice",
+            "type": {
+              "defined": {
+                "name": "leaderChoice"
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "leaderSelector",
+      "docs": [
+        "To select a Leader.",
+        "Uses the greatest divisors method: https://en.wikipedia.org/wiki/D%27Hondt_method"
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "stakingEpoch",
+            "type": {
+              "defined": {
+                "name": "epoch"
+              }
+            }
+          },
+          {
+            "name": "info",
+            "type": {
+              "vec": {
+                "defined": {
+                  "name": "leaderInfo"
+                }
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "localCircuitSource",
+      "type": {
+        "kind": "enum",
+        "variants": [
+          {
+            "name": "mxeKeygen"
+          },
+          {
+            "name": "mxeKeyRecoveryInit"
+          },
+          {
+            "name": "mxeKeyRecoveryFinalize"
+          }
+        ]
+      }
+    },
+    {
+      "name": "mxeAccount",
+      "docs": [
+        "A MPC Execution Environment."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "padding",
+            "type": "u8"
+          },
+          {
+            "name": "cluster",
+            "type": "u32"
+          },
+          {
+            "name": "keygenOffset",
+            "type": "u64"
+          },
+          {
+            "name": "keyRecoveryInitOffset",
+            "type": "u64"
+          },
+          {
+            "name": "mxeProgramId",
+            "type": "pubkey"
+          },
+          {
+            "name": "authority",
+            "type": {
+              "option": "pubkey"
+            }
+          },
+          {
+            "name": "utilityPubkeys",
+            "type": {
+              "defined": {
+                "name": "setUnset",
+                "generics": [
+                  {
+                    "kind": "type",
+                    "type": {
+                      "defined": {
+                        "name": "utilityPubkeys"
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          },
+          {
+            "name": "lutOffsetSlot",
+            "type": "u64"
+          },
+          {
+            "name": "computationDefinitions",
+            "type": {
+              "vec": "u32"
+            }
+          },
+          {
+            "name": "status",
+            "type": {
+              "defined": {
+                "name": "mxeStatus"
+              }
+            }
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          },
+          {
+            "name": "currentEpochRecoveryRewards",
+            "type": "u64"
+          },
+          {
+            "name": "recoveryRewardsEpoch",
+            "type": {
+              "defined": {
+                "name": "epoch"
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "mxeEncryptedStruct",
+      "generics": [
+        {
+          "kind": "const",
+          "name": "len",
+          "type": "usize"
+        }
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "nonce",
+            "type": "u128"
+          },
+          {
+            "name": "ciphertexts",
+            "type": {
+              "array": [
+                {
+                  "array": [
+                    "u8",
+                    32
+                  ]
+                },
+                {
+                  "generic": "len"
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "mxeStatus",
+      "docs": [
+        "The status of an MXE."
+      ],
+      "type": {
+        "kind": "enum",
+        "variants": [
+          {
+            "name": "active"
+          },
+          {
+            "name": "migration"
+          }
+        ]
+      }
+    },
+    {
+      "name": "nodeMetadata",
+      "docs": [
+        "location as [ISO 3166-1 alpha-2](https://www.iso.org/iso-3166-country-codes.html) country code"
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "ip",
+            "type": {
+              "array": [
+                "u8",
+                4
+              ]
+            }
+          },
+          {
+            "name": "peerId",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "location",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "nodeRef",
+      "docs": [
+        "A reference to a node in the cluster.",
+        "The offset is to derive the Node Account."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "offset",
+            "type": "u32"
+          },
+          {
+            "name": "padding",
+            "type": {
+              "array": [
+                "u8",
+                8
+              ]
+            }
+          },
+          {
+            "name": "vote",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "offChainCircuitSource",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "source",
+            "type": "string"
+          },
+          {
+            "name": "hash",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "onChainCircuitSource",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "isCompleted",
+            "type": "bool"
+          },
+          {
+            "name": "uploadAuth",
+            "type": "pubkey"
+          }
+        ]
+      }
+    },
+    {
+      "name": "output",
+      "docs": [
+        "An output of a computation.",
+        "We currently don't support encrypted outputs yet since encrypted values are passed via",
+        "data objects."
+      ],
+      "type": {
+        "kind": "enum",
+        "variants": [
+          {
+            "name": "plaintextBool"
+          },
+          {
+            "name": "plaintextU8"
+          },
+          {
+            "name": "plaintextU16"
+          },
+          {
+            "name": "plaintextU32"
+          },
+          {
+            "name": "plaintextU64"
+          },
+          {
+            "name": "plaintextU128"
+          },
+          {
+            "name": "ciphertext"
+          },
+          {
+            "name": "arcisX25519Pubkey"
+          },
+          {
+            "name": "plaintextFloat"
+          },
+          {
+            "name": "plaintextPoint"
+          },
+          {
+            "name": "plaintextI8"
+          },
+          {
+            "name": "plaintextI16"
+          },
+          {
+            "name": "plaintextI32"
+          },
+          {
+            "name": "plaintextI64"
+          },
+          {
+            "name": "plaintextI128"
+          }
+        ]
+      }
+    },
+    {
+      "name": "parameter",
+      "docs": [
+        "A parameter of a computation.",
+        "We differentiate between plaintext and encrypted parameters and data objects.",
+        "Plaintext parameters are directly provided as their value.",
+        "Encrypted parameters are provided as an offchain reference to the data.",
+        "Data objects are provided as a reference to the data object account."
+      ],
+      "type": {
+        "kind": "enum",
+        "variants": [
+          {
+            "name": "plaintextBool"
+          },
+          {
+            "name": "plaintextU8"
+          },
+          {
+            "name": "plaintextU16"
+          },
+          {
+            "name": "plaintextU32"
+          },
+          {
+            "name": "plaintextU64"
+          },
+          {
+            "name": "plaintextU128"
+          },
+          {
+            "name": "ciphertext"
+          },
+          {
+            "name": "arcisX25519Pubkey"
+          },
+          {
+            "name": "arcisSignature"
+          },
+          {
+            "name": "plaintextFloat"
+          },
+          {
+            "name": "plaintextI8"
+          },
+          {
+            "name": "plaintextI16"
+          },
+          {
+            "name": "plaintextI32"
+          },
+          {
+            "name": "plaintextI64"
+          },
+          {
+            "name": "plaintextI128"
+          },
+          {
+            "name": "plaintextPoint"
           }
         ]
       }
@@ -3000,24 +4693,10 @@ export type Hiddenhand = {
             "type": "u64"
           },
           {
-            "name": "holeCard1",
-            "docs": [
-              "Encrypted hole card 1 (Inco handle)"
-            ],
-            "type": "u128"
-          },
-          {
-            "name": "holeCard2",
-            "docs": [
-              "Encrypted hole card 2 (Inco handle)"
-            ],
-            "type": "u128"
-          },
-          {
             "name": "revealedCard1",
             "docs": [
-              "Revealed plaintext card 1 (0-51, or 255 if not revealed)",
-              "Set via reveal_cards instruction with Ed25519 verification"
+              "Revealed plaintext card 1 (0-51, or 255 if not revealed).",
+              "Written by the `showdown_reveal` MPC callback."
             ],
             "type": "u8"
           },
@@ -3084,6 +4763,59 @@ export type Hiddenhand = {
       }
     },
     {
+      "name": "revealFlopOutput",
+      "docs": [
+        "The output of the callback instruction. Provided as a struct with ordered fields",
+        "as anchor does not support tuples and tuple structs yet."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "field0",
+            "type": {
+              "array": [
+                "u8",
+                3
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "revealRiverOutput",
+      "docs": [
+        "The output of the callback instruction. Provided as a struct with ordered fields",
+        "as anchor does not support tuples and tuple structs yet."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "field0",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "revealTurnOutput",
+      "docs": [
+        "The output of the callback instruction. Provided as a struct with ordered fields",
+        "as anchor does not support tuples and tuple structs yet."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "field0",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
       "name": "sessionToken",
       "type": {
         "kind": "struct",
@@ -3103,6 +4835,88 @@ export type Hiddenhand = {
           {
             "name": "validUntil",
             "type": "i64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "setUnset",
+      "docs": [
+        "Utility struct to store a value that needs to be set by a certain number of participants (keys",
+        "in our case). Once all participants have set the value, the value is considered set and we only",
+        "store it once."
+      ],
+      "generics": [
+        {
+          "kind": "type",
+          "name": "t"
+        }
+      ],
+      "type": {
+        "kind": "enum",
+        "variants": [
+          {
+            "name": "set",
+            "fields": [
+              {
+                "generic": "t"
+              }
+            ]
+          },
+          {
+            "name": "unset",
+            "fields": [
+              {
+                "generic": "t"
+              },
+              {
+                "vec": "bool"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "sharedEncryptedStruct",
+      "generics": [
+        {
+          "kind": "const",
+          "name": "len",
+          "type": "usize"
+        }
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "encryptionKey",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "nonce",
+            "type": "u128"
+          },
+          {
+            "name": "ciphertexts",
+            "type": {
+              "array": [
+                {
+                  "array": [
+                    "u8",
+                    32
+                  ]
+                },
+                {
+                  "generic": "len"
+                }
+              ]
+            }
           }
         ]
       }
@@ -3161,6 +4975,112 @@ export type Hiddenhand = {
               "Unix timestamp"
             ],
             "type": "i64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "showdownRevealOutput",
+      "docs": [
+        "The output of the callback instruction. Provided as a struct with ordered fields",
+        "as anchor does not support tuples and tuple structs yet."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "field0",
+            "type": {
+              "array": [
+                {
+                  "defined": {
+                    "name": "showdownRevealOutputStruct0"
+                  }
+                },
+                9
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "showdownRevealOutputStruct0",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "field0",
+            "type": "u8"
+          },
+          {
+            "name": "field1",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "shuffleOutput",
+      "docs": [
+        "The output of the callback instruction. Provided as a struct with ordered fields",
+        "as anchor does not support tuples and tuple structs yet."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "field0",
+            "type": {
+              "defined": {
+                "name": "mxeEncryptedStruct",
+                "generics": [
+                  {
+                    "kind": "const",
+                    "value": "2"
+                  }
+                ]
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "signedComputationOutputs",
+      "generics": [
+        {
+          "kind": "type",
+          "name": "o"
+        }
+      ],
+      "type": {
+        "kind": "enum",
+        "variants": [
+          {
+            "name": "success",
+            "fields": [
+              {
+                "generic": "o"
+              },
+              {
+                "array": [
+                  "u8",
+                  64
+                ]
+              }
+            ]
+          },
+          {
+            "name": "failure"
+          },
+          {
+            "name": "markerForIdlBuildDoNotUseThis",
+            "fields": [
+              {
+                "generic": "o"
+              }
+            ]
           }
         ]
       }
@@ -3330,6 +5250,62 @@ export type Hiddenhand = {
           },
           {
             "name": "closed"
+          }
+        ]
+      }
+    },
+    {
+      "name": "timestamp",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "timestamp",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "utilityPubkeys",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "x25519Pubkey",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "ed25519VerifyingKey",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "elgamalPubkey",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "pubkeyValidityProof",
+            "type": {
+              "array": [
+                "u8",
+                64
+              ]
+            }
           }
         ]
       }
