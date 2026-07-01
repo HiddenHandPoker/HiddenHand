@@ -26,7 +26,7 @@ import {
   decryptHoleCards,
   queueAccounts,
   awaitFinalization,
-  fetchCallbackEvents,
+  scanRecentEvents,
   newComputationOffset,
   newNonce,
   isRealCard,
@@ -722,10 +722,13 @@ export function usePokerGame(sessionKey?: SessionKeyParam | null): UsePokerGameR
 
       await provider.connection.confirmTransaction(tx, "confirmed");
 
-      // The callback emits a HoleDealt event on the finalization tx. Decrypt the
-      // sealed cards addressed to our key.
-      const finalizeSig = await awaitFinalization(provider, computationOffset, program.programId);
-      const events = await fetchCallbackEvents(provider.connection, program, finalizeSig);
+      // The deal_to_seat callback emits a HoleDealt event addressed to our key.
+      // Arcium runs the callback in its own tx (plus a duplicate that fails), so
+      // awaitFinalization's returned sig is NOT reliably the one carrying the
+      // event — scan the recent program txs for it instead (verified on devnet).
+      await awaitFinalization(provider, computationOffset, program.programId);
+      await new Promise((r) => setTimeout(r, 2500)); // let the callback tx land
+      const events = await scanRecentEvents(provider.connection, program, program.programId);
 
       const myPubHex = Buffer.from(keys.publicKey).toString("hex");
       let decrypted: [number, number] | null = null;
@@ -1165,16 +1168,19 @@ export function usePokerGame(sessionKey?: SessionKeyParam | null): UsePokerGameR
           ? program.methods.revealTurn(computationOffset)
           : program.methods.revealRiver(computationOffset);
 
-      const tx = await builder
-        .accountsPartial({
-          payer: publicKey,
-          caller: publicKey,
-          ...arcium,
-          table: gameState.tablePDA,
-          handState: handPDA,
-          deckState: deckPDA,
-        })
-        .rpc();
+      // Optional session_token must be explicit null when absent (@anchor-lang/core);
+      // build as `any` since accountsPartial's typed shape rejects null.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const revealAccts: any = {
+        payer: publicKey,
+        caller: publicKey,
+        ...arcium,
+        table: gameState.tablePDA,
+        handState: handPDA,
+        deckState: deckPDA,
+        sessionToken: null,
+      };
+      const tx = await builder.accountsPartial(revealAccts).rpc();
 
       await provider.connection.confirmTransaction(tx, "confirmed");
       // Callback writes the board on-chain and advances the phase.
@@ -1408,10 +1414,10 @@ export function usePokerGame(sessionKey?: SessionKeyParam | null): UsePokerGameR
           handState: handPDA,
           deckState: deckPDA,
           playerSeat: seatPDA,
+          // Optional session_token: @anchor-lang/core requires it be explicitly
+          // null when absent, else validateAccounts throws "not provided".
+          sessionToken: sessionKey?.isActive ? sessionKey.sessionTokenPDA : null,
         };
-        if (sessionKey?.isActive) {
-          accounts.sessionToken = sessionKey.sessionTokenPDA;
-        }
 
         if (sessionKey?.isActive) {
           // Session key path — sign with ephemeral key, no wallet popup

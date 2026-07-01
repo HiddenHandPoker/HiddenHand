@@ -355,3 +355,26 @@ export async function fetchCallbackEvents(
   }
   return events;
 }
+
+/**
+ * Scan the most recent program transactions for decoded events.
+ *
+ * Arcium submits the callback that carries `HoleDealt` as its own transaction —
+ * and frequently a duplicate that fails with `AlreadyCallbackedComputation`. So
+ * the signature returned by `awaitComputationFinalization` is NOT reliably the
+ * tx that emitted the event. Scanning the last few program txs finds it robustly.
+ * (Verified on devnet — parsing only the finalize sig silently missed the event.)
+ */
+export async function scanRecentEvents(
+  connection: Connection,
+  program: Program<Idl>,
+  programId: PublicKey,
+  limit = 15
+): Promise<DecodedEvent[]> {
+  const sigs = await connection.getSignaturesForAddress(programId, { limit });
+  const out: DecodedEvent[] = [];
+  for (const s of sigs) {
+    out.push(...(await fetchCallbackEvents(connection, program, s.signature)));
+  }
+  return out;
+}
