@@ -1316,16 +1316,18 @@ export default function TablePage({ params }: { params: Promise<{ tableId: strin
             />
           )}
 
-          {/* Deal Cards timeout panel for non-authority players */}
+          {/* Waiting-for-shuffle panel for non-authority players. Only while the
+              deck is NOT yet shuffled — once it is, the per-player "deal me in"
+              button below takes over (each player deals themselves in). */}
           {!gameState.isAuthority && currentPlayer && gameState.table &&
-            gameState.phase === "Dealing" && (
+            gameState.phase === "Dealing" && !gameState.isDeckShuffled && (
             <AuthorityTimeoutPanel
               lastTimestamp={gameState.lastActionTime}
               delayBeforeShowing={Math.floor(DEAL_TIMEOUT_SECONDS / 2)}
               timeoutSeconds={DEAL_TIMEOUT_SECONDS}
-              waitingMessage="Waiting for authority to deal cards..."
-              readyMessage="Timeout reached - you can deal the cards"
-              buttonLabel="Deal Cards"
+              waitingMessage="Waiting for authority to shuffle the deck..."
+              readyMessage="Timeout reached - you can shuffle the deck"
+              buttonLabel="Shuffle Deck"
               onAction={async () => {
                 playSound("shuffle");
                 return withToast(() => dealCards(), "Dealing cards...", "Cards dealt");
@@ -1394,43 +1396,45 @@ export default function TablePage({ params }: { params: Promise<{ tableId: strin
             </div>
           )}
 
-          {/* Decrypt My Cards button - shows when current player has encrypted cards AND allowances granted */}
-          {/* Button appears for all players once authority grants allowances (detected on-chain) */}
-          {/* FAIRNESS: Requires allPlayersHaveAllowances so no one can decrypt before others */}
-          {/* Also check phase is not Dealing (cards must be dealt first) */}
+          {/* "Deal me in" button — Arcium MPC deal_to_seat.
+              Each seated player runs this themselves (cards seal to their own
+              key), during the Dealing phase after the deck is shuffled. The hand
+              only advances to PreFlop once every player has dealt in, so this
+              MUST be available during Dealing (not hidden as in the old flow). */}
           {currentPlayer && currentPlayer.isEncrypted && gameState.decryptedCards[0] === null &&
-           gameState.areAllowancesGranted && gameState.allPlayersHaveAllowances &&
+           gameState.isDeckShuffled &&
            gameState.tableStatus === "Playing" &&
-           gameState.phase !== "Settled" && gameState.phase !== "Dealing" && (
+           gameState.phase !== "Settled" && gameState.phase !== "Showdown" && (
             <div className="max-w-md mx-auto glass border border-cyan-500/30 rounded-2xl p-5 text-center">
               <div className="flex items-center justify-center gap-2 mb-3">
                 <svg className="w-5 h-5 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
                 </svg>
                 <span className="text-cyan-400 font-semibold">
-                  Your cards are encrypted
+                  Deal yourself in
                 </span>
               </div>
               <p className="text-[var(--text-muted)] text-sm mb-4">
-                Click below to decrypt and view your hole cards
+                Your hole cards are sealed to your key in MPC. Click to deal them
+                to your seat and decrypt them — only you can see them.
               </p>
               {gameState.isDecrypting ? (
                 <div className="text-cyan-400 text-sm flex items-center justify-center gap-2">
                   <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
-                  Decrypting with Inco...
+                  Dealing your cards (MPC, ~15-20s)…
                 </div>
               ) : (
                 <Tooltip
-                  title="🔐 Inco TEE Decryption"
-                  content="Your cards are encrypted on-chain using confidential computing (TEE). Only you can decrypt them locally - no one else can see your hand."
+                  title="🔐 Arcium MPC deal"
+                  content="Your two hole cards are dealt from the sealed deck inside Arcium's MPC network and encrypted to your key. Only you can decrypt them — nobody else, not even a chain observer, sees your hand."
                 >
                   <button
                     onClick={async () => {
                       try {
                         await decryptMyCards();
-                        addGameEvent("privacy", "Cards decrypted via Inco TEE");
+                        addGameEvent("privacy", "Dealt in via Arcium MPC");
                       } catch (e) {
-                        console.error("Decryption failed:", e);
+                        console.error("Deal-in failed:", e);
                       }
                     }}
                     disabled={loading}
@@ -1439,7 +1443,7 @@ export default function TablePage({ params }: { params: Promise<{ tableId: strin
                     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z" />
                     </svg>
-                    Decrypt My Cards
+                    Deal me in
                     <InfoIcon />
                   </button>
                 </Tooltip>
