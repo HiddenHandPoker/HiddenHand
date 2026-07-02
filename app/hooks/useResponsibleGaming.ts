@@ -8,6 +8,10 @@ const STORAGE_PREFIX = "hh_rg_";
 const SESSION_REMINDER_HOURS = 2;
 const SESSION_REMINDER_INTERVAL_HOURS = 1;
 const LIMIT_COOLOFF_MS = 24 * 60 * 60 * 1000; // 24 hours
+// A play "session" is a single sitting. If the stored session hasn't been seen
+// for longer than this (tab closed / walked away), the next load starts fresh
+// instead of counting time since the very first visit.
+const SESSION_IDLE_RESET_MS = 30 * 60 * 1000; // 30 minutes
 
 // ─── Types ───
 
@@ -30,6 +34,7 @@ export interface SelfExclusion {
 export interface SessionData {
   startedAt: number; // Unix ms
   totalDeposited: number; // base units deposited this session
+  lastSeenAt?: number; // Unix ms — last time the session was observed active
 }
 
 export interface DailyDeposits {
@@ -180,18 +185,25 @@ export function useResponsibleGaming(walletAddress: string | null) {
     const threshold = loadJSON<LossThreshold>(storageKey(walletAddress, "loss_threshold"));
     if (threshold) setLossThresholdState(threshold);
 
-    // Start session timer
+    // Start session timer. A session is one sitting: resume the stored one only
+    // if it was active within SESSION_IDLE_RESET_MS, otherwise start fresh. This
+    // stops the timer from counting since the very first visit (and self-heals
+    // stale localStorage that predates lastSeenAt).
     const existingSession = loadJSON<SessionData>(storageKey(walletAddress, "session"));
-    if (existingSession) {
+    const lastSeen = existingSession?.lastSeenAt ?? existingSession?.startedAt ?? 0;
+    const isFresh = existingSession != null && now - lastSeen < SESSION_IDLE_RESET_MS;
+    if (isFresh) {
       setSessionStartedAt(existingSession.startedAt);
       setSessionDeposits(existingSession.totalDeposited);
+      saveJSON(storageKey(walletAddress, "session"), { ...existingSession, lastSeenAt: now });
     } else {
-      const startTime = Date.now();
+      const startTime = now;
       setSessionStartedAt(startTime);
       setSessionDeposits(0);
       saveJSON(storageKey(walletAddress, "session"), {
         startedAt: startTime,
         totalDeposited: 0,
+        lastSeenAt: startTime,
       });
     }
 
@@ -205,6 +217,13 @@ export function useResponsibleGaming(walletAddress: string | null) {
     const tick = () => {
       const elapsed = Date.now() - sessionStartedAt;
       setSessionElapsedMs(elapsed);
+
+      // Mark the session as still active so a continuous sitting isn't treated
+      // as stale on the next load (a closed tab stops ticking → goes stale).
+      if (walletAddress) {
+        const s = loadJSON<SessionData>(storageKey(walletAddress, "session"));
+        if (s) saveJSON(storageKey(walletAddress, "session"), { ...s, lastSeenAt: Date.now() });
+      }
 
       // Check if we should show a break reminder
       const elapsedHours = elapsed / (1000 * 60 * 60);
@@ -220,7 +239,7 @@ export function useResponsibleGaming(walletAddress: string | null) {
     tick();
     const id = setInterval(tick, 60_000); // Update every minute
     return () => clearInterval(id);
-  }, [sessionStartedAt, lastReminderDismissedAt]);
+  }, [sessionStartedAt, lastReminderDismissedAt, walletAddress]);
 
   // ─── Format session time ───
   const formatSessionTime = useCallback((): string => {
