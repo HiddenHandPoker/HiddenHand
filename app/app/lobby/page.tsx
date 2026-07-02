@@ -7,6 +7,7 @@ import Link from "next/link";
 import { WalletButton } from "@/components/WalletButton";
 import { SoundToggle } from "@/components/SoundToggle";
 import { SwapModal } from "@/components/SwapModal";
+import { FaucetButton } from "@/components/FaucetButton";
 import { NETWORK } from "@/contexts/WalletProvider";
 import { useLobby, type StakeTier, type TableSize, type LobbyTable } from "@/hooks/useLobby";
 import { usePokerProgram } from "@/hooks/usePokerProgram";
@@ -326,6 +327,9 @@ export default function LobbyPage() {
 
             {connected && (
               <>
+                {/* Get free devnet chips (HHC) — one-tap buy-in */}
+                <FaucetButton onSuccess={handleRefresh} />
+
                 {/* Quick Play button */}
                 <button
                   onClick={() => setShowQuickPlay(true)}

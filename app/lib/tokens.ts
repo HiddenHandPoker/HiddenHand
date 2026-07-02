@@ -17,6 +17,18 @@ export interface TokenInfo {
   baseUnitsPerToken: number;
 }
 
+// HiddenHand Chips — free play-money token on devnet. Anyone can mint some via
+// the in-app faucet (/api/faucet), so a new player can get chips in one tap
+// instead of hunting for a devnet USDC faucet. This is the DEFAULT table token
+// on devnet.
+export const HHC_DEVNET: TokenInfo = {
+  mint: new PublicKey("59JzBXJybnMs1HaWGXqVL9LS7eiHYcicbuUL78GGYVjC"),
+  name: "HiddenHand Chips",
+  symbol: "HHC",
+  decimals: 6,
+  baseUnitsPerToken: 1_000_000,
+};
+
 // USDC on Solana Devnet (Circle test token)
 export const USDC_DEVNET: TokenInfo = {
   mint: new PublicKey("4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU"),
@@ -37,16 +49,21 @@ export const USDC_MAINNET: TokenInfo = {
 
 /** All supported tokens, keyed by mint address string */
 export const SUPPORTED_TOKENS: Record<string, TokenInfo> = {
+  [HHC_DEVNET.mint.toBase58()]: HHC_DEVNET,
   [USDC_DEVNET.mint.toBase58()]: USDC_DEVNET,
   [USDC_MAINNET.mint.toBase58()]: USDC_MAINNET,
 };
 
+/** The devnet faucet token (free chips, one-tap mint via /api/faucet). */
+export const FAUCET_TOKEN = HHC_DEVNET;
+
 /**
  * Get the default token for the current network.
- * For devnet, use devnet USDC. For mainnet, use mainnet USDC.
+ * Devnet defaults to free HiddenHand Chips (HHC) so new players can get a
+ * one-tap buy-in; mainnet uses USDC.
  */
 export function getDefaultToken(cluster: "devnet" | "mainnet-beta" = "devnet"): TokenInfo {
-  return cluster === "mainnet-beta" ? USDC_MAINNET : USDC_DEVNET;
+  return cluster === "mainnet-beta" ? USDC_MAINNET : HHC_DEVNET;
 }
 
 /**
