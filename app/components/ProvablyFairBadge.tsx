@@ -43,7 +43,7 @@ export const ProvablyFairBadge: FC<ProvablyFairBadgeProps> = ({
             />
           </svg>
           <span className="text-emerald-400 tracking-wide uppercase">
-            VRF Verified
+            MPC Verified
           </span>
         </div>
 

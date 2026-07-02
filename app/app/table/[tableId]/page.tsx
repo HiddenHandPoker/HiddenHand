@@ -678,23 +678,14 @@ export default function TablePage({ params }: { params: Promise<{ tableId: strin
             >
               Solana Privacy Hack
             </a>
-            {" "}with{" "}
+            {" "}powered by{" "}
             <a
-              href="https://magicblock.gg"
-              className="text-purple-400 hover:text-purple-300 transition-colors"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              MagicBlock VRF
-            </a>
-            {" "}&{" "}
-            <a
-              href="https://inco.org"
+              href="https://arcium.com"
               className="text-cyan-400 hover:text-cyan-300 transition-colors"
               target="_blank"
               rel="noopener noreferrer"
             >
-              Inco TEE
+              Arcium MPC
             </a>
           </p>
         </footer>
@@ -1111,16 +1102,16 @@ export default function TablePage({ params }: { params: Promise<{ tableId: strin
                             {gameState.isShuffling && (
                               <div className="flex items-center gap-2 text-purple-400 text-sm">
                                 <div className="animate-spin h-4 w-4 border-2 border-purple-400/30 border-t-purple-400 rounded-full" />
-                                {!gameState.areCardsEncrypted ? "Shuffling & encrypting..." : "Granting allowances..."}
+                                Shuffling the deck in MPC…
                               </div>
                             )}
-                            {/* Cards ready - game can begin */}
-                            {gameState.isDeckShuffled && gameState.allPlayersHaveAllowances && (
+                            {/* Deck shuffled — each player deals themselves in */}
+                            {gameState.isDeckShuffled && (
                               <div className="flex items-center gap-2 text-green-400 text-sm">
                                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                                 </svg>
-                                Cards dealt - click Decrypt to see your hand
+                                Deck shuffled — each player clicks “Deal me in” below
                               </div>
                             )}
                           </>
@@ -1155,81 +1146,15 @@ export default function TablePage({ params }: { params: Promise<{ tableId: strin
                         )
                       )}
 
-                      {/* Inco TEE Encryption - show after cards are dealt */}
-                      {gameState.phase === "PreFlop" && gameState.useIncoPrivacy && !gameState.areCardsEncrypted && !gameState.isEncrypting && (
-                        <button
-                          onClick={async () => {
-                            try {
-                              await encryptAllPlayersCards();
-                              addGameEvent("privacy", "Cards encrypted with Inco TEE");
-                            } catch (e) {
-                              console.error("Encryption failed:", e);
-                            }
-                          }}
-                          disabled={loading}
-                          className="btn-info px-5 py-2.5 rounded-xl text-sm font-semibold disabled:opacity-50 flex items-center gap-2"
-                        >
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                          </svg>
-                          Encrypt Cards (Inco)
-                        </button>
-                      )}
-                      {/* Encryption in progress */}
-                      {gameState.isEncrypting && (
-                        <div className="text-cyan-400 text-sm flex items-center gap-2">
-                          <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
-                          Encrypting cards...
-                        </div>
-                      )}
-                      {/* Cards encrypted indicator */}
-                      {gameState.areCardsEncrypted && (
+                      {/* Deck sealed in MPC — Arcium. No separate encrypt/grant
+                          steps: cards are sealed by the shuffle circuit and each
+                          player deals themselves in (see "Deal me in" below). */}
+                      {gameState.isDeckShuffled && (
                         <div className="flex items-center gap-2 glass-dark px-3 py-1.5 rounded-lg border border-cyan-500/30">
                           <svg className="w-4 h-4 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
                           </svg>
-                          <span className="text-cyan-400 text-xs font-medium">TEE Encrypted</span>
-                        </div>
-                      )}
-                      {/* Grant Allowances - now auto-granted after VRF shuffle completes */}
-                      {/* This indicator shows while auto-grant is in progress */}
-                      {gameState.isAuthority && gameState.areCardsEncrypted && !gameState.allPlayersHaveAllowances && gameState.isShuffling && (
-                        <div className="flex items-center gap-2 glass-dark px-3 py-1.5 rounded-lg border border-blue-500/30">
-                          <svg className="animate-spin w-4 h-4 text-blue-400" fill="none" viewBox="0 0 24 24">
-                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                          </svg>
-                          <span className="text-blue-400 text-xs font-medium">Granting allowances...</span>
-                        </div>
-                      )}
-                      {/* Self-grant allowance button - for non-authority after timeout */}
-                      {gameState.areCardsEncrypted && !gameState.areAllowancesGranted && !gameState.isAuthority && !gameState.isEncrypting &&
-                       gameState.lastActionTime && (Date.now() / 1000 - gameState.lastActionTime) >= ALLOWANCE_TIMEOUT_SECONDS && (
-                        <button
-                          onClick={async () => {
-                            try {
-                              await grantOwnAllowance();
-                              addGameEvent("privacy", "Self-granted decryption allowance after timeout");
-                            } catch (e) {
-                              console.error("Failed to self-grant allowance:", e);
-                            }
-                          }}
-                          disabled={loading}
-                          className="btn-warning px-5 py-2.5 rounded-xl text-sm font-semibold disabled:opacity-50 flex items-center gap-2"
-                        >
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                          </svg>
-                          Grant My Allowance (Timeout)
-                        </button>
-                      )}
-                      {/* Allowances granted indicator - shows when ALL players have allowances */}
-                      {gameState.areCardsEncrypted && gameState.allPlayersHaveAllowances && (
-                        <div className="flex items-center gap-2 glass-dark px-3 py-1.5 rounded-lg border border-green-500/30">
-                          <svg className="w-4 h-4 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                          </svg>
-                          <span className="text-green-400 text-xs font-medium">Ready to Decrypt</span>
+                          <span className="text-cyan-400 text-xs font-medium">Deck sealed in MPC</span>
                         </div>
                       )}
                     </>
@@ -1365,7 +1290,7 @@ export default function TablePage({ params }: { params: Promise<{ tableId: strin
               smallBlind={gameState.smallBlind}
               bigBlind={gameState.bigBlind}
               isShowdownPhase={isShowdownPhase}
-              isVrfVerified={gameState.useVrf && gameState.isDeckShuffled}
+              isVrfVerified={gameState.isDeckShuffled}
               chipBetTrigger={betTrigger}
               chipWinTrigger={winTrigger}
               showWinCelebration={showCelebration}
@@ -1398,13 +1323,16 @@ export default function TablePage({ params }: { params: Promise<{ tableId: strin
 
           {/* "Deal me in" button — Arcium MPC deal_to_seat.
               Each seated player runs this themselves (cards seal to their own
-              key), during the Dealing phase after the deck is shuffled. The hand
-              only advances to PreFlop once every player has dealt in, so this
-              MUST be available during Dealing (not hidden as in the old flow). */}
-          {currentPlayer && currentPlayer.isEncrypted && gameState.decryptedCards[0] === null &&
-           gameState.isDeckShuffled &&
+              key), after the deck is shuffled. Gate on the on-chain bitmaps:
+              show when my seat is active in the hand but NOT yet dealt. (Do NOT
+              gate on seat status — the status only flips to Playing *inside*
+              deal_to_seat, i.e. the very action this button triggers.) The hand
+              advances to PreFlop once every active seat has dealt in. */}
+          {currentPlayer && gameState.currentPlayerSeat !== null && gameState.handState &&
+           gameState.isDeckShuffled && gameState.decryptedCards[0] === null &&
            gameState.tableStatus === "Playing" &&
-           gameState.phase !== "Settled" && gameState.phase !== "Showdown" && (
+           (gameState.handState.activePlayers & (1 << (gameState.currentPlayerSeat ?? 0))) !== 0 &&
+           (gameState.handState.dealtPlayers & (1 << (gameState.currentPlayerSeat ?? 0))) === 0 && (
             <div className="max-w-md mx-auto glass border border-cyan-500/30 rounded-2xl p-5 text-center">
               <div className="flex items-center justify-center gap-2 mb-3">
                 <svg className="w-5 h-5 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">

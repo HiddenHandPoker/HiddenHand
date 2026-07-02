@@ -83,6 +83,7 @@ export interface HandStateAccount {
   lastActionTime: BN;  // Unix timestamp (seconds)
   handStartTime: BN;   // Unix timestamp (seconds)
   awaitingCommunityReveal: boolean; // Whether waiting for community card reveal
+  dealtPlayers: number; // Bitmap of seats that have run deal_to_seat this hand
   bump: number;
 }
 
