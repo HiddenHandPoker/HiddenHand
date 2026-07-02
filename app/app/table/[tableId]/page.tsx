@@ -1075,8 +1075,8 @@ export default function TablePage({ params }: { params: Promise<{ tableId: strin
                             {/* Deal Cards - Single button that does everything */}
                             {!gameState.isDeckShuffled && !gameState.isShuffling && (
                               <Tooltip
-                                title="🎲 Deal Cards"
-                                content="Shuffles deck with MagicBlock VRF (provably fair), encrypts cards with Inco TEE (cryptographic privacy), and grants decryption access to all players. One click does it all!"
+                                title="🎲 Shuffle the deck"
+                                content="Shuffles the 52-card deck inside Arcium's MPC network and seals it on-chain as opaque ciphertext — nobody, not even a chain observer, can read it. After this, each player deals themselves in."
                               >
                                 <button
                                   onClick={() => {
@@ -1408,8 +1408,8 @@ export default function TablePage({ params }: { params: Promise<{ tableId: strin
                 </div>
               ) : (
                 <Tooltip
-                  title="Ed25519 Verified Reveal"
-                  content="Cryptographic signature proves these are your real cards from Inco decryption. No one can fake their hand at showdown."
+                  title="MPC Verified Reveal"
+                  content="Your hole cards are revealed straight from the sealed deck inside Arcium's MPC — the same deck everyone was dealt from. No one can swap or fake their hand at showdown."
                 >
                   <button
                     onClick={async () => {
@@ -1486,7 +1486,7 @@ export default function TablePage({ params }: { params: Promise<{ tableId: strin
                 </span>
               </div>
               <p className="text-[var(--text-muted)] text-sm">
-                Decrypting community cards with Inco TEE
+                Revealing the board from the sealed deck via Arcium MPC
               </p>
               {gameState.isRevealingCommunity && (
                 <p className="text-purple-400 text-xs mt-2">
