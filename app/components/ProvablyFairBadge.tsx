@@ -3,7 +3,7 @@
 import { FC, useState } from "react";
 
 interface ProvablyFairBadgeProps {
-  isActive: boolean; // VRF shuffle has completed
+  isActive: boolean; // MPC shuffle has completed (deck sealed on-chain)
   variant?: "compact" | "expanded"; // compact for in-table, expanded for info panel
 }
 
@@ -79,11 +79,11 @@ export const ProvablyFairBadge: FC<ProvablyFairBadgeProps> = ({
                 </span>
               </div>
               <p className="text-[var(--text-secondary)] text-xs leading-relaxed mb-3">
-                Cards were shuffled using MagicBlock VRF (Verifiable Random Function).
-                The randomness is cryptographically proven and cannot be manipulated.
+                The deck was shuffled inside Arcium&apos;s MPC network. The randomness
+                never touches the chain and cannot be seen or manipulated by anyone.
               </p>
               <a
-                href="https://www.magicblock.xyz/blog/verifiable-randomness-solana-plugin"
+                href="https://arcium.com"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="inline-flex items-center gap-1 text-xs text-emerald-400/80 hover:text-emerald-400 transition-colors"
@@ -141,16 +141,16 @@ export const ProvablyFairBadge: FC<ProvablyFairBadgeProps> = ({
           Provably Fair Shuffle
         </h4>
         <p className="text-[var(--text-secondary)] text-xs leading-relaxed mb-2">
-          This hand was shuffled using MagicBlock VRF. The randomness is cryptographically
-          verifiable on-chain.
+          This hand was shuffled inside Arcium&apos;s MPC network. The deck is sealed
+          on-chain as opaque ciphertext — no party ever sees the full deck.
         </p>
         <a
-          href="https://www.magicblock.xyz/blog/verifiable-randomness-solana-plugin"
+          href="https://arcium.com"
           target="_blank"
           rel="noopener noreferrer"
           className="inline-flex items-center gap-1 text-xs text-emerald-400/80 hover:text-emerald-400 transition-colors"
         >
-          Learn about VRF
+          Learn about Arcium
           <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
           </svg>

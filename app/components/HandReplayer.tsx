@@ -523,7 +523,7 @@ const ReplaySeat: FC<{
         {player.isRevealed && player.holeCards[0] !== null ? (
           <div className="relative">
             <CardHand cards={player.holeCards} size="sm" dealt />
-            {/* TEE Verified badge on showdown reveal */}
+            {/* MPC Verified badge on showdown reveal */}
             {isFinalStep && player.isRevealed && (
               <div
                 className="absolute -top-2 left-1/2 -translate-x-1/2 px-1.5 py-0.5 rounded text-[7px] font-bold uppercase tracking-wider whitespace-nowrap z-10 replay-verified-badge"
@@ -533,7 +533,7 @@ const ReplaySeat: FC<{
                   boxShadow: "0 0 8px rgba(34, 211, 238, 0.5)",
                 }}
               >
-                Ed25519 Verified
+                MPC Verified
               </div>
             )}
           </div>

@@ -174,8 +174,8 @@ export default function Home() {
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
                   </svg>
                 ),
-                title: "TEE Encryption",
-                desc: "Hole cards encrypted with Inco Lightning. Only you can decrypt them.",
+                title: "MPC Encryption",
+                desc: "Hole cards sealed to your key inside Arcium's MPC network. Only you can decrypt them.",
               },
               {
                 icon: (
@@ -184,7 +184,7 @@ export default function Home() {
                   </svg>
                 ),
                 title: "Verified Fair",
-                desc: "MagicBlock VRF ensures provably random shuffles. No rigged decks.",
+                desc: "The deck is shuffled inside MPC — randomness never touches the chain. No rigged decks.",
               },
               {
                 icon: (
@@ -230,23 +230,14 @@ export default function Home() {
           >
             Solana Privacy Hack
           </a>
-          {" "}with{" "}
+          {" "}powered by{" "}
           <a
-            href="https://magicblock.gg"
-            className="text-purple-400 hover:text-purple-300 transition-colors"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            MagicBlock VRF
-          </a>
-          {" "}&{" "}
-          <a
-            href="https://inco.org"
+            href="https://arcium.com"
             className="text-cyan-400 hover:text-cyan-300 transition-colors"
             target="_blank"
             rel="noopener noreferrer"
           >
-            Inco TEE
+            Arcium MPC
           </a>
           <span className="mx-2 text-white/10">|</span>
           <Link href="/responsible-gaming" className="text-amber-400/60 hover:text-amber-400 transition-colors">

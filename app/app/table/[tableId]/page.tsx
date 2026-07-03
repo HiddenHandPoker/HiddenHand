@@ -796,7 +796,7 @@ export default function TablePage({ params }: { params: Promise<{ tableId: strin
                       <span className="text-[var(--text-muted)] text-xs">&mdash; Select a seat below to join</span>
                     </div>
                     <p className="text-[var(--text-muted)] text-xs mt-0.5">
-                      Hole cards are TEE encrypted &mdash; only seated players can see their hands
+                      Hole cards are sealed in MPC &mdash; only seated players can see their hands
                     </p>
                   </div>
                 </div>
@@ -1068,7 +1068,7 @@ export default function TablePage({ params }: { params: Promise<{ tableId: strin
                         )
                       )}
 
-                      {/* Deal Cards - VRF Flow (Streamlined: Shuffle + Encrypt + Grant in one click) */}
+                      {/* Deal Cards — runs the Arcium MPC shuffle (authority) */}
                       {gameState.phase === "Dealing" && gameState.useVrf && (
                         canStart ? (
                           <>
@@ -1663,23 +1663,14 @@ export default function TablePage({ params }: { params: Promise<{ tableId: strin
           >
             Solana Privacy Hack
           </a>
-          {" "}with{" "}
+          {" "}powered by{" "}
           <a
-            href="https://magicblock.gg"
-            className="text-purple-400 hover:text-purple-300 transition-colors"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            MagicBlock VRF
-          </a>
-          {" "}&{" "}
-          <a
-            href="https://inco.org"
+            href="https://arcium.com"
             className="text-cyan-400 hover:text-cyan-300 transition-colors"
             target="_blank"
             rel="noopener noreferrer"
           >
-            Inco TEE
+            Arcium MPC
           </a>
           <span className="mx-2 text-white/10">|</span>
           <Link href="/responsible-gaming" className="text-amber-400/60 hover:text-amber-400 transition-colors">

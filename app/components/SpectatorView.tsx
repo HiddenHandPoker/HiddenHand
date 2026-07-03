@@ -11,9 +11,10 @@ import { getTokenByMint, getDefaultToken, baseUnitsToDisplay, type TokenInfo } f
  *
  * Works WITHOUT a connected wallet. Uses useTableState for on-chain reads.
  *
- * PRIVACY INVARIANT: All player hole cards are [null, null]. Encrypted u128
- * handles from Inco TEE are NEVER passed to any component. Spectators see
- * card backs only. At showdown, only explicitly revealed cards are shown.
+ * PRIVACY INVARIANT: All player hole cards are [null, null]. Under Arcium MPC,
+ * hole cards never touch the chain at all (they live only client-side for their
+ * owner), so spectators see card backs only. At showdown, only explicitly
+ * revealed cards are shown.
  */
 
 interface SpectatorViewProps {
@@ -225,7 +226,7 @@ export const SpectatorView: FC<SpectatorViewProps> = ({
                 </span>
               </div>
               <p className="text-[var(--text-muted)] text-xs mt-0.5">
-                Hole cards are TEE encrypted &mdash; only seated players can see their hands
+                Hole cards are sealed in MPC &mdash; only seated players can see their hands
               </p>
             </div>
           </div>
@@ -435,22 +436,16 @@ export const SpectatorView: FC<SpectatorViewProps> = ({
                   Privacy-First Poker
                 </h4>
                 <p className="text-[var(--text-muted)] text-xs leading-relaxed">
-                  Player hole cards are encrypted using Inco&apos;s confidential computing (TEE).
-                  Cards are encrypted on-chain &mdash; not even the server can see them. Only each player
-                  can decrypt their own hand. Card backs shown above represent truly encrypted data,
-                  not hidden UI elements.
+                  Player hole cards are dealt and sealed inside Arcium&apos;s MPC network.
+                  The deck lives on-chain only as opaque ciphertext &mdash; not even a chain
+                  observer can read it. Only each player can decrypt their own hand. Card backs
+                  shown above represent truly sealed data, not hidden UI elements.
                 </p>
                 <div className="flex items-center gap-4 mt-3">
                   <div className="flex items-center gap-1.5">
-                    <div className="w-1.5 h-1.5 rounded-full bg-purple-400" />
-                    <span className="text-[var(--text-muted)] text-[10px] uppercase tracking-wider">
-                      MagicBlock VRF
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-1.5">
                     <div className="w-1.5 h-1.5 rounded-full bg-cyan-400" />
                     <span className="text-[var(--text-muted)] text-[10px] uppercase tracking-wider">
-                      Inco TEE
+                      Arcium MPC
                     </span>
                   </div>
                   <div className="flex items-center gap-1.5">
