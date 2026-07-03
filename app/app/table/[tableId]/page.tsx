@@ -1379,6 +1379,31 @@ export default function TablePage({ params }: { params: Promise<{ tableId: strin
             </div>
           )}
 
+          {/* Waiting on other players to deal themselves in. Shown once I've
+              dealt in but the hand can't advance until everyone has. */}
+          {gameState.phase === "Dealing" && gameState.isDeckShuffled && gameState.handState &&
+           gameState.currentPlayerSeat !== null &&
+           (gameState.handState.dealtPlayers & (1 << (gameState.currentPlayerSeat ?? 0))) !== 0 &&
+           gameState.handState.dealtPlayers !== gameState.handState.activePlayers && (() => {
+            const active = gameState.handState.activePlayers;
+            const dealt = gameState.handState.dealtPlayers;
+            let pending = 0;
+            for (let s = 0; s < 8; s++) if ((active & (1 << s)) && !(dealt & (1 << s))) pending++;
+            return (
+              <div className="max-w-md mx-auto glass border border-purple-500/30 rounded-2xl p-5 text-center">
+                <div className="flex items-center justify-center gap-3 mb-1">
+                  <div className="w-5 h-5 border-2 border-purple-400 border-t-transparent rounded-full animate-spin" />
+                  <span className="text-purple-300 font-semibold">
+                    Waiting for {pending} more player{pending > 1 ? "s" : ""} to deal in…
+                  </span>
+                </div>
+                <p className="text-[var(--text-muted)] text-sm">
+                  You&apos;re dealt in. The hand starts once everyone has dealt themselves in.
+                </p>
+              </div>
+            );
+          })()}
+
           {/* Reveal Cards for Showdown */}
           {/* Only show when: in Showdown phase, player is active (not folded), and multiple players remain */}
           {currentPlayer &&

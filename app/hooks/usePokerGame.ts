@@ -291,6 +291,31 @@ export interface SessionKeyParam {
   isActive: boolean;
 }
 
+// ── Hole-card refresh recovery ──────────────────────────────────────────────
+// A player's decrypted hole cards live ONLY client-side (from the one-time
+// HoleDealt event). A page refresh would lose them, and the on-chain "dealt"
+// bit blocks re-dealing — so cache them in sessionStorage (same browser, the
+// player's own cards) keyed by table+hand+seat, and restore on load.
+function holeCardsKey(tablePda: PublicKey, handNumber: number, seat: number): string {
+  return `hh_holecards:${tablePda.toBase58()}:${handNumber}:${seat}`;
+}
+function saveHoleCards(tablePda: PublicKey, handNumber: number, seat: number, cards: [number, number]): void {
+  if (typeof window === "undefined") return;
+  try { window.sessionStorage.setItem(holeCardsKey(tablePda, handNumber, seat), JSON.stringify(cards)); } catch {}
+}
+function loadHoleCards(tablePda: PublicKey, handNumber: number, seat: number): [number, number] | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.sessionStorage.getItem(holeCardsKey(tablePda, handNumber, seat));
+    if (!raw) return null;
+    const c = JSON.parse(raw);
+    if (Array.isArray(c) && c.length === 2 && typeof c[0] === "number" && typeof c[1] === "number") {
+      return [c[0], c[1]];
+    }
+  } catch {}
+  return null;
+}
+
 export function usePokerGame(sessionKey?: SessionKeyParam | null): UsePokerGameResult {
   const { program, provider, publicKey, signMessage } = usePokerProgram();
   const [gameState, setGameState] = useState<GameState>(initialGameState);
@@ -518,6 +543,15 @@ export function usePokerGame(sessionKey?: SessionKeyParam | null): UsePokerGameR
       const detectedAllowancesGranted = deckSealed;
       const detectedAllPlayersHaveAllowances = deckSealed;
 
+      // Refresh recovery: if we've already dealt in this hand (on-chain "dealt"
+      // bit set) but have no cards in memory (e.g. after a page reload), restore
+      // them from the sessionStorage cache written at deal time.
+      let restoredCards: [number | null, number | null] | null = null;
+      if (!resetEncryptionState && currentPlayerSeat !== null && handState &&
+          (handState.dealtPlayers & (1 << currentPlayerSeat)) !== 0) {
+        restoredCards = loadHoleCards(gameState.tablePDA, currentHandNumber, currentPlayerSeat);
+      }
+
       setGameState((prev) => ({
         ...prev,
         table,
@@ -549,7 +583,9 @@ export function usePokerGame(sessionKey?: SessionKeyParam | null): UsePokerGameR
         allPlayersHaveAllowances: resetEncryptionState ? false : (detectedAllPlayersHaveAllowances || (detectedCardsEncrypted && prev.allPlayersHaveAllowances)),
         isEncrypting: resetEncryptionState ? false : prev.isEncrypting,
         isDecrypting: resetEncryptionState ? false : prev.isDecrypting,
-        decryptedCards: resetEncryptionState ? [null, null] : prev.decryptedCards,
+        decryptedCards: resetEncryptionState
+          ? [null, null]
+          : (prev.decryptedCards[0] !== null ? prev.decryptedCards : (restoredCards ?? prev.decryptedCards)),
         // Track which hand the encryption state belongs to (for cross-hand leak prevention)
         encryptionHandNumber: resetEncryptionState ? null : (detectedCardsEncrypted ? currentHandNumber : prev.encryptionHandNumber),
         // Clear Ed25519 attestation instructions when hand changes (they're handle-specific)
@@ -745,6 +781,9 @@ export function usePokerGame(sessionKey?: SessionKeyParam | null): UsePokerGameR
       if (!decrypted) {
         throw new Error("Dealt, but no matching HoleDealt event found to decrypt");
       }
+
+      // Persist so a page refresh doesn't lose our only copy of these cards.
+      saveHoleCards(gameState.tablePDA, gameState.table.handNumber.toNumber(), seatIndex, decrypted);
 
       setGameState((prev) => ({
         ...prev,
