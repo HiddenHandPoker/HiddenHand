@@ -74,7 +74,7 @@ pub enum HiddenHandError {
     #[msg("Deck already shuffled for this hand")]
     DeckAlreadyShuffled,
 
-    #[msg("Deck not yet shuffled - request VRF shuffle first")]
+    #[msg("Deck not yet shuffled - shuffle the deck (MPC) first")]
     DeckNotShuffled,
 
     #[msg("Cards not yet dealt")]
@@ -116,7 +116,7 @@ pub enum HiddenHandError {
     #[msg("Invalid card value - must be 0-51")]
     InvalidCard,
 
-    #[msg("Ed25519 signature verification failed")]
+    #[msg("Signature verification failed")]
     Ed25519VerificationFailed,
 
     #[msg("All active players must reveal before showdown can complete")]

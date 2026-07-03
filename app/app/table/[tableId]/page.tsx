@@ -92,6 +92,7 @@ export default function TablePage({ params }: { params: Promise<{ tableId: strin
     playerAction,
     showdown,
     timeoutPlayer,
+    timeoutDeal,
     setTableId,
     // Arcium MPC — shuffle the deck
     requestShuffle,
@@ -1083,8 +1084,8 @@ export default function TablePage({ params }: { params: Promise<{ tableId: strin
                                     playSound("shuffle");
                                     withToast(
                                       () => requestShuffle(),
-                                      "Dealing cards...",
-                                      "Cards dealt - ready to play!"
+                                      "Shuffling the deck in MPC…",
+                                      "Deck shuffled — players can now deal in"
                                     );
                                   }}
                                   disabled={loading}
@@ -1093,7 +1094,7 @@ export default function TablePage({ params }: { params: Promise<{ tableId: strin
                                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                                   </svg>
-                                  Deal Cards
+                                  Shuffle &amp; Deal
                                   <InfoIcon />
                                 </button>
                               </Tooltip>
@@ -1389,6 +1390,11 @@ export default function TablePage({ params }: { params: Promise<{ tableId: strin
             const dealt = gameState.handState.dealtPlayers;
             let pending = 0;
             for (let s = 0; s < 8; s++) if ((active & (1 << s)) && !(dealt & (1 << s))) pending++;
+            // After the deal timeout, anyone can abort the stuck hand (the AFK
+            // player who never dealt in can't be dealt for). Small client buffer
+            // over DEAL_TIMEOUT_SECONDS so the on-chain (cluster-time) check passes.
+            const elapsed = gameState.lastActionTime ? Date.now() / 1000 - gameState.lastActionTime : 0;
+            const canReset = elapsed >= DEAL_TIMEOUT_SECONDS + 5;
             return (
               <div className="max-w-md mx-auto glass border border-purple-500/30 rounded-2xl p-5 text-center">
                 <div className="flex items-center justify-center gap-3 mb-1">
@@ -1400,6 +1406,15 @@ export default function TablePage({ params }: { params: Promise<{ tableId: strin
                 <p className="text-[var(--text-muted)] text-sm">
                   You&apos;re dealt in. The hand starts once everyone has dealt themselves in.
                 </p>
+                {canReset && (
+                  <button
+                    onClick={() => withToast(() => timeoutDeal(), "Resetting hand…", "Hand reset — blinds refunded")}
+                    disabled={loading}
+                    className="mt-4 btn-warning px-5 py-2.5 rounded-xl text-sm font-semibold disabled:opacity-50 mx-auto"
+                  >
+                    Reset hand (player didn&apos;t deal in)
+                  </button>
+                )}
               </div>
             );
           })()}

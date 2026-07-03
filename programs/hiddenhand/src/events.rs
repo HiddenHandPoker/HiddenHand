@@ -64,7 +64,7 @@ pub struct PlayerHandResult {
     pub all_in: bool,
 }
 
-/// Emitted when a new hand starts (VRF shuffle complete, blinds posted, phase set to PreFlop)
+/// Emitted when a new hand starts (MPC shuffle complete, all seats dealt in, phase set to PreFlop)
 #[event]
 pub struct HandStarted {
     /// Table identifier

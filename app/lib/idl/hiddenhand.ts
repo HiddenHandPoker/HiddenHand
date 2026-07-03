@@ -2501,6 +2501,110 @@ export type Hiddenhand = {
       "args": []
     },
     {
+      "name": "timeoutDeal",
+      "docs": [
+        "Abort a hand stuck in the Dealing phase because a seated player never ran",
+        "deal_to_seat (AFK). Callable by anyone after DEAL_TIMEOUT_SECONDS; refunds",
+        "posted blinds, resets seats, and returns the table to Waiting.",
+        "Remaining accounts: all occupied player seat accounts."
+      ],
+      "discriminator": [
+        100,
+        29,
+        155,
+        49,
+        123,
+        164,
+        194,
+        103
+      ],
+      "accounts": [
+        {
+          "name": "caller",
+          "docs": [
+            "Anyone can call once the deal timeout has elapsed."
+          ],
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "table",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  116,
+                  97,
+                  98,
+                  108,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "table.table_id",
+                "account": "table"
+              }
+            ]
+          }
+        },
+        {
+          "name": "handState",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  104,
+                  97,
+                  110,
+                  100
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "table"
+              },
+              {
+                "kind": "account",
+                "path": "table.hand_number",
+                "account": "table"
+              }
+            ]
+          }
+        },
+        {
+          "name": "deckState",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  100,
+                  101,
+                  99,
+                  107
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "table"
+              },
+              {
+                "kind": "account",
+                "path": "table.hand_number",
+                "account": "table"
+              }
+            ]
+          }
+        }
+      ],
+      "args": []
+    },
+    {
       "name": "timeoutPlayer",
       "docs": [
         "Timeout a player who hasn't acted within 60 seconds",
@@ -2893,7 +2997,7 @@ export type Hiddenhand = {
     {
       "code": 6024,
       "name": "deckNotShuffled",
-      "msg": "Deck not yet shuffled - request VRF shuffle first"
+      "msg": "Deck not yet shuffled - shuffle the deck (MPC) first"
     },
     {
       "code": 6025,
@@ -2963,7 +3067,7 @@ export type Hiddenhand = {
     {
       "code": 6038,
       "name": "ed25519VerificationFailed",
-      "msg": "Ed25519 signature verification failed"
+      "msg": "Signature verification failed"
     },
     {
       "code": 6039,
@@ -3824,7 +3928,7 @@ export type Hiddenhand = {
     {
       "name": "handStarted",
       "docs": [
-        "Emitted when a new hand starts (VRF shuffle complete, blinds posted, phase set to PreFlop)"
+        "Emitted when a new hand starts (MPC shuffle complete, all seats dealt in, phase set to PreFlop)"
       ],
       "type": {
         "kind": "struct",

@@ -187,6 +187,7 @@ export interface UsePokerGameResult {
   playerAction: (action: ActionType) => Promise<string>;
   showdown: () => Promise<string>;
   timeoutPlayer: () => Promise<string>;
+  timeoutDeal: () => Promise<string>; // Abort a hand stuck on an AFK player who never dealt in
 
   // MagicBlock VRF Actions
   requestShuffle: () => Promise<string>;
@@ -1594,6 +1595,53 @@ export function usePokerGame(sessionKey?: SessionKeyParam | null): UsePokerGameR
     }
   }, [program, provider, publicKey, gameState.tablePDA, gameState.table, gameState.handState, refreshState]);
 
+  // ============================================================
+  // AFK deal recovery: abort a hand stuck in Dealing because a seated player
+  // never ran deal_to_seat. Callable by anyone after the deal timeout; the
+  // program refunds posted blinds and returns the table to Waiting.
+  // ============================================================
+  const timeoutDeal = useCallback(async (): Promise<string> => {
+    if (!program || !provider || !publicKey || !gameState.tablePDA || !gameState.table) {
+      throw new Error("Table not ready");
+    }
+    setLoading(true);
+    setError(null);
+    try {
+      const handNumber = BigInt(gameState.table.handNumber.toNumber());
+      const [handPDA] = getHandPDA(gameState.tablePDA, handNumber);
+      const [deckPDA] = getDeckPDA(gameState.tablePDA, handNumber);
+
+      // All occupied seats, so the program can refund blinds + reset them.
+      const occupied = getOccupiedSeats(gameState.table.occupiedSeats, gameState.table.maxPlayers);
+      const seatMetas = occupied.map((seatIndex) => ({
+        pubkey: getSeatPDA(gameState.tablePDA!, seatIndex)[0],
+        isSigner: false,
+        isWritable: true,
+      }));
+
+      const tx = await program.methods
+        .timeoutDeal()
+        .accounts({
+          caller: publicKey,
+          table: gameState.tablePDA,
+          handState: handPDA,
+          deckState: deckPDA,
+        })
+        .remainingAccounts(seatMetas)
+        .rpc();
+
+      await provider.connection.confirmTransaction(tx, "confirmed");
+      await refreshState();
+      return tx;
+    } catch (e) {
+      const message = parseAnchorError(e);
+      setError(message);
+      throw e;
+    } finally {
+      setLoading(false);
+    }
+  }, [program, provider, publicKey, gameState.tablePDA, gameState.table, refreshState]);
+
   return {
     gameState,
     loading,
@@ -1606,6 +1654,7 @@ export function usePokerGame(sessionKey?: SessionKeyParam | null): UsePokerGameR
     playerAction,
     showdown,
     timeoutPlayer,
+    timeoutDeal,
     // MagicBlock VRF
     requestShuffle,
     // Inco TEE Encryption

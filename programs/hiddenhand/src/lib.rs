@@ -77,6 +77,14 @@ pub mod hiddenhand {
         instructions::timeout_player::handler(ctx)
     }
 
+    /// Abort a hand stuck in the Dealing phase because a seated player never ran
+    /// deal_to_seat (AFK). Callable by anyone after DEAL_TIMEOUT_SECONDS; refunds
+    /// posted blinds, resets seats, and returns the table to Waiting.
+    /// Remaining accounts: all occupied player seat accounts.
+    pub fn timeout_deal(ctx: Context<TimeoutDeal>) -> Result<()> {
+        instructions::timeout_deal::handler(ctx)
+    }
+
     /// Close an inactive table and return all funds to players
     /// Can be called by anyone after 1 hour of inactivity
     pub fn close_inactive_table<'info>(
