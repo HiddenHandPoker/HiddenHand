@@ -1,353 +1,195 @@
-# HiddenHand
+<div align="center">
 
-**The only poker game where the house can't see your cards.**
+# 🃏 HiddenHand
 
-HiddenHand is a fully on-chain Texas Hold'em poker game with strong privacy guarantees. Built on Solana with MagicBlock VRF for provably fair shuffling and Inco Lightning's confidential computing (TEE) for encrypted hole cards.
+### The only poker game where the house *can't* see your cards — not even us.
 
-> *"Don't trust the dealer. Trust the math."*
+Fully on-chain Texas Hold'em on Solana, where the deck is shuffled and dealt **inside a multi-party computation (MPC) network** ([Arcium](https://arcium.com)). No server, no dealer, no chain observer — **nobody** — ever sees the deck or your hole cards. The privacy isn't a promise. It's a cryptographic guarantee.
 
----
+[![Live on Devnet](https://img.shields.io/badge/▶_Live_Demo-devnet-14F195?style=for-the-badge)](https://hiddenhand.netlify.app)
+[![Solana](https://img.shields.io/badge/Solana-devnet-9945FF?style=flat-square&logo=solana)](https://explorer.solana.com/address/9chPz3vJDeU7gr4zBtDreJUpVLKbqwrKoQBQQjT1SF5X?cluster=devnet)
+[![Arcium MPC](https://img.shields.io/badge/Arcium-MPC-22d3ee?style=flat-square)](https://arcium.com)
+[![Anchor](https://img.shields.io/badge/Anchor-1.0-blue?style=flat-square)](https://www.anchor-lang.com/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow?style=flat-square)](./LICENSE)
 
-## The Problem
+*"Don't trust the dealer. Trust the math."*
 
-Every year, **$60 billion** flows through online poker. And every hand you play, you're betting that the platform won't cheat, that their employees won't peek, that their servers won't get hacked.
-
-In 2007, insiders at Ultimate Bet could see every player's hole cards. They stole **millions** before anyone noticed.
-
-**The dirty secret of online poker? The game is only as honest as the people running it.**
-
-## The Solution
-
-HiddenHand is the first poker game where **no one can see your cards—not even us.**
-
-| Traditional Online Poker | HiddenHand |
-|-------------------------|------------|
-| Server sees all cards | Cards encrypted on-chain |
-| Database can be hacked | State lives on Solana |
-| Superuser exploits possible | Cryptographic guarantees |
-| "Trust us" | Verify the math |
+</div>
 
 ---
 
-## Security Model
+## Why this exists
 
-HiddenHand combines three layers to minimize trust requirements:
+Every hand of online poker you've ever played, you were trusting that the platform wouldn't cheat — that no employee would peek, no server would get breached, no superuser account would quietly read every hole card.
 
-### Layer 1: Provably Fair Shuffling (MagicBlock VRF)
+That trust has been broken before. In the **UltimateBet / Absolute Poker** scandal, insiders with "god-mode" accounts could see everyone's cards and stole an estimated **$20M+** before players noticed the impossibly perfect play.
 
-**What it does:** Generates verifiable random numbers that no one can predict or manipulate.
+The dirty secret of online poker is that **the game is only as honest as the people running the servers.**
 
-**How it works:**
-1. Game requests randomness from MagicBlock VRF oracle
-2. Oracle generates random seed using Verifiable Random Function
-3. VRF proof is verified on-chain before use
-4. Deck is shuffled using the verified seed
+HiddenHand removes those people from the equation. The cards stay encrypted the entire time — shuffled inside MPC, dealt to you sealed to *your* key, and only revealed at showdown, straight from the same sealed deck everyone was dealt from. There is no server that could cheat, because there is no server that can see.
 
-**Security guarantee:** The shuffle is provably fair—anyone can verify the randomness was not manipulated. The VRF seed exists only in memory during the callback transaction and is never stored on-chain.
-
-### Layer 2: Card Encryption (Inco Lightning — TEE Confidential Compute)
-
-**What it does:** Encrypts all cards—both hole cards AND community cards—so no one can see them prematurely.
-
-**How it works:**
-1. After shuffle, ALL 52 cards are encrypted via Inco Lightning's confidential computing (TEE-backed)
-2. Cards are stored on-chain as encrypted `u128` handles
-3. **Hole cards**: Decryption allowances granted only to the card owner
-4. **Community cards**: Remain encrypted until flop/turn/river, then revealed with Ed25519 verification
-5. Players decrypt their hole cards client-side using wallet signature + Inco SDK
-
-**Security guarantee:** No one can see the flop, turn, or river in advance. Hole cards cannot be decrypted without the player's wallet signature. The program, other players, and even the table authority cannot see encrypted cards.
-
-### Layer 3: Verified Reveals (Ed25519 Signatures)
-
-**What it does:** Prevents players from lying about their cards at showdown.
-
-**How it works:**
-1. To reveal a card, player must provide the plaintext value
-2. Player must also provide an Ed25519 signature from Inco's covalidator
-3. The signature proves the plaintext matches the encrypted handle
-4. Invalid signatures are rejected—fake cards cannot be claimed
-
-**Security guarantee:** Cryptographic proof that revealed cards match encrypted values. Players cannot claim to have different cards than they were dealt.
-
-### Attack Prevention Summary
-
-| Attack Vector | Prevention |
-|--------------|------------|
-| Rigged shuffle | VRF provides verifiable randomness with on-chain proof |
-| Peeking at hole cards | TEE encryption—only card owner can decrypt |
-| Peeking at community cards | TEE encryption—revealed only at flop/turn/river with Ed25519 proof |
-| Card forgery at showdown | Ed25519 signatures verify card authenticity |
-| Seed prediction | VRF seed never stored, only in-memory during callback |
-| Replay attacks | Unique encryption handles per card per hand |
-| Stalled games | Timeout mechanisms force action or auto-fold |
-| Authority collusion | Authority cannot decrypt player cards (no allowance) |
-
-### Trust Assumptions
-
-HiddenHand minimizes trust, but some assumptions remain:
-
-1. **Inco Lightning TEE**: Card encryption relies on Inco's Trusted Execution Environment
-2. **MagicBlock VRF Oracle**: Randomness depends on MagicBlock's oracle availability
-3. **Solana Consensus**: Game state security depends on Solana's validator set
-
-These are infrastructure-level dependencies, not application-level trust. No single party can cheat the game.
+| Traditional online poker | HiddenHand |
+|---|---|
+| The server sees every card | The deck is **never** in plaintext, anywhere |
+| A DB breach leaks all hands | Cards live only as MPC ciphertext / client-side |
+| "Superuser" exploits are possible | No party holds the deck — it's split across MPC nodes |
+| "Trust us" | Verify the transactions on-chain |
 
 ---
 
-## How It Works
+## What makes this technically interesting
+
+This project started for the Solana Privacy Hack with a **different** privacy stack — MagicBlock VRF for shuffling + Inco's TEE for card encryption — and then got **re-architected from the ground up** to fix a real, subtle flaw:
+
+> **The vulnerability:** with a public verifiable-random-function (VRF) shuffle, the randomness that ordered the deck is emitted in the VRF callback **on-chain, in the clear**. Anyone watching the chain could re-derive the entire deck ordering. The "encrypted" hole cards were theater against a chain observer.
+
+The fix isn't a patch — it's a different trust model. **Arcium MPC** shuffles the deck *inside* the computation: the randomness never touches the chain, and the deck exists on-chain only as an opaque ciphertext that no single party can decrypt. Privacy by construction, not by obscurity.
+
+That migration — **VRF + TEE → MPC** — is the heart of this repo, and it's a case study in *understanding the tradeoffs* of each privacy primitive on Solana (VRF, TEE, FHE, MPC) rather than cargo-culting one.
+
+---
+
+## How a hand actually works
+
+The betting, pot/side-pot math, hand evaluation, rake, and seating all run as **normal public Solana program logic** (they don't need to be secret). Only the card lifecycle is confidential, and it runs as **six Arcium MPC circuits** ([`encrypted-ixs/src/lib.rs`](./encrypted-ixs/src/lib.rs)). The deck is the single source of truth: shuffled once, sealed to the MXE, stored on-chain as ciphertext, and **re-fed unchanged** into every later circuit.
 
 ```
-┌──────────────────────────────────────────────────────────────────────────┐
-│                           GAME FLOW                                       │
-├──────────────────────────────────────────────────────────────────────────┤
-│                                                                          │
-│  1. START HAND          2. VRF SHUFFLE           3. ENCRYPT CARDS        │
-│  ┌─────────────┐       ┌─────────────┐          ┌─────────────┐         │
-│  │ Initialize  │──────▶│  Request    │─────────▶│ Inco TEE    │         │
-│  │ deck state  │       │  VRF seed   │          │ encryption  │         │
-│  └─────────────┘       └─────────────┘          └─────────────┘         │
-│                              │                         │                 │
-│                              ▼                         ▼                 │
-│                     ┌─────────────┐          ┌─────────────┐            │
-│                     │ Callback:   │          │ Grant       │            │
-│                     │ shuffle +   │          │ allowances  │            │
-│                     │ deal cards  │          │ to players  │            │
-│                     └─────────────┘          └─────────────┘            │
-│                                                      │                   │
-│  6. SHOWDOWN            5. BETTING              4. DECRYPT               │
-│  ┌─────────────┐       ┌─────────────┐          ┌─────────────┐         │
-│  │ Ed25519     │◀──────│ Fold/Check/ │◀─────────│ Player      │         │
-│  │ verified    │       │ Call/Raise/ │          │ decrypts    │         │
-│  │ reveals     │       │ All-In      │          │ own cards   │         │
-│  └─────────────┘       └─────────────┘          └─────────────┘         │
-│        │                                                                 │
-│        ▼                                                                 │
-│  ┌─────────────┐                                                        │
-│  │ Evaluate    │                                                        │
-│  │ hands &     │                                                        │
-│  │ distribute  │                                                        │
-│  │ pot         │                                                        │
-│  └─────────────┘                                                        │
-│                                                                          │
-└──────────────────────────────────────────────────────────────────────────┘
+                     ┌──────────────────── on-chain, opaque ciphertext ─────────────────────┐
+ start_hand ─▶ shuffle() ─▶ DeckState.deck  (Enc<Mxe, Pack<[u8;52]>>)                        │
+ (public)      (MPC)            │                                                            │
+                               │  re-fed (unchanged) into every circuit below               │
+                               ▼                                                            │
+  each player ─▶ deal_to_seat(deck, my_x25519_key, seat_i) ─▶ HoleDealt event (sealed to me) │
+  (MPC, ×N)         hole cards = deck[2i], deck[2i+1]        └▶ only I decrypt (RescueCipher) │
+                               ▼                                                            │
+  betting ─▶ reveal_flop / reveal_turn / reveal_river(deck) ─▶ public board written on-chain │
+  (public)      (MPC, .reveal() of deck[18..23])                                            │
+                               ▼                                                            │
+  showdown ─▶ showdown_reveal(deck, fold_mask) ─▶ non-folded hole cards revealed on-chain    │
+  (public)      (MPC, batched)  └▶ hand evaluated on public cards, pot paid                  │
+                     └────────────────────────────────────────────────────────────────────┘
 ```
 
-### Privacy Architecture
+**Fixed deck layout** (so community-card indices don't depend on player count):
+`hole cards` → seat `i` gets `deck[2i], deck[2i+1]` · `flop` → `deck[18,19,20]` · `turn` → `deck[21]` · `river` → `deck[22]`.
 
-```
-┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
-│  MagicBlock VRF │────▶│  Atomic Shuffle │────▶│  Inco TEE       │
-│  (Randomness)   │     │  + Encrypt      │     │  (Encryption)   │
-└─────────────────┘     └─────────────────┘     └─────────────────┘
-                                                        │
-                                                        ▼
-┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
-│  Player Wallet  │◀────│  Inco SDK       │◀────│  Covalidator    │
-│  (View Cards)   │     │  (Decrypt)      │     │  (TEE)          │
-└─────────────────┘     └─────────────────┘     └─────────────────┘
-```
+**The privacy guarantees, precisely:**
+- **Shuffle** happens in MPC; the randomness never appears on-chain. The deck is stored as `Enc<Mxe, …>` ciphertext — decryptable only by the MPC network acting together, for later computation.
+- **Your hole cards** are sealed inside MPC to *your* x25519 key and emitted in a `HoleDealt` event. Only you can decrypt them (client-side, via `RescueCipher`). They **never touch the chain in plaintext** — not even as an encrypted handle on your seat account.
+- **The board** is revealed publicly from the sealed deck — the same deck you were dealt from, provably.
+- **At showdown**, only non-folded hands are revealed, straight from that same deck. Nobody can swap or fabricate a hand.
+
+Because each player's cards seal to a key only they hold, **each player deals themselves in** (the authority can't deal for you). The hand advances to pre-flop once every seated player has run `deal_to_seat`. An [AFK-recovery instruction](#program-instructions) (`timeout_deal`) cleanly aborts and refunds a hand if someone never deals in.
 
 ---
 
-## Features
+## Feature highlights
 
-- **Provably Fair Shuffling** — MagicBlock VRF provides verifiable randomness
-- **Encrypted Cards** — All cards (hole + community) encrypted via Inco Lightning (TEE confidential compute)
-- **Ed25519 Verified Reveals** — Covalidator signatures prove card authenticity
-- **Full Texas Hold'em** — PreFlop, Flop, Turn, River, Showdown
-- **On-Chain Hand History** — Every action emitted as Anchor events for audit trail
-- **Timeout Protection** — Players can't stall indefinitely (30s action timeout)
-- **AFK Recovery** — Non-authority players can continue after 60s authority timeout
-- **Abandoned Table Recovery** — Anyone can close inactive tables after 5 minutes
-- **Client-Side Decryption** — Only you can see your cards via wallet signing
-- **42 Unit Tests** — Comprehensive coverage for hand evaluation and game logic
+- ♠️ **Full Texas Hold'em** — blinds, betting (fold/check/call/raise/all-in), side pots, showdown hand evaluation (best 5 of 7), rake.
+- 🔒 **Arcium MPC card privacy** — shuffle, per-seat deal, community reveals, and showdown reveal as six MPC circuits.
+- 🪙 **One-tap onboarding** — a built-in devnet faucet mints free **HiddenHand Chips (HHC)** so a new player is playing in one click, no token hunting.
+- 👀 **Spectator mode** — watch any table live without a wallet; hole cards are provably never exposed to spectators.
+- 📜 **On-chain hand history & replay** — every hand reconstructs from program events (`HandStarted`, `ActionTaken`, `CommunityCardsRevealed`, `ShowdownReveal`, `HandCompleted`).
+- ⏱️ **Liveness / AFK recovery** — timeouts for stuck actions, community reveals, the deal phase, and abandoned tables.
+- 📱 **Mobile-responsive** — landscape table, bottom action bar, safe-area handling, touch targets.
+- 🛟 **Responsible-gaming tooling** — session timers, deposit limits, self-exclusion, break reminders.
 
 ---
 
-## Tech Stack
+## Tech stack
 
-| Component | Technology | Purpose |
-|-----------|------------|---------|
-| Smart Contract | Anchor 0.32.1 / Rust | Game logic & state management |
-| Blockchain | Solana Devnet | Settlement & data availability |
-| Randomness | MagicBlock VRF | Provably fair card shuffling |
-| Encryption | Inco Lightning (TEE) | Card privacy (hole + community) |
-| Signatures | Ed25519 | Card reveal verification |
-| Frontend | Next.js 15 / TypeScript | Player interface |
-| Wallet | Solana Wallet Adapter | Authentication & signing |
-
-### Program IDs
-
-| Program | Address |
-|---------|---------|
-| HiddenHand | `5fcckjDn8wzRSodJbQVpHeuWZ8x4B3htKv1WEMx36XJe` |
-| Inco Lightning | `5sjEbPiqgZrYwR31ahR6Uk9wf5awoX61YGg7jExQSwaj` |
-| MagicBlock VRF | `Vrf1RNUjXmQGjmQrQLvJHs9SNkvDJEsRVFPkfSQUwGz` |
+| Layer | Choice |
+|---|---|
+| MPC circuits | **Arcis** `0.11.1` (Rust DSL) — [`encrypted-ixs/`](./encrypted-ixs/) |
+| On-chain program | **Anchor** `1.0.x` / **Solana** `3.x`, `#[arcium_program]` — [`programs/hiddenhand/`](./programs/hiddenhand/) |
+| MPC coordination | Arcium CLI `0.11.2`, cluster offset **456** (devnet), Cerberus backend |
+| Frontend | **Next.js 16** (App Router, TypeScript), Tailwind — [`app/`](./app/) |
+| Client SDK | `@arcium-hq/client` `0.11.2` (x25519 / RescueCipher), `@anchor-lang/core`, Solana Wallet Adapter |
+| Token | SPL (Token / Token-2022 via `InterfaceAccount`); devnet default = HHC play-money |
 
 ---
 
-## Live Demo
+## Deployment
 
-**Play now:** [https://hiddenhand.netlify.app](https://hiddenhand.netlify.app) | **Discord:** [https://discord.gg/N4dtmnyCw7](https://discord.gg/N4dtmnyCw7)
+- **Program (devnet):** [`9chPz3vJDeU7gr4zBtDreJUpVLKbqwrKoQBQQjT1SF5X`](https://explorer.solana.com/address/9chPz3vJDeU7gr4zBtDreJUpVLKbqwrKoQBQQjT1SF5X?cluster=devnet) — MXE + all 6 comp-defs initialized.
+- **Circuits (OffChain source):** hosted at [`criptocbas/hiddenhand-arcium-circuit`](https://github.com/criptocbas/hiddenhand-arcium-circuit). The program pins each circuit by `circuit_hash!()`; the MXE fetches and hash-verifies the `.arcis` at compute time. (Multi-MB circuits can't go on-chain economically — offchain hosting + hash pinning is the pattern.)
+- **Live app:** deployed on Netlify → [hiddenhand.netlify.app](https://hiddenhand.netlify.app).
 
-> **Note:** Due to browser popup policies, your wallet may not automatically open when approving transactions. If the wallet doesn't pop up, click on your wallet extension to see pending transaction requests.
-
----
-
-## Getting Started
-
-### Prerequisites
-
-- Rust & Cargo
-- Solana CLI
-- Anchor CLI (0.32.1)
-- Node.js 18+
-- Solana wallet with devnet SOL
-
-### Installation
-
-```bash
-# Clone the repository
-git clone https://github.com/HiddenHandPoker/HiddenHand.git
-cd HiddenHand
-
-# Install dependencies
-npm install
-
-# Build the program
-anchor build
-
-# Run tests
-anchor test
-```
-
-### Running the Frontend
-
-```bash
-cd app
-npm install
-npm run dev
-```
-
-Open [http://localhost:3000](http://localhost:3000) and connect your wallet.
-
-### Playing the Game
-
-1. **Create or Join Table** — Enter a table ID and buy-in amount
-2. **Wait for Players** — Minimum 2 players required
-3. **Start Hand** — Table authority initiates the hand
-4. **VRF Shuffle** — Provably fair shuffle with on-chain verification
-5. **Decrypt Cards** — View your encrypted hole cards
-6. **Play Poker** — Fold, Check, Call, Raise, or All-In
-7. **Showdown** — Ed25519 verified reveals determine the winner
+A full hand has been played end-to-end through the live UI against the deployed program: shuffle → deal → bet → flop/turn/river → showdown, with the correct winner paid and the cards each player decrypted at deal time matching what the showdown revealed.
 
 ---
 
-## Project Structure
+## Program instructions
+
+**Core game (public):** `create_table` · `join_table` · `leave_table` · `start_hand` · `player_action` · `showdown` · `collect_rake` · `close_inactive_table`
+
+**Card lifecycle (Arcium MPC — queue + callback each):** `shuffle` · `deal_to_seat` · `reveal_flop` · `reveal_turn` · `reveal_river` · `showdown_reveal`
+
+**Liveness / timeouts:** `timeout_player` (force-fold an AFK actor) · `timeout_deal` (abort + refund a hand stuck because a player never dealt in)
+
+---
+
+## Repository layout
 
 ```
-HiddenHand/
+hiddenhand/
+├── encrypted-ixs/src/lib.rs          # 6 Arcis MPC circuits (shuffle, deal, reveals, showdown)
 ├── programs/hiddenhand/src/
-│   ├── lib.rs                    # Entry point (19 instructions)
-│   ├── instructions/
-│   │   ├── create_table.rs       # Table creation
-│   │   ├── join_table.rs         # Player buy-in
-│   │   ├── start_hand.rs         # Hand initialization
-│   │   ├── request_shuffle.rs    # VRF randomness request
-│   │   ├── callback_shuffle.rs   # VRF callback + shuffle
-│   │   ├── deal_cards_encrypted.rs
-│   │   ├── player_action.rs      # Betting logic
-│   │   ├── showdown.rs           # Hand evaluation
-│   │   ├── reveal_cards.rs       # Ed25519 verification
-│   │   ├── timeout_player.rs     # Action timeout
-│   │   ├── timeout_reveal.rs     # Showdown timeout
-│   │   └── close_inactive_table.rs
-│   ├── state/
-│   │   ├── table.rs              # Table configuration
-│   │   ├── hand.rs               # Hand state & phases
-│   │   ├── player.rs             # Player seats & chips
-│   │   ├── deck.rs               # Card utilities
-│   │   └── hand_eval.rs          # Poker hand ranking
-│   ├── inco_cpi.rs               # Inco TEE confidential-compute CPI
-│   └── error.rs                  # 30+ custom errors
-├── app/                          # Next.js frontend
-│   ├── components/               # UI components
-│   ├── hooks/                    # React hooks
-│   └── lib/                      # Utilities & IDL
-└── tests/                        # Integration tests
+│   ├── lib.rs                        # #[arcium_program] entrypoints (queue + callback per circuit)
+│   ├── instructions/                 # one file per instruction (incl. timeout_deal)
+│   └── state/                        # Table, HandState, PlayerSeat, DeckState, hand_eval
+├── app/                             # Next.js frontend
+│   ├── lib/arcium.ts                 # x25519 keys, RescueCipher decrypt, queue-account set, event scan
+│   ├── hooks/usePokerGame.ts         # drives the 6 MPC steps + game state
+│   ├── app/api/faucet/route.ts       # devnet HHC faucet (mint-on-demand)
+│   └── scripts/                      # devnet integration tests (full hand, timeout_deal)
+├── Arcium.toml · Anchor.toml
 ```
 
 ---
 
-## Game Mechanics
+## Running it
 
-### Card Encoding
-- Cards encoded as 0-51 (u8)
-- Suit: `card / 13` → 0=Hearts, 1=Diamonds, 2=Clubs, 3=Spades
-- Rank: `card % 13` → 0=2, 1=3, ..., 12=Ace
+**Prerequisites:** Rust 1.85+, Solana CLI 3.x, Arcium CLI `0.11.2` (`curl -sSfL https://install.arcium.com/ | bash`), Node ≥ 20, Docker (for localnet).
 
-### Hand Rankings (On-Chain Evaluation)
-1. Royal Flush
-2. Straight Flush
-3. Four of a Kind
-4. Full House
-5. Flush
-6. Straight
-7. Three of a Kind
-8. Two Pair
-9. One Pair
-10. High Card
+**Program + circuits**
+```bash
+arcium build                     # compiles the Arcis circuits + the Anchor program
+arcium test                      # runs against a local MPC cluster
+# devnet: arcium deploy --cluster-offset 456 --recovery-set-size 4 -k <wallet> -u <reliable-rpc>
+```
 
-### Betting Actions
-| Action | Description |
-|--------|-------------|
-| Fold | Surrender your hand |
-| Check | Pass (when no bet to call) |
-| Call | Match the current bet |
-| Raise | Increase the bet |
-| All-In | Bet all remaining chips |
+**Frontend**
+```bash
+cd app && npm install && npm run dev
+```
+Set `NEXT_PUBLIC_SOLANA_RPC` to a reliable devnet RPC (Helius/QuickNode/Triton) — the public devnet RPC drops Arcium transactions. To enable the chip faucet, set `FAUCET_SECRET` (base58 mint-authority key) server-side.
+
+**Integration tests (devnet)**
+```bash
+cd app && RPC_URL=<helius> node scripts/devnet-full-hand.cjs     # full hand through real MPC
+cd app && RPC_URL=<helius> node scripts/test-timeout-deal.cjs    # AFK deal-recovery
+```
+
+> ⚠️ **Note on the faucet:** `/api/faucet` mints free **devnet** HiddenHand Chips to any wallet on request — this is intentional (frictionless onboarding for a play-money demo), not a bug. The mint-authority key lives only in the deployment's server-side env, never in this repo.
 
 ---
 
-## Hackathon
+## Status & honest tradeoffs
 
-**Solana Privacy Hack** — January 12-30, 2025
+**Working end-to-end** on devnet and playable on the live site: onboarding → shuffle → deal → betting → reveals → showdown → payout, plus spectating, hand replay, and AFK recovery.
 
-### Target Bounties
-- Inco Gaming Track
-- Open Track
-
-### Submission Checklist
-- [x] Open-source code
-- [x] Deployed to Solana devnet
-- [x] Comprehensive documentation
-- [x] 42 unit tests passing
-- [x] Ed25519 signature verification
-- [x] MagicBlock VRF integration
-- [x] Inco confidential-compute (TEE) encryption
-- [x] 3-minute demo video
+Conscious tradeoffs for a devnet showcase (not oversights):
+- **Latency:** ~15–20s per MPC round-trip on devnet, and a hand has several (shuffle, per-seat deal, three street reveals, showdown). This is the honest cost of provable privacy; the UI surfaces each step. Pre-computing the next hand during betting would hide most of it.
+- **Wallet popups:** each MPC action uses the real wallet. MagicBlock session-key infrastructure is present but not yet wired into the MPC path.
+- **Play-money only:** this is a technology showcase, not a real-money product (real-money poker carries liquidity + legal burdens a solo build shouldn't take on).
 
 ---
 
-## Future Roadmap
+## Credits
 
-- [ ] Multi-table tournaments
-- [ ] Spectator mode
-- [ ] In-game chat
-- [ ] Mainnet deployment
-- [ ] Tournament mode with blind escalation
-- [ ] Mobile app
-
----
+Built by [**criptocbas**](https://github.com/criptocbas). Card privacy powered by [**Arcium**](https://arcium.com) MPC. Originally created for the **Solana Privacy Hack**, then re-architected from a VRF+TEE design to MPC.
 
 ## License
 
-MIT
-
----
-
-<p align="center">
-  <strong>HiddenHand</strong><br>
-  <em>Poker you can verify.</em>
-</p>
+[MIT](./LICENSE) — do what you like, no warranty.
