@@ -164,15 +164,16 @@ The frontend supports mobile phones in both portrait and landscape orientations.
 
 ### On-Chain Events & Hand Replay
 
-5 events in `events.rs` create a complete audit trail for every hand:
+Events in `events.rs` create a complete audit trail for every hand:
 
 | Event | Emitted in | When |
 |-------|-----------|------|
-| `HandStarted` | `callback_shuffle.rs` | VRF shuffle complete, blinds posted |
-| `ActionTaken` | `player_action.rs`, `timeout_player.rs`, `timeout_reveal.rs` | Every player action or timeout |
-| `CommunityCardsRevealed` | `reveal_community.rs` | Flop/turn/river revealed |
-| `ShowdownReveal` | `reveal_cards.rs` | Player reveals hole cards |
+| `HandStarted` | `deal_to_seat` (last seat) | All seats dealt, blinds posted |
+| `ActionTaken` | `player_action.rs`, `timeout_player.rs` | Every player action or timeout |
+| `CommunityCardsRevealed` | `reveal_flop` / `reveal_turn` / `reveal_river` callbacks | Board cards published |
+| `ShowdownReveal` | `showdown_reveal` callback | Non-folded hole cards published |
 | `HandCompleted` | `showdown.rs` | Hand finishes, pot distributed |
+| `HandAborted` | `timeout_deal`, `timeout_showdown` | Stuck hand refunded |
 
 **Phase encoding**: `GamePhase as u8` cast (Dealing=0, PreFlop=1, Flop=2, Turn=3, River=4, Showdown=5, Settled=6). This relies on enum variant ordering in `hand.rs` — **do not reorder GamePhase variants**.
 
@@ -190,9 +191,9 @@ The frontend supports mobile phones in both portrait and landscape orientations.
 The game includes robust timeout mechanisms to prevent games from getting stuck if a player or the table authority goes AFK:
 
 1. **Player Action Timeout** (`timeout_player`): Force fold inactive players after timeout
-2. **Showdown Reveal Timeout** (`timeout_reveal`): Auto-fold players who don't reveal cards at showdown
-3. **Community Card Reveal Timeout** (`reveal_community`): Any player can reveal community cards after 60s if authority is AFK
-4. **Community Card Allowances** (`grant_community_allowances`): All players receive decryption access for community cards after VRF shuffle
+2. **Deal Timeout** (`timeout_deal`): Abort if a seated player never deals in
+3. **Community Reveal Timeout** (`reveal_flop` / `reveal_turn` / `reveal_river`): Any player can queue the street after 60s if authority is AFK
+4. **Stuck MPC Reveal** (`timeout_showdown`): After 180s, abort and refund everyone (retired: `timeout_reveal` per-player muck)
 
 **Technical Details:**
 - Timeout checks use Solana cluster time (not local time) to avoid clock synchronization issues
@@ -345,7 +346,7 @@ Each table is denominated in a single SPL token (stored as `token_mint: Pubkey` 
 |-------------|-------------|--------|
 | `collect_rake` | Authority withdraws accumulated rake from vault | Done |
 | `timeout_player` | Force fold inactive player | Done |
-| `timeout_reveal` | Force reveal timeout at showdown | Done |
+| `timeout_reveal` | **Retired** — replaced by batched `showdown_reveal` + `timeout_showdown` | Retired |
 | `close_inactive_table` | Close abandoned table, return funds | Done |
 
 ## File Structure
@@ -374,7 +375,7 @@ hiddenhand/
 │           ├── reveal_cards.rs         # Ed25519 verified card reveal
 │           ├── reveal_community.rs     # Ed25519 verified community card reveal
 │           ├── timeout_player.rs       # Force fold inactive players
-│           ├── timeout_reveal.rs       # Force reveal at showdown
+│           ├── timeout_showdown.rs     # Abort a stuck MPC reveal (retired: timeout_reveal.rs)
 │           ├── close_inactive_table.rs # Return funds from abandoned table
 │           ├── request_shuffle.rs      # VRF randomness request
 │           ├── callback_shuffle.rs     # VRF callback - atomic shuffle + encrypt

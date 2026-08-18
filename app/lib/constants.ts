@@ -4,11 +4,11 @@
  * IMPORTANT: If you change these values, update the Rust constants too!
  */
 
-// Timeouts (in seconds)
-export const ACTION_TIMEOUT_SECONDS = 60; // Time for player to act during their turn
-export const DEAL_TIMEOUT_SECONDS = 30; // Time for authority to deal cards
-export const ALLOWANCE_TIMEOUT_SECONDS = 60; // Time for authority to grant decryption allowances
-export const REVEAL_TIMEOUT_SECONDS = 180; // Time to reveal cards at showdown (3 minutes)
+// Timeouts (in seconds) — must match programs/hiddenhand/src/constants.rs
+export const ACTION_TIMEOUT_SECONDS = 60; // player action / non-authority start-hand / non-authority showdown-settle
+export const DEAL_TIMEOUT_SECONDS = 30; // timeout_deal: abort if a seat never deals in
+export const ALLOWANCE_TIMEOUT_SECONDS = 60; // non-authority community reveal (name is historical; program uses this ident)
+export const REVEAL_TIMEOUT_SECONDS = 180; // timeout_showdown: abort a stuck MPC reveal
 export const TABLE_INACTIVE_TIMEOUT_SECONDS = 3600; // Inactive table auto-close (1 hour)
 export const EMERGENCY_TIMEOUT_SECONDS = 86400; // Emergency withdraw (24 hours)
 

@@ -21,7 +21,7 @@ and every finding with its fix.
 ### What the program guarantees
 
 - Betting, pot accounting, side pots, rake, and hand evaluation are deterministic
-  public logic, unit-tested (46 tests).
+  public logic, unit-tested (50 tests).
 - Real token transfers happen only at 4 entry/exit points: `join_table`,
   `leave_table`, `collect_rake`, `close_inactive_table`. Gameplay instructions
   manipulate an internal chip ledger and never touch the vault.
