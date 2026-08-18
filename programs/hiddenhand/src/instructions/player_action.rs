@@ -306,7 +306,10 @@ fn find_next_player_who_can_act(
 
 /// Signal that we need to run out all remaining community cards to showdown
 /// This happens when all remaining players are all-in (no more betting possible)
-fn run_out_to_showdown(hand_state: &mut HandState, _deck_state: &DeckState) -> Result<()> {
+pub(crate) fn run_out_to_showdown(
+    hand_state: &mut HandState,
+    _deck_state: &DeckState,
+) -> Result<()> {
     // Community cards are ENCRYPTED - authority must reveal them
     // Set the awaiting flag. The reveal_community instruction will detect
     // that all players are all-in and reveal all remaining cards at once.
@@ -332,4 +335,92 @@ fn run_out_to_showdown(hand_state: &mut HandState, _deck_state: &DeckState) -> R
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn hand_state(phase: GamePhase, active_count: u8) -> HandState {
+        HandState {
+            table: Pubkey::default(),
+            hand_number: 1,
+            phase,
+            pot: 0,
+            current_bet: 0,
+            min_raise: 0,
+            dealer_position: 0,
+            action_on: 0,
+            community_cards: vec![255; 5],
+            community_revealed: 0,
+            active_players: (1u8 << active_count) - 1,
+            acted_this_round: 0,
+            active_count,
+            all_in_players: 0,
+            last_action_time: 0,
+            hand_start_time: 0,
+            awaiting_community_reveal: false,
+            dealt_players: 0,
+            bump: 0,
+        }
+    }
+
+    fn deck_state() -> DeckState {
+        DeckState {
+            deck: [[0u8; 32]; 2],
+            deck_nonce: 0,
+            hand: Pubkey::default(),
+            hand_number: 1,
+            is_shuffled: true,
+            bump: 0,
+        }
+    }
+
+    /// H-3: a lone remaining player is settled WITHOUT a showdown — the runout
+    /// path must never route back to Showdown, or a permissionless
+    /// showdown_reveal could force-expose the uncontested winner's hole cards.
+    #[test]
+    fn lone_player_runout_settles_without_showdown() {
+        for phase in [
+            GamePhase::PreFlop,
+            GamePhase::Flop,
+            GamePhase::Turn,
+            GamePhase::River,
+        ] {
+            let mut hs = hand_state(phase, 1);
+            run_out_to_showdown(&mut hs, &deck_state()).unwrap();
+            assert_eq!(hs.phase, GamePhase::Settled, "phase {phase:?}");
+            assert!(!hs.awaiting_community_reveal, "phase {phase:?}");
+        }
+    }
+
+    /// H-3: an already-settled fold-out stays Settled even if the runout path
+    /// is reached afterwards.
+    #[test]
+    fn settled_lone_player_stays_settled() {
+        let mut hs = hand_state(GamePhase::Settled, 1);
+        run_out_to_showdown(&mut hs, &deck_state()).unwrap();
+        assert_eq!(hs.phase, GamePhase::Settled);
+    }
+
+    /// A contested all-in on the river (board complete) goes straight to Showdown.
+    #[test]
+    fn river_runout_advances_to_showdown() {
+        let mut hs = hand_state(GamePhase::River, 2);
+        run_out_to_showdown(&mut hs, &deck_state()).unwrap();
+        assert_eq!(hs.phase, GamePhase::Showdown);
+        assert!(!hs.awaiting_community_reveal);
+    }
+
+    /// A contested all-in before the river must wait for the community reveal
+    /// (phase unchanged, awaiting flag set) so the board can be run out in MPC.
+    #[test]
+    fn pre_river_runout_awaits_community_reveal() {
+        for phase in [GamePhase::PreFlop, GamePhase::Flop, GamePhase::Turn] {
+            let mut hs = hand_state(phase, 3);
+            run_out_to_showdown(&mut hs, &deck_state()).unwrap();
+            assert_eq!(hs.phase, phase, "phase must not change pre-river");
+            assert!(hs.awaiting_community_reveal, "phase {phase:?}");
+        }
+    }
 }
