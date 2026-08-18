@@ -207,6 +207,14 @@ export function parseAnchorError(error: unknown, context?: {
     "DuplicateAccount": "Duplicate account error.",
     "InvalidRemainingAccounts": "Invalid accounts provided.",
     "InvalidTokenMint": "Token mint does not match the table's token. Check your wallet has the correct token.",
+    "IncompletePlayerAccounts": "Not every player in this hand was included. Refresh and try again.",
+    "HandNotStuck": "This hand can still be settled normally — it will not be refunded.",
+    "PlayersNotRevealed": "Hands have not been revealed from the sealed deck yet.",
+    "AlreadyDealt": "You have already been dealt into this hand.",
+    "NotYourSeat": "Only you can deal your own seat.",
+    "TimeoutNotReached": "The timeout has not elapsed yet.",
+    "AbortedComputation": "The private computation did not finish. You can retry, or refund the hand after the timeout.",
+    "AwaitingCommunityReveal": "Waiting for the next board cards to be revealed.",
   };
 
   // Try to extract error code from message
