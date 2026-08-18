@@ -93,6 +93,7 @@ export default function TablePage({ params }: { params: Promise<{ tableId: strin
     showdown,
     timeoutPlayer,
     timeoutDeal,
+    timeoutShowdown,
     setTableId,
     // Arcium MPC — shuffle the deck
     requestShuffle,
@@ -936,8 +937,11 @@ export default function TablePage({ params }: { params: Promise<{ tableId: strin
                     </div>
                   )}
 
-                  {/* Leave table */}
-                  {currentPlayer && (gameState.tableStatus === "Waiting" || currentPlayer.chips === 0) && (
+                  {/* Leave table. The program forbids leaving mid-hand (every
+                      seated player is a participant once a hand starts), so
+                      only offer it while the table is Waiting — otherwise show
+                      a hint instead of a button that would just fail. */}
+                  {currentPlayer && gameState.tableStatus === "Waiting" && (
                     <button
                       onClick={() => leaveTable()}
                       disabled={loading}
@@ -945,6 +949,17 @@ export default function TablePage({ params }: { params: Promise<{ tableId: strin
                     >
                       Leave Table
                     </button>
+                  )}
+                  {currentPlayer && gameState.tableStatus === "Playing" && (
+                    <Tooltip
+                      title="Leaving locked during hand"
+                      content="Your stake is part of the current hand. You can leave as soon as the hand settles."
+                    >
+                      <span className="text-[var(--text-muted)] text-xs cursor-help flex items-center gap-1">
+                        Leave available after this hand
+                        <InfoIcon />
+                      </span>
+                    </Tooltip>
                   )}
 
                   {/* Close inactive table - shows after 1 hour of inactivity */}
@@ -1182,33 +1197,23 @@ export default function TablePage({ params }: { params: Promise<{ tableId: strin
                         <p className="text-xs text-[var(--text-muted)] mt-1">
                           All players must reveal before showdown
                         </p>
-                        {/* Timeout reveal option after reveal timeout */}
-                        {gameState.lastActionTime && (Date.now() / 1000 - gameState.lastActionTime) >= REVEAL_TIMEOUT_SECONDS && (
+                        {/* Last-resort abort once the reveal timeout has passed.
+                            The showdown_reveal MPC is re-queueable, so this only
+                            fires under a sustained MPC failure; the program
+                            refunds every seat's stake (nobody is advantaged). */}
+                        {gameState.lastActionTime && (Date.now() / 1000 - gameState.lastActionTime) >= REVEAL_TIMEOUT_SECONDS + 5 && (
                           <div className="mt-3 pt-3 border-t border-white/10">
                             <p className="text-orange-400 text-xs mb-2">
-                              Reveal timeout reached - you can muck non-revealing players
+                              Reveal timeout reached — if the MPC reveal won&apos;t complete,
+                              anyone can abort the hand and refund all stakes
                             </p>
-                            <div className="flex flex-wrap gap-2 justify-center">
-                              {activePlayers
-                                .filter(p => !p.cardsRevealed && p.status !== "folded")
-                                .map(p => (
-                                  <button
-                                    key={p.seatIndex}
-                                    onClick={async () => {
-                                      try {
-                                        await timeoutReveal(p.seatIndex);
-                                        addGameEvent("system", `Player at seat ${p.seatIndex + 1} mucked for not revealing`);
-                                      } catch (e) {
-                                        console.error("Failed to timeout player:", e);
-                                      }
-                                    }}
-                                    disabled={loading}
-                                    className="btn-danger px-3 py-1.5 rounded-lg text-xs font-medium disabled:opacity-50"
-                                  >
-                                    Muck Seat {p.seatIndex + 1}
-                                  </button>
-                                ))}
-                            </div>
+                            <button
+                              onClick={() => withToast(() => timeoutShowdown(), "Aborting stuck hand…", "Hand aborted — all stakes refunded")}
+                              disabled={loading}
+                              className="btn-danger px-4 py-2 rounded-lg text-xs font-semibold disabled:opacity-50"
+                            >
+                              Abort hand &amp; refund everyone
+                            </button>
                           </div>
                         )}
                       </div>
@@ -1418,6 +1423,35 @@ export default function TablePage({ params }: { params: Promise<{ tableId: strin
               </div>
             );
           })()}
+
+          {/* Stuck community-card reveal: the reveal_* MPC never completed.
+              After REVEAL_TIMEOUT_SECONDS anyone can abort the hand; the program
+              refunds every seat's stake (fair for all — nobody is advantaged). */}
+          {currentPlayer && gameState.tableStatus === "Playing" &&
+           gameState.awaitingCommunityReveal && gameState.phase !== "Showdown" &&
+           (gameState.handState?.activeCount ?? 0) > 1 &&
+           gameState.lastActionTime &&
+           Date.now() / 1000 - gameState.lastActionTime >= REVEAL_TIMEOUT_SECONDS + 5 && (
+            <div className="max-w-md mx-auto glass border border-red-500/30 rounded-2xl p-5 text-center">
+              <div className="flex items-center justify-center gap-2 mb-2">
+                <svg className="w-5 h-5 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+                <span className="text-red-300 font-semibold">Community reveal stuck</span>
+              </div>
+              <p className="text-[var(--text-muted)] text-sm mb-4">
+                The MPC reveal hasn&apos;t completed in over {Math.floor(REVEAL_TIMEOUT_SECONDS / 60)} minutes.
+                You can abort this hand — every player&apos;s stake is refunded in full.
+              </p>
+              <button
+                onClick={() => withToast(() => timeoutShowdown(), "Aborting stuck hand…", "Hand aborted — all stakes refunded")}
+                disabled={loading}
+                className="btn-danger px-5 py-2.5 rounded-xl text-sm font-semibold disabled:opacity-50 mx-auto"
+              >
+                Abort hand &amp; refund everyone
+              </button>
+            </div>
+          )}
 
           {/* Reveal Cards for Showdown */}
           {/* Only show when: in Showdown phase, player is active (not folded), and multiple players remain */}

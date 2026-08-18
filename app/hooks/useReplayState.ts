@@ -241,6 +241,19 @@ function applyStep(
         }
         break;
       }
+
+      case "hand_aborted": {
+        // Stuck hand force-aborted: every stake refunded, pot voided.
+        next.phase = "Settled";
+        next.pot = 0;
+        next.players.forEach((p) => {
+          if (p.status !== "empty") {
+            p.chips += p.currentBet;
+            p.currentBet = 0;
+          }
+        });
+        break;
+      }
     }
   } else {
     // HandCompleted — final step
@@ -315,6 +328,11 @@ function getAnnotation(
     case "showdown_reveal": {
       const cards = `${formatCard(event.card1)} ${formatCard(event.card2)}`;
       return `Seat ${event.seatIndex + 1} reveals: ${cards}`;
+    }
+
+    case "hand_aborted": {
+      const cause = event.reason === 0 ? "deal stalled" : "reveal stalled";
+      return `Hand aborted (${cause}) — ${fmt(event.refundedTotal)} ${token.symbol} refunded`;
     }
   }
 }

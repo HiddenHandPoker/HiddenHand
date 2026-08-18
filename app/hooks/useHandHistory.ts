@@ -32,6 +32,7 @@ const EVENT_DISCRIMINATORS = {
   ActionTaken:            [0x80, 0xba, 0x4d, 0x0c, 0x63, 0xc3, 0x30, 0x3c],
   CommunityCardsRevealed: [0xc2, 0xff, 0x4e, 0x04, 0x74, 0x5f, 0x16, 0xb4],
   ShowdownReveal:         [0x57, 0x83, 0x25, 0x8d, 0xc7, 0xc0, 0x5c, 0xb2],
+  HandAborted:            [0xa3, 0xbe, 0x97, 0xef, 0x15, 0x1e, 0xf9, 0xaa],
 } as const;
 
 // --- Types ---
@@ -96,11 +97,19 @@ export interface ShowdownRevealTimelineEvent extends BaseTimelineEvent {
   card2: number;
 }
 
+export interface HandAbortedTimelineEvent extends BaseTimelineEvent {
+  type: "hand_aborted";
+  /** 0 = deal stall, 1 = reveal stall */
+  reason: number;
+  refundedTotal: number;
+}
+
 export type TimelineEvent =
   | HandStartedTimelineEvent
   | ActionTakenTimelineEvent
   | CommunityCardsTimelineEvent
-  | ShowdownRevealTimelineEvent;
+  | ShowdownRevealTimelineEvent
+  | HandAbortedTimelineEvent;
 
 // --- Helpers ---
 
@@ -285,6 +294,24 @@ function parseShowdownRevealFromBuffer(data: Uint8Array, signature: string): { h
   }
 }
 
+// HandAborted layout: table_id[32] + hand_number[8] + reason[1] + refunded_total[8] + timestamp[8]
+function parseHandAbortedFromBuffer(data: Uint8Array, signature: string): { handNumber: number; event: HandAbortedTimelineEvent } | null {
+  try {
+    let offset = 32;
+    const handNumber = readU64LE(data, offset); offset += 8;
+    const reason = data[offset++];
+    const refundedTotal = readU64LE(data, offset); offset += 8;
+    const timestamp = readI64LE(data, offset); offset += 8;
+    return {
+      handNumber,
+      event: { type: "hand_aborted", timestamp: new Date(timestamp * 1000), signature, reason, refundedTotal },
+    };
+  } catch (e) {
+    console.error("[HandHistory] HandAborted parse error:", e);
+    return null;
+  }
+}
+
 // Parse all events from a single "Program data:" log line
 // Returns any events found (may be empty)
 function parseEventsFromDataLog(
@@ -316,6 +343,9 @@ function parseEventsFromDataLog(
       if (parsed) timeline.push(parsed);
     } else if (matchDisc(disc, EVENT_DISCRIMINATORS.ShowdownReveal)) {
       const parsed = parseShowdownRevealFromBuffer(eventData, signature);
+      if (parsed) timeline.push(parsed);
+    } else if (matchDisc(disc, EVENT_DISCRIMINATORS.HandAborted)) {
+      const parsed = parseHandAbortedFromBuffer(eventData, signature);
       if (parsed) timeline.push(parsed);
     }
   } catch {
@@ -573,6 +603,18 @@ export function useHandHistory(program: Program<Idl> | null, tablePDA?: PublicKe
         });
       });
       listenerIdsRef.current.push(showdownId);
+
+      const handAbortedId = program.addEventListener("HandAborted" as any, (event: any, slot: number, signature: string) => {
+        const handNumber = Number(event.handNumber ?? event.hand_number ?? 0);
+        addTimelineEvent(handNumber, {
+          type: "hand_aborted",
+          timestamp: new Date(Number(event.timestamp ?? 0) * 1000),
+          signature,
+          reason: event.reason ?? 0,
+          refundedTotal: Number(event.refundedTotal ?? event.refunded_total ?? 0),
+        });
+      });
+      listenerIdsRef.current.push(handAbortedId);
 
       setIsListening(true);
       console.log("[HandHistory] Anchor event listeners started");

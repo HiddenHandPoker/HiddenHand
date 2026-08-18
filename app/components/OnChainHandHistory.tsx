@@ -369,6 +369,20 @@ function getTimelineRowContent(event: TimelineEvent, token: TokenInfo): { dot: s
           </>
         ),
       };
+
+    case "hand_aborted":
+      return {
+        dot: "bg-[var(--status-danger)]",
+        content: (
+          <span className="text-[var(--status-danger)]">
+            Hand aborted ({event.reason === 0 ? "deal stalled" : "reveal stalled"}) —{" "}
+            <span className="text-[var(--text-primary)]">
+              {baseUnitsToDisplay(event.refundedTotal, token).toFixed(2)} {token.symbol}
+            </span>{" "}
+            refunded to players
+          </span>
+        ),
+      };
   }
 }
 
