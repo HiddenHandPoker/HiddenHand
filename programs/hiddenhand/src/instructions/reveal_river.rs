@@ -45,7 +45,11 @@ pub fn handler(ctx: Context<RevealRiver>, computation_offset: u64) -> Result<()>
         ctx.accounts.hand_state.awaiting_community_reveal,
         HiddenHandError::CommunityNotReady
     );
-    authorize_reveal(&ctx.accounts.table, &ctx.accounts.hand_state, &ctx.accounts.caller)?;
+    authorize_reveal(
+        &ctx.accounts.table,
+        &ctx.accounts.hand_state,
+        &ctx.accounts.caller,
+    )?;
 
     ctx.accounts.sign_pda_account.bump = ctx.bumps.sign_pda_account;
 
@@ -61,14 +65,16 @@ pub fn handler(ctx: Context<RevealRiver>, computation_offset: u64) -> Result<()>
         vec![RevealRiverCallback::callback_ix(
             computation_offset,
             &ctx.accounts.mxe_account,
-            &[CallbackAccount {
-                pubkey: ctx.accounts.table.key(),
-                is_writable: false,
-            },
-            CallbackAccount {
-                pubkey: ctx.accounts.hand_state.key(),
-                is_writable: true,
-            }],
+            &[
+                CallbackAccount {
+                    pubkey: ctx.accounts.table.key(),
+                    is_writable: false,
+                },
+                CallbackAccount {
+                    pubkey: ctx.accounts.hand_state.key(),
+                    is_writable: true,
+                },
+            ],
         )?],
         1,
         0,

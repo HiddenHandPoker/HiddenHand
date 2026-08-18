@@ -1,19 +1,16 @@
 use anchor_lang::prelude::*;
 
-#[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, PartialEq, Eq, Debug, InitSpace)]
+#[derive(
+    AnchorSerialize, AnchorDeserialize, Clone, Copy, PartialEq, Eq, Debug, InitSpace, Default,
+)]
 pub enum TableStatus {
     /// Waiting for players to join
+    #[default]
     Waiting,
     /// Hand in progress
     Playing,
     /// Table is closed
     Closed,
-}
-
-impl Default for TableStatus {
-    fn default() -> Self {
-        TableStatus::Waiting
-    }
 }
 
 #[account]
@@ -99,7 +96,7 @@ impl Table {
         8 +  // accumulated_rake
         32 + // token_mint
         1 +  // token_decimals
-        1;   // bump
+        1; // bump
 
     /// Check if a seat is occupied
     pub fn is_seat_occupied(&self, seat_index: u8) -> bool {
@@ -120,12 +117,7 @@ impl Table {
 
     /// Find first available seat
     pub fn find_empty_seat(&self) -> Option<u8> {
-        for i in 0..self.max_players {
-            if !self.is_seat_occupied(i) {
-                return Some(i);
-            }
-        }
-        None
+        (0..self.max_players).find(|&i| !self.is_seat_occupied(i))
     }
 
     /// Advance dealer button to next occupied seat

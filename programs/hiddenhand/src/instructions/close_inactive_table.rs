@@ -26,18 +26,14 @@ fn validate_player_token_account(
     expected_owner: &Pubkey,
     expected_mint: &Pubkey,
 ) -> Result<()> {
-    let ta = TokenAccount::try_deserialize(
-        &mut &account_info.try_borrow_data()?[..],
-    ).map_err(|_| HiddenHandError::InvalidRemainingAccounts)?;
+    let ta = TokenAccount::try_deserialize(&mut &account_info.try_borrow_data()?[..])
+        .map_err(|_| HiddenHandError::InvalidRemainingAccounts)?;
 
     require!(
         ta.owner == *expected_owner,
         HiddenHandError::PlayerNotAtTable
     );
-    require!(
-        ta.mint == *expected_mint,
-        HiddenHandError::InvalidTokenMint
-    );
+    require!(ta.mint == *expected_mint, HiddenHandError::InvalidTokenMint);
 
     Ok(())
 }
@@ -79,9 +75,7 @@ pub struct CloseInactiveTable<'info> {
 /// Close an inactive table and return funds to all players
 /// remaining_accounts should contain player seats and their corresponding token accounts
 /// Format: [seat0, player_token_account0, seat1, player_token_account1, ...]
-pub fn handler<'info>(
-    ctx: Context<'info, CloseInactiveTable<'info>>,
-) -> Result<()> {
+pub fn handler<'info>(ctx: Context<'info, CloseInactiveTable<'info>>) -> Result<()> {
     let table = &ctx.accounts.table;
     let clock = Clock::get()?;
 
@@ -110,11 +104,7 @@ pub fn handler<'info>(
     let program_id = crate::ID;
     let mint_decimals = ctx.accounts.mint.decimals;
 
-    let signer_seeds: &[&[u8]] = &[
-        TABLE_SEED,
-        table_id.as_ref(),
-        &[table_bump],
-    ];
+    let signer_seeds: &[&[u8]] = &[TABLE_SEED, table_id.as_ref(), &[table_bump]];
 
     // Process remaining_accounts in pairs: [seat, player_token_account, ...]
     let remaining = ctx.remaining_accounts;
@@ -143,7 +133,10 @@ pub fn handler<'info>(
 
         let seat = match PlayerSeat::try_deserialize(&mut &seat_data[..]) {
             Ok(s) => s,
-            Err(_) => { drop(seat_data); continue; }
+            Err(_) => {
+                drop(seat_data);
+                continue;
+            }
         };
 
         // Security check 2: Verify seat belongs to this table
@@ -170,7 +163,11 @@ pub fn handler<'info>(
         // Return chips to player via token transfer
         if transfer_amount > 0 {
             // Security: Verify token account belongs to the player and matches table mint
-            validate_player_token_account(player_token_info, &player_key, &ctx.accounts.mint.key())?;
+            validate_player_token_account(
+                player_token_info,
+                &player_key,
+                &ctx.accounts.mint.key(),
+            )?;
 
             token_interface::transfer_checked(
                 CpiContext::new_with_signer(

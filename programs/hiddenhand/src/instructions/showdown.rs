@@ -4,7 +4,9 @@ use std::collections::BTreeSet;
 use crate::constants::*;
 use crate::error::HiddenHandError;
 use crate::events::{HandCompleted, PlayerHandResult};
-use crate::state::{evaluate_hand, find_winners, GamePhase, HandState, PlayerSeat, PlayerStatus, Table, TableStatus};
+use crate::state::{
+    evaluate_hand, find_winners, GamePhase, HandState, PlayerSeat, PlayerStatus, Table, TableStatus,
+};
 
 /// Helper to validate a seat account from remaining_accounts
 /// Returns Some(seat) if valid, None if should be skipped
@@ -139,7 +141,10 @@ pub fn handler(ctx: Context<Showdown>) -> Result<()> {
             elapsed >= ACTION_TIMEOUT_SECONDS,
             HiddenHandError::UnauthorizedAuthority
         );
-        msg!("Non-authority calling showdown after {} seconds timeout", elapsed);
+        msg!(
+            "Non-authority calling showdown after {} seconds timeout",
+            elapsed
+        );
     }
 
     // Security: Check for duplicate accounts in remaining_accounts
@@ -152,13 +157,14 @@ pub fn handler(ctx: Context<Showdown>) -> Result<()> {
 
     // Validate game phase
     require!(
-        hand_state.phase == GamePhase::Showdown ||
-        (hand_state.phase == GamePhase::Settled && hand_state.active_count == 1),
+        hand_state.phase == GamePhase::Showdown
+            || (hand_state.phase == GamePhase::Settled && hand_state.active_count == 1),
         HiddenHandError::InvalidPhase
     );
 
     // Get community cards
-    let community_cards: Vec<u8> = hand_state.community_cards
+    let community_cards: Vec<u8> = hand_state
+        .community_cards
         .iter()
         .filter(|&&c| c != 255)
         .copied()
@@ -192,7 +198,8 @@ pub fn handler(ctx: Context<Showdown>) -> Result<()> {
             break;
         }
         if let Some(seat) = validate_seat_account(account_info, &table.key(), &program_id) {
-            let is_active = seat.status == PlayerStatus::Playing || seat.status == PlayerStatus::AllIn;
+            let is_active =
+                seat.status == PlayerStatus::Playing || seat.status == PlayerStatus::AllIn;
 
             // Track active seats for hand evaluation
             if is_active {
@@ -224,9 +231,13 @@ pub fn handler(ctx: Context<Showdown>) -> Result<()> {
 
             let hand_rank = if hole_1 != 255 && hole_2 != 255 && community_cards.len() == 5 {
                 let eval = evaluate_hand(&[
-                    hole_1, hole_2,
-                    community_cards[0], community_cards[1], community_cards[2],
-                    community_cards[3], community_cards[4],
+                    hole_1,
+                    hole_2,
+                    community_cards[0],
+                    community_cards[1],
+                    community_cards[2],
+                    community_cards[3],
+                    community_cards[4],
                 ]);
                 eval.rank as u8
             } else {
@@ -260,10 +271,7 @@ pub fn handler(ctx: Context<Showdown>) -> Result<()> {
         present_active_bits == hand_state.active_players,
         HiddenHandError::IncompletePlayerAccounts
     );
-    require!(
-        sum_bets == pot,
-        HiddenHandError::IncompletePlayerAccounts
-    );
+    require!(sum_bets == pot, HiddenHandError::IncompletePlayerAccounts);
 
     // Check that all active players have revealed their cards (required for secure showdown)
     // Skip this check if only one player remains (they win by default)
@@ -285,7 +293,11 @@ pub fn handler(ctx: Context<Showdown>) -> Result<()> {
     // === RAKE CALCULATION ===
     let total_rake = if table.rake_bps > 0 && pot > 0 {
         let r = pot.saturating_mul(table.rake_bps as u64) / 10000;
-        if table.rake_cap > 0 { r.min(table.rake_cap) } else { r }
+        if table.rake_cap > 0 {
+            r.min(table.rake_cap)
+        } else {
+            r
+        }
     } else {
         0
     };
@@ -293,7 +305,12 @@ pub fn handler(ctx: Context<Showdown>) -> Result<()> {
     let pot_after_rake = pot.saturating_sub(total_rake);
     if total_rake > 0 {
         table.accumulated_rake = table.accumulated_rake.saturating_add(total_rake);
-        msg!("Rake: {} lamports ({}bps, cap {})", total_rake, table.rake_bps, table.rake_cap);
+        msg!(
+            "Rake: {} lamports ({}bps, cap {})",
+            total_rake,
+            table.rake_bps,
+            table.rake_cap
+        );
     }
 
     // === POT DISTRIBUTION ===
@@ -310,7 +327,11 @@ pub fn handler(ctx: Context<Showdown>) -> Result<()> {
                     seat.award_chips(pot_after_rake);
                     seat.try_serialize(&mut *data)?;
                     chips_awarded.push((*seat_idx, pot_after_rake));
-                    msg!("Player at seat {} wins {} (all others folded)", seat_idx, pot_after_rake);
+                    msg!(
+                        "Player at seat {} wins {} (all others folded)",
+                        seat_idx,
+                        pot_after_rake
+                    );
                 }
                 break;
             }
@@ -319,7 +340,11 @@ pub fn handler(ctx: Context<Showdown>) -> Result<()> {
         // === SIDE POT CALCULATION ===
         let side_pots = calculate_side_pots(&all_bets);
 
-        msg!("Calculated {} side pot(s) from {} player bets", side_pots.len(), all_bets.len());
+        msg!(
+            "Calculated {} side pot(s) from {} player bets",
+            side_pots.len(),
+            all_bets.len()
+        );
 
         // Deduct rake from side pots (from the main pot first)
         let mut rake_remaining = total_rake;
@@ -352,7 +377,12 @@ pub fn handler(ctx: Context<Showdown>) -> Result<()> {
                             seat.award_chips(*pot_amount);
                             seat.try_serialize(&mut *data)?;
                             chips_awarded.push((*seat_idx, *pot_amount));
-                            msg!("Side pot {}: seat {} wins {} (sole eligible)", pot_idx, seat_idx, pot_amount);
+                            msg!(
+                                "Side pot {}: seat {} wins {} (sole eligible)",
+                                pot_idx,
+                                seat_idx,
+                                pot_amount
+                            );
                         }
                         break;
                     }
@@ -383,7 +413,7 @@ pub fn handler(ctx: Context<Showdown>) -> Result<()> {
                             let seven_cards: [u8; 7] = [
                                 hole_card_1,
                                 hole_card_2,
-                                community_cards.get(0).copied().unwrap_or(0),
+                                community_cards.first().copied().unwrap_or(0),
                                 community_cards.get(1).copied().unwrap_or(0),
                                 community_cards.get(2).copied().unwrap_or(0),
                                 community_cards.get(3).copied().unwrap_or(0),
@@ -408,7 +438,13 @@ pub fn handler(ctx: Context<Showdown>) -> Result<()> {
             let share = pot_amount / winner_count;
             let remainder = pot_amount % winner_count;
 
-            msg!("Side pot {}: {} - {} winner(s), share: {}", pot_idx, pot_amount, winner_count, share);
+            msg!(
+                "Side pot {}: {} - {} winner(s), share: {}",
+                pot_idx,
+                pot_amount,
+                winner_count,
+                share
+            );
 
             for (i, winner_seat_idx) in winners.iter().enumerate() {
                 for (seat_idx, acc_idx) in active_seats.iter() {
@@ -423,11 +459,20 @@ pub fn handler(ctx: Context<Showdown>) -> Result<()> {
 
                             if seat.cards_revealed {
                                 let hand_eval = evaluate_hand(&[
-                                    seat.revealed_card_1, seat.revealed_card_2,
-                                    community_cards[0], community_cards[1], community_cards[2],
-                                    community_cards[3], community_cards[4],
+                                    seat.revealed_card_1,
+                                    seat.revealed_card_2,
+                                    community_cards[0],
+                                    community_cards[1],
+                                    community_cards[2],
+                                    community_cards[3],
+                                    community_cards[4],
                                 ]);
-                                msg!("Seat {} wins {} with {:?}", seat_idx, winnings, hand_eval.rank);
+                                msg!(
+                                    "Seat {} wins {} with {:?}",
+                                    seat_idx,
+                                    winnings,
+                                    hand_eval.rank
+                                );
                             } else {
                                 msg!("Seat {} wins {}", seat_idx, winnings);
                             }
@@ -454,7 +499,7 @@ pub fn handler(ctx: Context<Showdown>) -> Result<()> {
         hand_number: hand_state.hand_number,
         timestamp: clock.unix_timestamp,
         community_cards: [
-            community_cards.get(0).copied().unwrap_or(255),
+            community_cards.first().copied().unwrap_or(255),
             community_cards.get(1).copied().unwrap_or(255),
             community_cards.get(2).copied().unwrap_or(255),
             community_cards.get(3).copied().unwrap_or(255),
@@ -466,7 +511,10 @@ pub fn handler(ctx: Context<Showdown>) -> Result<()> {
         results_count,
     });
 
-    msg!("HandCompleted event emitted for hand #{}", hand_state.hand_number);
+    msg!(
+        "HandCompleted event emitted for hand #{}",
+        hand_state.hand_number
+    );
 
     // Reset all player states for next hand (including folded players)
     for account_info in ctx.remaining_accounts.iter() {
@@ -582,10 +630,10 @@ mod tests {
     fn test_side_pots_with_multiple_folds() {
         // A folds at 50, B folds at 100, C all-in 200, D all-in 500
         let bets = vec![
-            (0u8, 50u64, false),  // A folded
-            (1, 100, false),      // B folded
-            (2, 200, true),       // C active
-            (3, 500, true),       // D active
+            (0u8, 50u64, false), // A folded
+            (1, 100, false),     // B folded
+            (2, 200, true),      // C active
+            (3, 500, true),      // D active
         ];
         let pots = calculate_side_pots(&bets);
 
@@ -612,11 +660,7 @@ mod tests {
     #[test]
     fn test_side_pots_duplicate_bets() {
         // Two players with same bet amount
-        let bets = vec![
-            (0u8, 100u64, true),
-            (1, 100, true),
-            (2, 300, true),
-        ];
+        let bets = vec![(0u8, 100u64, true), (1, 100, true), (2, 300, true)];
         let pots = calculate_side_pots(&bets);
 
         assert_eq!(pots.len(), 2);

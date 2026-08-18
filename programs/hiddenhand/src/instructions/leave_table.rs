@@ -84,11 +84,7 @@ pub fn handler(ctx: Context<LeaveTable>) -> Result<()> {
 
     // Transfer chips back to player from vault using table PDA as signer
     if chips_to_return > 0 {
-        let signer_seeds: &[&[u8]] = &[
-            TABLE_SEED,
-            table_id.as_ref(),
-            &[table_bump],
-        ];
+        let signer_seeds: &[&[u8]] = &[TABLE_SEED, table_id.as_ref(), &[table_bump]];
 
         token_interface::transfer_checked(
             CpiContext::new_with_signer(

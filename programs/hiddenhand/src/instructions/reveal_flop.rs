@@ -51,7 +51,11 @@ pub fn handler(ctx: Context<RevealFlop>, computation_offset: u64) -> Result<()> 
         ctx.accounts.hand_state.awaiting_community_reveal,
         HiddenHandError::CommunityNotReady
     );
-    authorize_reveal(&ctx.accounts.table, &ctx.accounts.hand_state, &ctx.accounts.caller)?;
+    authorize_reveal(
+        &ctx.accounts.table,
+        &ctx.accounts.hand_state,
+        &ctx.accounts.caller,
+    )?;
 
     ctx.accounts.sign_pda_account.bump = ctx.bumps.sign_pda_account;
 
@@ -67,14 +71,16 @@ pub fn handler(ctx: Context<RevealFlop>, computation_offset: u64) -> Result<()> 
         vec![RevealFlopCallback::callback_ix(
             computation_offset,
             &ctx.accounts.mxe_account,
-            &[CallbackAccount {
-                pubkey: ctx.accounts.table.key(),
-                is_writable: false,
-            },
-            CallbackAccount {
-                pubkey: ctx.accounts.hand_state.key(),
-                is_writable: true,
-            }],
+            &[
+                CallbackAccount {
+                    pubkey: ctx.accounts.table.key(),
+                    is_writable: false,
+                },
+                CallbackAccount {
+                    pubkey: ctx.accounts.hand_state.key(),
+                    is_writable: true,
+                },
+            ],
         )?],
         1,
         0,
@@ -105,7 +111,12 @@ pub fn callback(
     hand_state.community_cards[2] = flop[2];
     hand_state.community_revealed = 3;
 
-    community_reset_and_advance(table, hand_state, GamePhase::Flop, vec![flop[0], flop[1], flop[2]])?;
+    community_reset_and_advance(
+        table,
+        hand_state,
+        GamePhase::Flop,
+        vec![flop[0], flop[1], flop[2]],
+    )?;
     Ok(())
 }
 

@@ -3,8 +3,10 @@ use anchor_lang::prelude::*;
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, PartialEq, Eq, Debug, InitSpace)]
 #[borsh(use_discriminant = true)]
 #[repr(u8)]
+#[derive(Default)]
 pub enum GamePhase {
     /// Cards being dealt
+    #[default]
     Dealing = 0,
     /// Pre-flop betting (after hole cards)
     PreFlop = 1,
@@ -18,12 +20,6 @@ pub enum GamePhase {
     Showdown = 5,
     /// Hand complete, pot distributed
     Settled = 6,
-}
-
-impl Default for GamePhase {
-    fn default() -> Self {
-        GamePhase::Dealing
-    }
 }
 
 #[account]
@@ -111,7 +107,7 @@ impl HandState {
         8 +  // hand_start_time (i64)
         1 +  // awaiting_community_reveal
         1 +  // dealt_players
-        1;   // bump
+        1; // bump
 
     /// Check if player is still active in hand
     pub fn is_player_active(&self, seat_index: u8) -> bool {

@@ -47,8 +47,10 @@ fn validate_seat_account(
     if seat.table != *table_key {
         return None;
     }
-    let (expected_pda, _) =
-        Pubkey::find_program_address(&[SEAT_SEED, table_key.as_ref(), &[seat.seat_index]], program_id);
+    let (expected_pda, _) = Pubkey::find_program_address(
+        &[SEAT_SEED, table_key.as_ref(), &[seat.seat_index]],
+        program_id,
+    );
     if *account_info.key != expected_pda {
         return None;
     }

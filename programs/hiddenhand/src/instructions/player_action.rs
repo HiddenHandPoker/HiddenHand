@@ -93,10 +93,7 @@ pub fn handler(ctx: Context<PlayerAction>, action: Action) -> Result<()> {
         HiddenHandError::NotPlayersTurn
     );
 
-    require!(
-        player_seat.can_act(),
-        HiddenHandError::PlayerFolded
-    );
+    require!(player_seat.can_act(), HiddenHandError::PlayerFolded);
 
     // Capture phase and bet state before action for event emission
     let phase_num = hand_state.phase as u8;
@@ -207,7 +204,9 @@ pub fn handler(ctx: Context<PlayerAction>, action: Action) -> Result<()> {
 
     // Find next player who needs to act in this betting round
     // (active, not all-in, hasn't acted yet or needs to respond to a raise)
-    if let Some(next_player) = find_next_player_who_can_act(hand_state, player_seat.seat_index, table.max_players) {
+    if let Some(next_player) =
+        find_next_player_who_can_act(hand_state, player_seat.seat_index, table.max_players)
+    {
         // Another player still needs to act - give them the action
         hand_state.action_on = next_player;
         msg!("Action moves to seat {}", next_player);
@@ -259,7 +258,11 @@ pub fn handler(ctx: Context<PlayerAction>, action: Action) -> Result<()> {
 }
 
 #[allow(clippy::too_many_arguments)]
-fn advance_to_next_phase(hand_state: &mut HandState, _deck_state: &DeckState, _max_players: u8) -> Result<()> {
+fn advance_to_next_phase(
+    hand_state: &mut HandState,
+    _deck_state: &DeckState,
+    _max_players: u8,
+) -> Result<()> {
     // Community cards are now ENCRYPTED in deck_state
     // We can't reveal them directly - authority must call reveal_community
     // Set the flag to signal that we're waiting for community card reveal
@@ -283,12 +286,17 @@ fn advance_to_next_phase(hand_state: &mut HandState, _deck_state: &DeckState, _m
 }
 
 /// Find next player who needs to act (not folded, not all-in, hasn't acted this round)
-fn find_next_player_who_can_act(hand_state: &HandState, after_seat: u8, max_players: u8) -> Option<u8> {
+fn find_next_player_who_can_act(
+    hand_state: &HandState,
+    after_seat: u8,
+    max_players: u8,
+) -> Option<u8> {
     let mut next = (after_seat + 1) % max_players;
     for _ in 0..max_players {
         if hand_state.is_player_active(next)
             && !hand_state.is_player_all_in(next)
-            && !hand_state.has_player_acted(next) {
+            && !hand_state.has_player_acted(next)
+        {
             return Some(next);
         }
         next = (next + 1) % max_players;

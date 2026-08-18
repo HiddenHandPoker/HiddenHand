@@ -40,7 +40,7 @@ impl DeckState {
         32 + // hand
         8 +  // hand_number
         1 +  // is_shuffled
-        1;   // bump
+        1; // bump
 }
 
 /// Helper functions for card encoding

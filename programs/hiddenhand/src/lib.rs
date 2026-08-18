@@ -1,3 +1,9 @@
+// The #[arcium_program] macro expands to code that triggers these two lints
+// (diverging match arms and duplicate comp-def symbol re-exports). They are
+// macro-generated, not ours to fix.
+#![allow(clippy::diverging_sub_expression)]
+#![allow(ambiguous_glob_reexports)]
+
 pub mod constants;
 pub mod error;
 pub mod events;
@@ -26,6 +32,8 @@ pub mod hiddenhand {
     /// Create a new poker table
     /// rake_bps: rake in basis points (0 = no rake, max 1000 = 10%)
     /// rake_cap: maximum rake per hand in lamports (0 = no cap)
+    // Table configuration is inherently wide; the arg list is the IDL surface.
+    #[allow(clippy::too_many_arguments)]
     pub fn create_table(
         ctx: Context<CreateTable>,
         table_id: [u8; 32],
@@ -37,7 +45,17 @@ pub mod hiddenhand {
         rake_bps: u16,
         rake_cap: u64,
     ) -> Result<()> {
-        instructions::create_table::handler(ctx, table_id, small_blind, big_blind, min_buy_in, max_buy_in, max_players, rake_bps, rake_cap)
+        instructions::create_table::handler(
+            ctx,
+            table_id,
+            small_blind,
+            big_blind,
+            min_buy_in,
+            max_buy_in,
+            max_players,
+            rake_bps,
+            rake_cap,
+        )
     }
 
     /// Join a table with a buy-in
@@ -156,7 +174,13 @@ pub mod hiddenhand {
         seat_pubkey: [u8; 32],
         seat_nonce: u128,
     ) -> Result<()> {
-        instructions::deal_to_seat::handler(ctx, computation_offset, seat_index, seat_pubkey, seat_nonce)
+        instructions::deal_to_seat::handler(
+            ctx,
+            computation_offset,
+            seat_index,
+            seat_pubkey,
+            seat_nonce,
+        )
     }
 
     #[arcium_callback(encrypted_ix = "deal_to_seat")]
@@ -209,7 +233,10 @@ pub mod hiddenhand {
     // ============================================================
     // Arcium MPC — showdown_reveal (reveal non-folded hole cards)
     // ============================================================
-    pub fn showdown_reveal(ctx: Context<ShowdownRevealAccounts>, computation_offset: u64) -> Result<()> {
+    pub fn showdown_reveal(
+        ctx: Context<ShowdownRevealAccounts>,
+        computation_offset: u64,
+    ) -> Result<()> {
         instructions::showdown_reveal::handler(ctx, computation_offset)
     }
 
@@ -231,7 +258,10 @@ mod unit_tests {
     #[test]
     fn test_table_constants() {
         assert!(MIN_PLAYERS >= 2, "Minimum players should be at least 2");
-        assert!(MAX_PLAYERS >= MIN_PLAYERS, "Max players should be >= min players");
+        assert!(
+            MAX_PLAYERS >= MIN_PLAYERS,
+            "Max players should be >= min players"
+        );
         assert!(MAX_PLAYERS <= 9, "Max players should be reasonable (<=9)");
     }
 
@@ -289,7 +319,8 @@ mod unit_tests {
         // 1 (current_players) + 1 (status) + 8 (hand_number) + 1 (occupied_seats) +
         // 1 (dealer_position) + 8 (last_ready_time) + 2 (rake_bps) + 8 (rake_cap) +
         // 8 (accumulated_rake) + 32 (token_mint) + 1 (token_decimals) + 1 (bump)
-        let expected_size = 8 + 32 + 32 + 8 + 8 + 8 + 8 + 1 + 1 + 1 + 8 + 1 + 1 + 8 + 2 + 8 + 8 + 32 + 1 + 1;
+        let expected_size =
+            8 + 32 + 32 + 8 + 8 + 8 + 8 + 1 + 1 + 1 + 8 + 1 + 1 + 8 + 2 + 8 + 8 + 32 + 1 + 1;
         assert_eq!(Table::SIZE, expected_size, "Table size mismatch");
     }
 

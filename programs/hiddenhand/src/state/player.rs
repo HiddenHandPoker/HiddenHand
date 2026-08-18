@@ -1,8 +1,11 @@
 use anchor_lang::prelude::*;
 
-#[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, PartialEq, Eq, Debug, InitSpace)]
+#[derive(
+    AnchorSerialize, AnchorDeserialize, Clone, Copy, PartialEq, Eq, Debug, InitSpace, Default,
+)]
 pub enum PlayerStatus {
     /// Seated but not in current hand
+    #[default]
     Sitting,
     /// Active in current hand
     Playing,
@@ -10,12 +13,6 @@ pub enum PlayerStatus {
     Folded,
     /// All-in this hand
     AllIn,
-}
-
-impl Default for PlayerStatus {
-    fn default() -> Self {
-        PlayerStatus::Sitting
-    }
 }
 
 #[account]
@@ -43,7 +40,6 @@ pub struct PlayerSeat {
     // `HoleDealt` event of their own `deal_to_seat` MPC computation. They are
     // proven on-chain only at showdown, via the `showdown_reveal` circuit, which
     // writes the plaintext values into `revealed_card_1/2` below.
-
     /// Revealed plaintext card 1 (0-51, or 255 if not revealed).
     /// Written by the `showdown_reveal` MPC callback.
     pub revealed_card_1: u8,
@@ -77,7 +73,7 @@ impl PlayerSeat {
         1 +  // cards_revealed
         1 +  // status
         1 +  // has_acted
-        1;   // bump
+        1; // bump
 
     /// Reset for new hand
     pub fn reset_for_new_hand(&mut self) {

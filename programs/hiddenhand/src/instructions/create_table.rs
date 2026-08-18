@@ -39,6 +39,9 @@ pub struct CreateTable<'info> {
     pub system_program: Program<'info, System>,
 }
 
+// Table configuration is inherently wide (blinds, buy-ins, rake, mint); a
+// params struct would just move the argument list into the IDL type.
+#[allow(clippy::too_many_arguments)]
 pub fn handler(
     ctx: Context<CreateTable>,
     table_id: [u8; 32],
@@ -51,29 +54,20 @@ pub fn handler(
     rake_cap: u64,
 ) -> Result<()> {
     require!(
-        max_players >= MIN_PLAYERS && max_players <= MAX_PLAYERS,
+        (MIN_PLAYERS..=MAX_PLAYERS).contains(&max_players),
         HiddenHandError::InvalidSeatIndex
     );
 
-    require!(
-        big_blind >= small_blind,
-        HiddenHandError::InvalidBuyIn
-    );
+    require!(big_blind >= small_blind, HiddenHandError::InvalidBuyIn);
 
-    require!(
-        min_buy_in <= max_buy_in,
-        HiddenHandError::InvalidBuyIn
-    );
+    require!(min_buy_in <= max_buy_in, HiddenHandError::InvalidBuyIn);
 
     require!(
         min_buy_in >= big_blind * 10, // Minimum 10 big blinds
         HiddenHandError::InvalidBuyIn
     );
 
-    require!(
-        rake_bps <= MAX_RAKE_BPS,
-        HiddenHandError::RakeExceedsLimit
-    );
+    require!(rake_bps <= MAX_RAKE_BPS, HiddenHandError::RakeExceedsLimit);
 
     let table = &mut ctx.accounts.table;
     let clock = Clock::get()?;
@@ -101,7 +95,11 @@ pub fn handler(
 
     msg!(
         "Table created: {:?} (mint: {}, decimals: {}, rake: {} bps, cap: {})",
-        table_id, mint.key(), mint.decimals, rake_bps, rake_cap
+        table_id,
+        mint.key(),
+        mint.decimals,
+        rake_bps,
+        rake_cap
     );
 
     Ok(())

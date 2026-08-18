@@ -53,7 +53,10 @@ pub fn handler(ctx: Context<StartHand>) -> Result<()> {
             elapsed >= ACTION_TIMEOUT_SECONDS,
             HiddenHandError::UnauthorizedAuthority
         );
-        msg!("Non-authority starting hand after {} seconds timeout", elapsed);
+        msg!(
+            "Non-authority starting hand after {} seconds timeout",
+            elapsed
+        );
     }
 
     // Validate enough players

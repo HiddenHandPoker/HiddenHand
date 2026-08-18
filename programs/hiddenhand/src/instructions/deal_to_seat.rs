@@ -124,7 +124,10 @@ pub fn handler(
             active_players: hand_state.active_players,
             player_count: hand_state.active_count,
         });
-        msg!("All seats dealt — phase PreFlop, action on seat {}", hand_state.action_on);
+        msg!(
+            "All seats dealt — phase PreFlop, action on seat {}",
+            hand_state.action_on
+        );
     }
 
     // --- Queue the MPC deal for this seat ---

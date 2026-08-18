@@ -33,7 +33,10 @@ pub fn authorize_reveal(
             elapsed >= ALLOWANCE_TIMEOUT_SECONDS,
             HiddenHandError::TimeoutNotReached
         );
-        msg!("Non-authority revealing community cards after {} seconds", elapsed);
+        msg!(
+            "Non-authority revealing community cards after {} seconds",
+            elapsed
+        );
     }
     Ok(())
 }

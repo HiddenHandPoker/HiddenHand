@@ -70,11 +70,7 @@ pub fn handler(ctx: Context<CollectRake>) -> Result<()> {
     let mint_decimals = ctx.accounts.mint.decimals;
 
     // Build signer seeds — table PDA is the vault authority
-    let signer_seeds: &[&[u8]] = &[
-        TABLE_SEED,
-        table_id.as_ref(),
-        &[table_bump],
-    ];
+    let signer_seeds: &[&[u8]] = &[TABLE_SEED, table_id.as_ref(), &[table_bump]];
 
     // Transfer rake from vault to authority's token account
     token_interface::transfer_checked(

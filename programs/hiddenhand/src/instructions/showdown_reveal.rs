@@ -111,8 +111,8 @@ pub fn handler(ctx: Context<ShowdownRevealAccounts>, computation_offset: u64) ->
     let mut b = ArgBuilder::new()
         .plaintext_u128(ctx.accounts.deck_state.deck_nonce)
         .account(ctx.accounts.deck_state.key(), DECK_OFFSET, DECK_LEN);
-    for i in 0..9 {
-        b = b.plaintext_bool(reveal_mask[i]);
+    for &mask in reveal_mask.iter() {
+        b = b.plaintext_bool(mask);
     }
     let args = b.build();
 

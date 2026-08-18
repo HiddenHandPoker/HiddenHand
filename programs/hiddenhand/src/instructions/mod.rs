@@ -6,8 +6,8 @@ pub mod showdown;
 pub mod start_hand;
 
 // Timeout handling
-pub mod timeout_player;
 pub mod timeout_deal;
+pub mod timeout_player;
 pub mod timeout_showdown;
 
 // Table management / liveness
@@ -19,16 +19,20 @@ pub mod collect_rake;
 // ============================================================
 // Arcium MPC card lifecycle (Phase 3b — replaces VRF + Inco)
 // ============================================================
-pub mod shuffle;
 pub mod deal_to_seat;
 pub mod reveal_common;
 pub mod reveal_flop;
-pub mod reveal_turn;
 pub mod reveal_river;
+pub mod reveal_turn;
 pub mod showdown_reveal;
+pub mod shuffle;
 
 // Re-export everything for convenience
 // The `handler` name conflicts are expected and handled by Anchor's program macro
+#[allow(ambiguous_glob_reexports)]
+pub use close_inactive_table::*;
+#[allow(ambiguous_glob_reexports)]
+pub use collect_rake::*;
 #[allow(ambiguous_glob_reexports)]
 pub use create_table::*;
 #[allow(ambiguous_glob_reexports)]
@@ -42,25 +46,21 @@ pub use showdown::*;
 #[allow(ambiguous_glob_reexports)]
 pub use start_hand::*;
 #[allow(ambiguous_glob_reexports)]
-pub use timeout_player::*;
-#[allow(ambiguous_glob_reexports)]
 pub use timeout_deal::*;
 #[allow(ambiguous_glob_reexports)]
+pub use timeout_player::*;
+#[allow(ambiguous_glob_reexports)]
 pub use timeout_showdown::*;
-#[allow(ambiguous_glob_reexports)]
-pub use close_inactive_table::*;
-#[allow(ambiguous_glob_reexports)]
-pub use collect_rake::*;
 
-#[allow(ambiguous_glob_reexports)]
-pub use shuffle::*;
 #[allow(ambiguous_glob_reexports)]
 pub use deal_to_seat::*;
 #[allow(ambiguous_glob_reexports)]
 pub use reveal_flop::*;
 #[allow(ambiguous_glob_reexports)]
-pub use reveal_turn::*;
-#[allow(ambiguous_glob_reexports)]
 pub use reveal_river::*;
 #[allow(ambiguous_glob_reexports)]
+pub use reveal_turn::*;
+#[allow(ambiguous_glob_reexports)]
 pub use showdown_reveal::*;
+#[allow(ambiguous_glob_reexports)]
+pub use shuffle::*;
