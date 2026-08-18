@@ -1368,7 +1368,7 @@ describe("hiddenhand", () => {
   // These tests verify the privacy features work on devnet
   // Requires: MagicBlock VRF oracle + Inco Lightning program
   // ============================================================
-  describe("VRF and Inco Integration", () => {
+  describe.skip("VRF and Inco Integration (retired — Arcium MPC replaced this stack)", () => {
     // MagicBlock VRF constants
     const DEFAULT_QUEUE = new PublicKey("Cuj97ggrhhidhbu39TijNVqE74xvKJ69gDervRUXAxGh");
     const INCO_PROGRAM_ID = new PublicKey("5sjEbPiqgZrYwR31ahR6Uk9wf5awoX61YGg7jExQSwaj");
