@@ -25,7 +25,21 @@ on-chain only as an opaque MXE ciphertext.
 Retired: `request_shuffle`/`callback_shuffle` (VRF), `encrypt_hole_cards`, `grant_card_allowance`,
 `grant_own_allowance`, `grant_community_allowances`, `reveal_cards`/`reveal_community` (Inco/Ed25519),
 `inco_cpi.rs`, `ephemeral-vrf-sdk`. Betting / pot / side-pots / rake / hand-eval are unchanged
-public Solana logic (still 48 passing unit tests).
+public Solana logic (50 passing unit tests).
+
+**Security hardening (Aug 2026, see `SECURITY.md` for full audit):** C-1 (deal_to_seat
+seat-ownership), H-1 (showdown remaining-accounts completeness: all active seats present +
+summed stakes == pot), H-2 (idempotent shuffle callback), H-3 (lone winner settles without
+showdown; `active_count > 1` guard in showdown_reveal), M-1 (timeout_deal refund dedup +
+completeness), M-2 (no timeout_player during community-reveal wait), L-1 (no leaving mid-hand,
+even at 0 chips), L-2 (collect_rake works on Closed tables). New instruction
+**`timeout_showdown`** (anyone, after 180s): aborts a hand stuck at showdown/community reveal
+because the MPC never completed — refunds every stake, guarded so a decided showdown can't be
+dodged (`HandNotStuck`). Both abort paths emit **`HandAborted`** (reason 0=deal stall,
+1=reveal stall; parsed in `useHandHistory.ts`). Error enum: never remove/reorder variants
+(Anchor error codes are index-based); retired Inco-era variants stay with a comment.
+CI: `.github/workflows/program.yml` enforces `cargo fmt --check` + `clippy -D warnings` +
+tests; `app.yml` enforces the Next build (lint non-blocking, pre-existing debt).
 
 **Version stack:** `arcis`/`arcium-anchor`/`-client`/`-macros` `=0.11.1`, `anchor-lang 1.0.x` /
 Solana 3.x, `arcium` CLI 0.11.2, `@arcium-hq/client 0.11.2` (frontend), devnet cluster offset **456**.

@@ -89,7 +89,7 @@ Because each player's cards seal to a key only they hold, **each player deals th
 - 🔒 **Arcium MPC card privacy** — shuffle, per-seat deal, community reveals, and showdown reveal as six MPC circuits.
 - 🪙 **One-tap onboarding** — a built-in devnet faucet mints free **HiddenHand Chips (HHC)** so a new player is playing in one click, no token hunting.
 - 👀 **Spectator mode** — watch any table live without a wallet; hole cards are provably never exposed to spectators.
-- 📜 **On-chain hand history & replay** — every hand reconstructs from program events (`HandStarted`, `ActionTaken`, `CommunityCardsRevealed`, `ShowdownReveal`, `HandCompleted`).
+- 📜 **On-chain hand history & replay** — every hand reconstructs from program events (`HandStarted`, `ActionTaken`, `CommunityCardsRevealed`, `ShowdownReveal`, `HandCompleted`, `HandAborted`).
 - ⏱️ **Liveness / AFK recovery** — timeouts for stuck actions, community reveals, the deal phase, and abandoned tables.
 - 📱 **Mobile-responsive** — landscape table, bottom action bar, safe-area handling, touch targets.
 - 🛟 **Responsible-gaming tooling** — session timers, deposit limits, self-exclusion, break reminders.
@@ -125,7 +125,18 @@ A full hand has been played end-to-end through the live UI against the deployed 
 
 **Card lifecycle (Arcium MPC — queue + callback each):** `shuffle` · `deal_to_seat` · `reveal_flop` · `reveal_turn` · `reveal_river` · `showdown_reveal`
 
-**Liveness / timeouts:** `timeout_player` (force-fold an AFK actor) · `timeout_deal` (abort + refund a hand stuck because a player never dealt in)
+**Liveness / timeouts:** `timeout_player` (force-fold an AFK actor) · `timeout_deal` (abort + refund a hand stuck because a player never dealt in) · `timeout_showdown` (abort + refund a hand whose MPC reveal never completed)
+
+---
+
+## Security
+
+The program went through an internal audit (August 2026) covering the MPC trust
+boundaries, pot accounting, and every permissionless recovery path. All findings
+are fixed and documented — severity, exploit scenario, and fix — in
+[`SECURITY.md`](./SECURITY.md), and the critical ones are regression-tested by
+devnet scripts that run the actual attacks against the deployed program
+(`app/scripts/devnet-exploit-checks.cjs`, `app/scripts/devnet-timeout-showdown.cjs`).
 
 ---
 
@@ -167,8 +178,10 @@ Set `NEXT_PUBLIC_SOLANA_RPC` to a reliable devnet RPC (Helius/QuickNode/Triton) 
 
 **Integration tests (devnet)**
 ```bash
-cd app && RPC_URL=<helius> node scripts/devnet-full-hand.cjs     # full hand through real MPC
-cd app && RPC_URL=<helius> node scripts/test-timeout-deal.cjs    # AFK deal-recovery
+cd app && RPC_URL=<helius> node scripts/devnet-full-hand.cjs        # full hand through real MPC
+cd app && RPC_URL=<helius> node scripts/test-timeout-deal.cjs       # AFK deal-recovery
+cd app && RPC_URL=<helius> node scripts/devnet-exploit-checks.cjs   # security regressions (C-1/L-1/H-1)
+cd app && RPC_URL=<helius> node scripts/devnet-timeout-showdown.cjs # stuck-showdown abort + refund
 ```
 
 > ⚠️ **Note on the faucet:** `/api/faucet` mints free **devnet** HiddenHand Chips to any wallet on request — this is intentional (frictionless onboarding for a play-money demo), not a bug. The mint-authority key lives only in the deployment's server-side env, never in this repo.
