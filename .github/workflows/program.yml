@@ -1,0 +1,40 @@
+name: Program
+
+on:
+  push:
+    branches: [main, arcium-migration]
+    paths:
+      - "programs/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "rust-toolchain.toml"
+      - ".github/workflows/program.yml"
+  pull_request:
+    paths:
+      - "programs/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "rust-toolchain.toml"
+      - ".github/workflows/program.yml"
+
+jobs:
+  check:
+    name: fmt + clippy + tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # rust-toolchain.toml pins the channel; rustup picks it up automatically.
+      - name: Install Rust toolchain
+        run: rustup show
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: rustfmt
+        run: cargo fmt -p hiddenhand -- --check
+
+      - name: clippy (deny warnings)
+        run: cargo clippy -p hiddenhand -- -D warnings
+
+      - name: unit tests
+        run: cargo test -p hiddenhand
