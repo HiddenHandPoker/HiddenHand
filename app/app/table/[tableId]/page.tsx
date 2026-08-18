@@ -646,16 +646,9 @@ export default function TablePage({ params }: { params: Promise<{ tableId: strin
         {/* Footer */}
         <footer className="fixed bottom-0 w-full glass-dark py-4 text-center border-t border-white/5">
           <p className="text-[var(--text-muted)] text-sm">
-            Built for{" "}
-            <a
-              href="https://solana.com/privacyhack"
-              className="text-[var(--felt-highlight)] hover:text-[var(--felt-light)] transition-colors"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              Solana Privacy Hack
-            </a>
-            {" "}powered by{" "}
+            Privacy poker on Solana
+            <span className="mx-2 text-white/10">·</span>
+            Powered by{" "}
             <a
               href="https://arcium.com"
               className="text-cyan-400 hover:text-cyan-300 transition-colors"
@@ -664,6 +657,10 @@ export default function TablePage({ params }: { params: Promise<{ tableId: strin
             >
               Arcium MPC
             </a>
+            <span className="mx-2 text-white/10">·</span>
+            <Link href="/responsible-gaming" className="text-amber-400/60 hover:text-amber-400 transition-colors">
+              Responsible Gaming
+            </Link>
           </p>
         </footer>
       </main>
@@ -1647,16 +1644,9 @@ export default function TablePage({ params }: { params: Promise<{ tableId: strin
       {/* Footer — hidden on mobile landscape when action panel is visible */}
       <footer className={`${isMobileLandscape ? "hidden" : ""} fixed bottom-0 w-full glass-dark py-4 text-center border-t border-white/5 safe-bottom`}>
         <p className="text-[var(--text-muted)] text-xs sm:text-sm">
-          Built for{" "}
-          <a
-            href="https://solana.com/privacyhack"
-            className="text-[var(--felt-highlight)] hover:text-[var(--felt-light)] transition-colors"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Solana Privacy Hack
-          </a>
-          {" "}powered by{" "}
+          Privacy poker on Solana
+          <span className="mx-2 text-white/10">·</span>
+          Powered by{" "}
           <a
             href="https://arcium.com"
             className="text-cyan-400 hover:text-cyan-300 transition-colors"
@@ -1665,7 +1655,7 @@ export default function TablePage({ params }: { params: Promise<{ tableId: strin
           >
             Arcium MPC
           </a>
-          <span className="mx-2 text-white/10">|</span>
+          <span className="mx-2 text-white/10">·</span>
           <Link href="/responsible-gaming" className="text-amber-400/60 hover:text-amber-400 transition-colors">
             Responsible Gaming
           </Link>
