@@ -33,7 +33,7 @@ interface PokerTableProps {
   smallBlind: number;
   bigBlind: number;
   isShowdownPhase?: boolean;
-  isVrfVerified?: boolean; // VRF shuffle has completed
+  isDeckShuffled?: boolean; // MPC shuffle has completed
   // Chip animation triggers
   chipBetTrigger?: { seatIndex: number; amount: number; key: string } | null;
   chipWinTrigger?: { seatIndex: number; key: string } | null;
@@ -80,7 +80,7 @@ export const PokerTable: FC<PokerTableProps> = ({
   smallBlind,
   bigBlind,
   isShowdownPhase = false,
-  isVrfVerified = false,
+  isDeckShuffled = false,
   chipBetTrigger = null,
   chipWinTrigger = null,
   showWinCelebration = false,
@@ -313,7 +313,7 @@ export const PokerTable: FC<PokerTableProps> = ({
             >
               {displayPhase}
             </div>
-            <ProvablyFairBadge isActive={isVrfVerified} />
+            <ProvablyFairBadge isActive={isDeckShuffled} />
           </div>
 
           {/* Blinds info */}

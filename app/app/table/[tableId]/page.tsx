@@ -88,28 +88,16 @@ export default function TablePage({ params }: { params: Promise<{ tableId: strin
     joinTable,
     leaveTable,
     startHand,
-    dealCards,
+    shuffleDeck,
+    dealMeIn,
+    revealHands,
     playerAction,
     showdown,
     timeoutPlayer,
     timeoutDeal,
     timeoutShowdown,
     setTableId,
-    // Arcium MPC — shuffle the deck
-    requestShuffle,
-    // Card lifecycle (deal own seat + decrypt, reveal at showdown)
-    encryptHoleCards,
-    grantCardAllowance,
-    encryptAndGrantCards,
-    encryptAllPlayersCards,
-    grantAllPlayersAllowances,
-    decryptMyCards,
-    revealCards,
-    // Game Liveness (prevent stuck games)
-    grantOwnAllowance,
-    timeoutReveal,
     closeInactiveTable,
-    // Program for event listeners
     program,
   } = usePokerGame(sessionKeyParam);
 
@@ -150,28 +138,22 @@ export default function TablePage({ params }: { params: Promise<{ tableId: strin
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const pokerGame = (window as any).__pokerGame || {};
       // Only update functions, not gameState (to avoid constant updates)
-      pokerGame.encryptHoleCards = encryptHoleCards;
-      pokerGame.grantCardAllowance = grantCardAllowance;
-      pokerGame.encryptAndGrantCards = encryptAndGrantCards;
-      pokerGame.encryptAllPlayersCards = encryptAllPlayersCards;
-      pokerGame.grantAllPlayersAllowances = grantAllPlayersAllowances;
-      pokerGame.decryptMyCards = decryptMyCards;
-      pokerGame.revealCards = revealCards;
-      pokerGame.grantOwnAllowance = grantOwnAllowance;
-      pokerGame.timeoutReveal = timeoutReveal;
+      pokerGame.shuffleDeck = shuffleDeck;
+      pokerGame.dealMeIn = dealMeIn;
+      pokerGame.revealHands = revealHands;
+      pokerGame.timeoutShowdown = timeoutShowdown;
+      pokerGame.timeoutDeal = timeoutDeal;
       pokerGame.closeInactiveTable = closeInactiveTable;
-      // Getter for fresh gameState (avoids stale closure)
       pokerGame.getGameState = () => gameState;
       (window as any).__pokerGame = pokerGame;
     }
-    // Cleanup on unmount
     return () => {
       if (typeof window !== "undefined" && process.env.NODE_ENV === "development") {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         delete (window as any).__pokerGame;
       }
     };
-  }, [encryptHoleCards, grantCardAllowance, encryptAndGrantCards, encryptAllPlayersCards, grantAllPlayersAllowances, decryptMyCards, revealCards, grantOwnAllowance, timeoutReveal, closeInactiveTable]);
+  }, [shuffleDeck, dealMeIn, revealHands, timeoutShowdown, timeoutDeal, closeInactiveTable]);
 
   // Transaction toast notifications
   const {
@@ -613,13 +595,6 @@ export default function TablePage({ params }: { params: Promise<{ tableId: strin
     if (activePlayers.length === 1) return true;
     // Check if all active players have revealed their cards
     return activePlayers.every(p => p.cardsRevealed);
-  }, [gameState.players]);
-
-  // Count how many players still need to reveal
-  const playersNeedingReveal = useMemo(() => {
-    return gameState.players.filter(
-      p => (p.status === "playing" || p.status === "allin") && !p.cardsRevealed
-    ).length;
   }, [gameState.players]);
 
   // If wallet not connected, show spectator view (read-only, no wallet needed)
@@ -1084,23 +1059,21 @@ export default function TablePage({ params }: { params: Promise<{ tableId: strin
                         )
                       )}
 
-                      {/* Deal Cards — runs the Arcium MPC shuffle (authority) */}
-                      {gameState.phase === "Dealing" && gameState.useVrf && (
+                      {gameState.phase === "Dealing" && (
                         canStart ? (
                           <>
-                            {/* Deal Cards - Single button that does everything */}
                             {!gameState.isDeckShuffled && !gameState.isShuffling && (
                               <Tooltip
-                                title="🎲 Shuffle the deck"
+                                title="Shuffle the deck"
                                 content="Shuffles the 52-card deck inside Arcium's MPC network and seals it on-chain as opaque ciphertext — nobody, not even a chain observer, can read it. After this, each player deals themselves in."
                               >
                                 <button
                                   onClick={() => {
                                     playSound("shuffle");
                                     withToast(
-                                      () => requestShuffle(),
+                                      () => shuffleDeck(),
                                       "Shuffling the deck in MPC…",
-                                      "Deck shuffled — players can now deal in"
+                                      "Deck shuffled — each player can deal in"
                                     );
                                   }}
                                   disabled={loading}
@@ -1109,19 +1082,17 @@ export default function TablePage({ params }: { params: Promise<{ tableId: strin
                                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                                   </svg>
-                                  Shuffle &amp; Deal
+                                  Shuffle deck
                                   <InfoIcon />
                                 </button>
                               </Tooltip>
                             )}
-                            {/* Dealing in progress - shows current step */}
                             {gameState.isShuffling && (
                               <div className="flex items-center gap-2 text-purple-400 text-sm">
                                 <div className="animate-spin h-4 w-4 border-2 border-purple-400/30 border-t-purple-400 rounded-full" />
                                 Shuffling the deck in MPC…
                               </div>
                             )}
-                            {/* Deck shuffled — each player deals themselves in */}
                             {gameState.isDeckShuffled && (
                               <div className="flex items-center gap-2 text-green-400 text-sm">
                                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1133,31 +1104,7 @@ export default function TablePage({ params }: { params: Promise<{ tableId: strin
                           </>
                         ) : (
                           <span className="text-[var(--status-warning)] text-sm">
-                            Cannot deal - need 2+ players with chips
-                          </span>
-                        )
-                      )}
-
-                      {/* Deal Cards - Standard (non-VRF) */}
-                      {gameState.phase === "Dealing" && !gameState.useVrf && (
-                        canStart ? (
-                          <button
-                            onClick={() => {
-                              playSound("shuffle");
-                              withToast(
-                                () => dealCards(),
-                                "Dealing cards...",
-                                "Cards dealt"
-                              );
-                            }}
-                            disabled={loading}
-                            className="btn-gold px-5 py-2.5 rounded-xl text-sm font-semibold disabled:opacity-50"
-                          >
-                            Deal Cards
-                          </button>
-                        ) : (
-                          <span className="text-[var(--status-warning)] text-sm">
-                            Cannot deal - need 2+ players with chips
+                            Cannot shuffle — need 2+ players with chips
                           </span>
                         )
                       )}
@@ -1192,10 +1139,12 @@ export default function TablePage({ params }: { params: Promise<{ tableId: strin
                     ) : (
                       <div className="glass-dark px-4 py-2.5 rounded-xl text-center">
                         <p className="text-yellow-400 text-sm font-medium">
-                          Waiting for {playersNeedingReveal} player{playersNeedingReveal > 1 ? 's' : ''} to reveal cards
+                          {gameState.isRevealing
+                            ? "Revealing hands from the sealed deck…"
+                            : "Waiting for hands to be revealed from the sealed deck"}
                         </p>
                         <p className="text-xs text-[var(--text-muted)] mt-1">
-                          All players must reveal before showdown
+                          One MPC reveal publishes every remaining hand
                         </p>
                         {/* Last-resort abort once the reveal timeout has passed.
                             The showdown_reveal MPC is re-queueable, so this only
@@ -1261,7 +1210,7 @@ export default function TablePage({ params }: { params: Promise<{ tableId: strin
               buttonLabel="Shuffle Deck"
               onAction={async () => {
                 playSound("shuffle");
-                return withToast(() => dealCards(), "Dealing cards...", "Cards dealt");
+                return withToast(() => shuffleDeck(), "Shuffling the deck in MPC…", "Deck shuffled — each player can deal in");
               }}
               isLoading={loading}
             />
@@ -1296,7 +1245,7 @@ export default function TablePage({ params }: { params: Promise<{ tableId: strin
               smallBlind={gameState.smallBlind}
               bigBlind={gameState.bigBlind}
               isShowdownPhase={isShowdownPhase}
-              isVrfVerified={gameState.isDeckShuffled}
+              isDeckShuffled={gameState.isDeckShuffled}
               chipBetTrigger={betTrigger}
               chipWinTrigger={winTrigger}
               showWinCelebration={showCelebration}
@@ -1365,7 +1314,7 @@ export default function TablePage({ params }: { params: Promise<{ tableId: strin
                   <button
                     onClick={async () => {
                       try {
-                        await decryptMyCards();
+                        await dealMeIn();
                         addGameEvent("privacy", "Dealt in via Arcium MPC");
                       } catch (e) {
                         console.error("Deal-in failed:", e);
@@ -1453,43 +1402,39 @@ export default function TablePage({ params }: { params: Promise<{ tableId: strin
             </div>
           )}
 
-          {/* Reveal Cards for Showdown */}
-          {/* Only show when: in Showdown phase, player is active (not folded), and multiple players remain */}
           {currentPlayer &&
            gameState.phase === "Showdown" &&
-           currentPlayer.status !== "folded" &&
-           activePlayers.length > 1 &&
-           gameState.decryptedCards[0] !== null &&
-           gameState.decryptedCards[1] !== null &&
-           !currentPlayer.cardsRevealed && (
-            <div className="max-w-md mx-auto glass border border-amber-500/30 rounded-2xl p-5 text-center animate-glow-reveal">
+           activePlayers.length > 1 && (
+            <div className="max-w-md mx-auto glass border border-amber-500/30 rounded-2xl p-5 text-center">
               <div className="flex items-center justify-center gap-2 mb-3">
                 <svg className="w-6 h-6 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
                 </svg>
-                <span className="text-amber-300 font-semibold">
-                  Showdown - Reveal Your Cards
-                </span>
+                <span className="text-amber-300 font-semibold">Showdown</span>
               </div>
               <p className="text-[var(--text-muted)] text-sm mb-4">
-                Submit your decrypted cards to the blockchain for hand evaluation
+                Hands are revealed from the sealed deck. Nobody can swap cards.
               </p>
               {gameState.isRevealing ? (
                 <div className="text-amber-400 text-sm flex items-center justify-center gap-2">
                   <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
-                  Revealing cards on-chain...
+                  Revealing hands (MPC, ~15–20s)…
                 </div>
+              ) : allPlayersRevealed ? (
+                <p className="text-green-300 text-sm font-medium">
+                  Hands are public. Run showdown to pay the pot.
+                </p>
               ) : (
                 <Tooltip
-                  title="MPC Verified Reveal"
-                  content="Your hole cards are revealed straight from the sealed deck inside Arcium's MPC — the same deck everyone was dealt from. No one can swap or fake their hand at showdown."
+                  title="Reveal from the sealed deck"
+                  content="Hole cards are revealed straight from the same MXE-sealed deck everyone was dealt from. No one can swap or fake a hand."
                 >
                   <button
                     onClick={async () => {
                       try {
-                        await revealCards();
-                        addGameEvent("cards", "Cards revealed for showdown");
+                        await revealHands();
+                        addGameEvent("cards", "Hands revealed from the sealed deck");
                       } catch (e) {
                         console.error("Reveal failed:", e);
                       }
@@ -1497,37 +1442,11 @@ export default function TablePage({ params }: { params: Promise<{ tableId: strin
                     disabled={loading}
                     className="bg-amber-600 hover:bg-amber-500 text-white px-6 py-3 rounded-xl font-semibold disabled:opacity-50 flex items-center gap-2 mx-auto transition-colors"
                   >
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                    </svg>
-                    Reveal Cards
+                    Reveal hands
                     <InfoIcon />
                   </button>
                 </Tooltip>
               )}
-            </div>
-          )}
-
-          {/* Cards Revealed Confirmation */}
-          {/* Only show when: in Showdown phase, player is active (not folded), and multiple players remain */}
-          {currentPlayer &&
-           gameState.phase === "Showdown" &&
-           currentPlayer.status !== "folded" &&
-           activePlayers.length > 1 &&
-           currentPlayer.cardsRevealed && (
-            <div className="max-w-md mx-auto glass border border-green-500/30 rounded-2xl p-5 text-center">
-              <div className="flex items-center justify-center gap-2 mb-2">
-                <svg className="w-6 h-6 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-                <span className="text-green-300 font-semibold">
-                  Cards Revealed
-                </span>
-              </div>
-              <p className="text-[var(--text-muted)] text-sm">
-                Waiting for other players to reveal their cards...
-              </p>
             </div>
           )}
 

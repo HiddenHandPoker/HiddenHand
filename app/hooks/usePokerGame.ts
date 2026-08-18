@@ -32,7 +32,7 @@ import {
   isRealCard,
   type EncryptionKeys,
 } from "@/lib/arcium";
-import { TransactionInstruction, Transaction, Keypair } from "@solana/web3.js";
+import { Transaction, Keypair } from "@solana/web3.js";
 import { getDefaultToken, getTokenByMint, TOKEN_PROGRAM_ID, type TokenInfo } from "@/lib/tokens";
 import { getAssociatedTokenAddressSync } from "@solana/spl-token";
 import {
@@ -124,8 +124,8 @@ export interface Player {
   holeCards: [number | null, number | null];
   status: "empty" | "sitting" | "playing" | "folded" | "allin";
   isActive: boolean;
-  isDelegated?: boolean; // Whether seat is delegated to ER
-  isEncrypted?: boolean; // Whether hole cards are Inco-encrypted
+  isDelegated?: boolean;
+  isEncrypted?: boolean;
   cardsRevealed?: boolean; // Whether cards have been revealed for showdown
   revealedCards?: [number | null, number | null]; // Plaintext cards after reveal (0-51)
 }
@@ -151,25 +151,14 @@ export interface GameState {
   currentPlayerSeat: number | null;
   lastActionTime: number | null; // Unix timestamp for timeout tracking
   lastReadyTime: number | null; // Unix timestamp for start_hand timeout
-  // MagicBlock state
-  useVrf: boolean; // Whether to use VRF for shuffling
-  isShuffling: boolean; // VRF shuffle in progress
-  isDeckShuffled: boolean; // VRF shuffle complete
-  // Inco TEE privacy state
-  useIncoPrivacy: boolean; // Whether to use Inco TEE encryption for cards
-  isEncrypting: boolean; // Inco encryption in progress
-  areCardsEncrypted: boolean; // Whether current cards are Inco-encrypted
-  areAllowancesGranted: boolean; // Whether current player's decryption allowances have been granted
-  allPlayersHaveAllowances: boolean; // Whether ALL active players have allowances (for Grant button)
-  isDecrypting: boolean; // Inco decryption in progress
-  decryptedCards: [number | null, number | null]; // Client-side decrypted cards
-  isRevealing: boolean; // Card reveal in progress (for showdown)
-  encryptionHandNumber: number | null; // Hand number when encryption was detected (prevents cross-hand leakage)
-  // Ed25519 attestation for card reveal verification
-  ed25519Instructions: TransactionInstruction[]; // Stored from decryption for reveal verification
-  // Community card reveal state (privacy feature)
-  awaitingCommunityReveal: boolean; // Whether waiting for authority to reveal community cards
-  isRevealingCommunity: boolean; // Community card reveal in progress
+  isShuffling: boolean; // MPC shuffle in progress
+  isDeckShuffled: boolean; // shuffle callback sealed the deck
+  isDecrypting: boolean; // deal_to_seat + HoleDealt decrypt in progress
+  decryptedCards: [number | null, number | null]; // this wallet's hole cards
+  isRevealing: boolean; // showdown_reveal in progress
+  encryptionHandNumber: number | null; // hand number the decrypted cards belong to
+  awaitingCommunityReveal: boolean;
+  isRevealingCommunity: boolean;
 }
 
 export interface UsePokerGameResult {
@@ -183,38 +172,20 @@ export interface UsePokerGameResult {
   joinTable: (seatIndex: number, buyInSol: number) => Promise<string>;
   leaveTable: () => Promise<string>;
   startHand: () => Promise<string>;
-  dealCards: () => Promise<string>;
+  shuffleDeck: () => Promise<string>;
+  dealMeIn: () => Promise<void>;
+  revealHands: () => Promise<string>;
   playerAction: (action: ActionType) => Promise<string>;
   showdown: () => Promise<string>;
   timeoutPlayer: () => Promise<string>;
-  timeoutDeal: () => Promise<string>; // Abort a hand stuck on an AFK player who never dealt in
-  timeoutShowdown: () => Promise<string>; // Abort a hand stuck at a reveal that the MPC never completed
-
-  // MagicBlock VRF Actions
-  requestShuffle: () => Promise<string>;
-
-  // Inco TEE Encryption Actions
-  encryptHoleCards: (seatIndex: number) => Promise<string>; // Phase 1: Encrypt cards
-  grantCardAllowance: (seatIndex: number) => Promise<string>; // Phase 2: Grant decryption
-  revealCards: () => Promise<string>; // Reveal decrypted cards for showdown
-  encryptAndGrantCards: (seatIndex: number) => Promise<void>; // Combined helper
-  encryptAllPlayersCards: () => Promise<void>; // Encrypt all players' cards
-  grantAllPlayersAllowances: () => Promise<void>; // Grant allowances only (for atomic encryption)
-  decryptMyCards: () => Promise<void>; // Client-side decrypt own cards
-
-  // Game Liveness Actions (prevent stuck games)
-  grantOwnAllowance: () => Promise<string>; // Self-grant allowance after 60s timeout
-  timeoutReveal: (targetSeat: number) => Promise<string>; // Muck non-revealing player after 3 min
-  closeInactiveTable: () => Promise<string>; // Close inactive table after 1 hour, return funds
-
-  // Community card reveal (privacy feature - authority only)
-  revealCommunityCards: () => Promise<string>; // Reveal encrypted community cards with Ed25519 verification
+  timeoutDeal: () => Promise<string>;
+  timeoutShowdown: () => Promise<string>;
+  closeInactiveTable: () => Promise<string>;
+  revealCommunityCards: () => Promise<string>;
 
   // Utilities
   refreshState: () => Promise<void>;
   setTableId: (tableId: string) => void;
-  setUseVrf: (useVrf: boolean) => void;
-  setUseIncoPrivacy: (useInco: boolean) => void;
 
   // Program instance (for event listeners)
   program: ReturnType<typeof usePokerProgram>["program"];
@@ -260,22 +231,12 @@ const initialGameState: GameState = {
   currentPlayerSeat: null,
   lastActionTime: null,
   lastReadyTime: null,
-  // MagicBlock state
-  useVrf: true, // VRF oracle is working - use provably fair shuffling
   isShuffling: false,
   isDeckShuffled: false,
-  // Inco TEE privacy state
-  useIncoPrivacy: true, // Default to Inco privacy ON (cryptographic card encryption)
-  isEncrypting: false,
-  areCardsEncrypted: false,
-  areAllowancesGranted: false,
-  allPlayersHaveAllowances: false,
   isDecrypting: false,
   decryptedCards: [null, null],
   isRevealing: false,
-  encryptionHandNumber: null, // Track which hand encryption belongs to
-  ed25519Instructions: [], // Ed25519 verification instructions for card reveal
-  // Community card reveal state
+  encryptionHandNumber: null,
   awaitingCommunityReveal: false,
   isRevealingCommunity: false,
 };
@@ -338,16 +299,6 @@ export function usePokerGame(sessionKey?: SessionKeyParam | null): UsePokerGameR
   useEffect(() => {
     encryptionHandNumberRef.current = gameState.encryptionHandNumber;
   }, [gameState.encryptionHandNumber]);
-
-  // Toggle VRF mode
-  const setUseVrf = useCallback((useVrf: boolean) => {
-    setGameState((prev) => ({ ...prev, useVrf }));
-  }, []);
-
-  // Toggle Inco TEE Privacy mode (cryptographic card encryption)
-  const setUseIncoPrivacy = useCallback((useIncoPrivacy: boolean) => {
-    setGameState((prev) => ({ ...prev, useIncoPrivacy }));
-  }, []);
 
   // Set table ID and derive PDA
   const setTableId = useCallback((tableId: string) => {
@@ -493,7 +444,7 @@ export function usePokerGame(sessionKey?: SessionKeyParam | null): UsePokerGameR
           const [handPDA] = getHandPDA(gameState.tablePDA, BigInt(table.handNumber.toNumber()));
           handState = await accounts.handState.fetch(handPDA) as HandStateAccount;
 
-          // Also fetch deck state for VRF status
+          // Also fetch deck state for shuffle status
           const [deckPDA] = getDeckPDA(gameState.tablePDA, BigInt(table.handNumber.toNumber()));
           try {
             deckState = await accounts.deckState.fetch(deckPDA) as DeckStateAccount;
@@ -534,17 +485,6 @@ export function usePokerGame(sessionKey?: SessionKeyParam | null): UsePokerGameR
                         currentHandNumber !== encryptionHandNumberRef.current;
       const resetEncryptionState = tableStatus === "Waiting" || isNewHand;
 
-      // Arcium MPC has no per-card allowances: the deck is "sealed" (cards
-      // encrypted) the moment the MPC shuffle callback runs, and each player
-      // decrypts their own hole cards straight from the HoleDealt event — there
-      // is nothing to grant. We keep the legacy flag names (areCardsEncrypted /
-      // areAllowancesGranted / allPlayersHaveAllowances) so the table-page UI
-      // keeps working; here they all collapse to "is the deck sealed yet".
-      const deckSealed = deckState?.isShuffled ?? false;
-      const detectedCardsEncrypted = deckSealed;
-      const detectedAllowancesGranted = deckSealed;
-      const detectedAllPlayersHaveAllowances = deckSealed;
-
       // Refresh recovery: if we've already dealt in this hand (on-chain "dealt"
       // bit set) but have no cards in memory (e.g. after a page reload), restore
       // them from the sessionStorage cache written at deal time.
@@ -574,25 +514,14 @@ export function usePokerGame(sessionKey?: SessionKeyParam | null): UsePokerGameR
         currentPlayerSeat,
         lastActionTime: handState?.lastActionTime?.toNumber() ?? null,
         lastReadyTime: table.lastReadyTime?.toNumber() ?? null,
-        // isShuffled means VRF callback completed atomic shuffle + encrypt
         isDeckShuffled: deckState?.isShuffled ?? false,
-        // Reset Inco encryption state for new hands or when hand number changes
-        areCardsEncrypted: resetEncryptionState ? false : (detectedCardsEncrypted || prev.areCardsEncrypted),
-        // Allowances: prefer on-chain detection, but preserve local state to avoid race conditions
-        // Only preserve local state if we're in the same hand (detectedCardsEncrypted implies same hand)
-        areAllowancesGranted: resetEncryptionState ? false : (detectedAllowancesGranted || (detectedCardsEncrypted && prev.areAllowancesGranted)),
-        // All players have allowances: for Grant Allowances button visibility (authority needs this)
-        allPlayersHaveAllowances: resetEncryptionState ? false : (detectedAllPlayersHaveAllowances || (detectedCardsEncrypted && prev.allPlayersHaveAllowances)),
-        isEncrypting: resetEncryptionState ? false : prev.isEncrypting,
         isDecrypting: resetEncryptionState ? false : prev.isDecrypting,
         decryptedCards: resetEncryptionState
           ? [null, null]
           : (prev.decryptedCards[0] !== null ? prev.decryptedCards : (restoredCards ?? prev.decryptedCards)),
-        // Track which hand the encryption state belongs to (for cross-hand leak prevention)
-        encryptionHandNumber: resetEncryptionState ? null : (detectedCardsEncrypted ? currentHandNumber : prev.encryptionHandNumber),
-        // Clear Ed25519 attestation instructions when hand changes (they're handle-specific)
-        ed25519Instructions: resetEncryptionState ? [] : prev.ed25519Instructions,
-        // Community card reveal state (from on-chain HandState)
+        encryptionHandNumber: resetEncryptionState
+          ? null
+          : ((deckState?.isShuffled ?? false) ? currentHandNumber : prev.encryptionHandNumber),
         awaitingCommunityReveal: handState?.awaitingCommunityReveal ?? false,
         // Reset reveal state when not awaiting
         isRevealingCommunity: (handState?.awaitingCommunityReveal ?? false) ? prev.isRevealingCommunity : false,
@@ -661,7 +590,7 @@ export function usePokerGame(sessionKey?: SessionKeyParam | null): UsePokerGameR
   // Arcium MPC: shuffle the deck (authority action). Queues the `shuffle`
   // circuit; its callback seals the shuffled 52-card deck into DeckState as
   // opaque ciphertext. After this, each seated player deals themselves in via
-  // deal_to_seat. Shared by requestShuffle() and the legacy dealCards() name.
+  // deal_to_seat.
   // ============================================================
   const doShuffle = useCallback(async (): Promise<string> => {
     if (!program || !provider || !publicKey || !gameState.tablePDA || !gameState.table) {
@@ -700,9 +629,6 @@ export function usePokerGame(sessionKey?: SessionKeyParam | null): UsePokerGameR
         ...prev,
         isShuffling: false,
         isDeckShuffled: true,
-        areCardsEncrypted: true,
-        areAllowancesGranted: true,
-        allPlayersHaveAllowances: true,
       }));
 
       await refreshState();
@@ -1017,14 +943,9 @@ export function usePokerGame(sessionKey?: SessionKeyParam | null): UsePokerGameR
     // This prevents stale state from previous hands from leaking through
     setGameState((prev) => ({
       ...prev,
-      areCardsEncrypted: false,
-      areAllowancesGranted: false,
-      allPlayersHaveAllowances: false,
-      isEncrypting: false,
       isDecrypting: false,
       decryptedCards: [null, null],
       encryptionHandNumber: null,
-      ed25519Instructions: [], // Clear attestation instructions from previous hand
     }));
 
     try {
@@ -1055,34 +976,9 @@ export function usePokerGame(sessionKey?: SessionKeyParam | null): UsePokerGameR
     }
   }, [program, provider, publicKey, gameState.tablePDA, gameState.table, refreshState]);
 
-  // Legacy name kept for the table-page "Deal Cards" control. In the Arcium
-  // build there is no separate deal step for the authority — dealing the deck
-  // means running the MPC shuffle; each player then deals themselves in.
-  const dealCards = useCallback((): Promise<string> => doShuffle(), [doShuffle]);
+  const shuffleDeck = useCallback((): Promise<string> => doShuffle(), [doShuffle]);
 
-  // ============================================================
-  // Shuffle the deck via Arcium MPC (authority action). See doShuffle().
-  // ============================================================
-  const requestShuffle = useCallback((): Promise<string> => doShuffle(), [doShuffle]);
-
-  // ============================================================
-  // Retired Inco encrypt/allowance steps. With Arcium MPC the deck is sealed
-  // by the shuffle circuit and each player decrypts their own hole cards from
-  // the HoleDealt event — there is nothing to encrypt or grant. These stubs
-  // keep the hook's public API stable for the existing table-page UI; they
-  // resolve immediately.
-  // ============================================================
-  const encryptHoleCards = useCallback(async (_seatIndex: number): Promise<string> => "", []);
-  const grantCardAllowance = useCallback(async (_seatIndex: number): Promise<string> => "", []);
-  const encryptAndGrantCards = useCallback(async (_seatIndex: number): Promise<void> => {}, []);
-  const encryptAllPlayersCards = useCallback(async (): Promise<void> => {}, []);
-  const grantAllPlayersAllowances = useCallback(async (): Promise<void> => {}, []);
-
-  // ============================================================
-  // Arcium MPC: "decrypt my cards" now means deal this player into the hand
-  // (deal_to_seat) and decrypt the sealed hole cards from the HoleDealt event.
-  // ============================================================
-  const decryptMyCards = useCallback(async (): Promise<void> => {
+  const dealMeIn = useCallback(async (): Promise<void> => {
     await dealToOwnSeat();
   }, [dealToOwnSeat]);
 
@@ -1090,10 +986,10 @@ export function usePokerGame(sessionKey?: SessionKeyParam | null): UsePokerGameR
   // Arcium MPC: reveal all non-folded hole cards at showdown in ONE batched
   // round-trip (showdown_reveal). The callback writes each revealed seat's
   // plaintext cards on-chain; polling then surfaces them via revealedCards.
-  // Replaces the old per-player Ed25519 reveal — any player can trigger it
-  // once at Showdown, and the circuit only reveals seats still in the hand.
+  // Any player can trigger it once at Showdown; the circuit only reveals
+  // seats still in the hand.
   // ============================================================
-  const revealCards = useCallback(async (): Promise<string> => {
+  const revealHands = useCallback(async (): Promise<string> => {
     if (!program || !provider || !publicKey || !gameState.tablePDA || !gameState.table) {
       throw new Error("Not ready to reveal");
     }
@@ -1333,15 +1229,36 @@ export function usePokerGame(sessionKey?: SessionKeyParam | null): UsePokerGameR
     }
   }, [gameState.isAuthority, gameState.awaitingCommunityReveal, gameState.isRevealingCommunity, gameState.handState?.lastActionTime, revealCommunityCards]);
 
-  // ============================================================
-  // Retired liveness instructions. Under Arcium MPC there are no per-card
-  // allowances (grant_own_allowance) and showdown reveal is a single batched
-  // MPC call driven by revealCards() rather than a per-player Ed25519 reveal
-  // that could time out (timeout_reveal). These stubs keep the public API
-  // stable for the table page; they resolve immediately.
-  // ============================================================
-  const grantOwnAllowance = useCallback(async (): Promise<string> => "", []);
-  const timeoutReveal = useCallback(async (_targetSeat: number): Promise<string> => "", []);
+  // Auto-queue showdown_reveal once the hand reaches Showdown with 2+ players
+  // still in. Same debounce/ref guard as community auto-reveal. Anyone at the
+  // table may pay the queue; the circuit is permissionless.
+  useEffect(() => {
+    if (gameState.phase !== "Showdown") return;
+    if (gameState.isRevealing || showdownRevealInProgressRef.current) return;
+    const activeCount = gameState.handState?.activeCount ?? 0;
+    if (activeCount <= 1) return;
+    const needsReveal = gameState.players.some(
+      (p) =>
+        (p.status === "playing" || p.status === "allin") &&
+        !p.cardsRevealed
+    );
+    if (!needsReveal) return;
+
+    const timeout = setTimeout(() => {
+      revealHands()
+        .then((sig) => {
+          if (sig) console.log("[Auto-reveal] Showdown hands revealed:", sig);
+        })
+        .catch((e) => {
+          const errorMsg = e instanceof Error ? e.message : String(e);
+          if (!errorMsg.includes("Reveal is only available")) {
+            console.error("[Auto-reveal] Showdown reveal failed:", e);
+          }
+        });
+    }, 500);
+
+    return () => clearTimeout(timeout);
+  }, [gameState.phase, gameState.isRevealing, gameState.handState?.activeCount, gameState.players, revealHands]);
 
   // ============================================================
   // Game Liveness: Close inactive table and return funds
@@ -1697,34 +1614,18 @@ export function usePokerGame(sessionKey?: SessionKeyParam | null): UsePokerGameR
     joinTable,
     leaveTable,
     startHand,
-    dealCards,
+    shuffleDeck,
+    dealMeIn,
+    revealHands,
     playerAction,
     showdown,
     timeoutPlayer,
     timeoutDeal,
     timeoutShowdown,
-    // MagicBlock VRF
-    requestShuffle,
-    // Inco TEE Encryption
-    encryptHoleCards,
-    grantCardAllowance,
-    encryptAndGrantCards,
-    encryptAllPlayersCards,
-    grantAllPlayersAllowances,
-    decryptMyCards,
-    revealCards,
-    // Game Liveness (prevent stuck games)
-    grantOwnAllowance,
-    timeoutReveal,
     closeInactiveTable,
-    // Community card reveal (privacy feature)
     revealCommunityCards,
-    // Utilities
     refreshState,
     setTableId,
-    setUseVrf,
-    setUseIncoPrivacy,
-    // Program instance for event listeners
     program,
   };
 }
