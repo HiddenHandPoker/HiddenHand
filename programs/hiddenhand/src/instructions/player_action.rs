@@ -303,6 +303,15 @@ fn run_out_to_showdown(hand_state: &mut HandState, _deck_state: &DeckState) -> R
     // Set the awaiting flag. The reveal_community instruction will detect
     // that all players are all-in and reveal all remaining cards at once.
 
+    // H-3 hardening: if only one player is left, the Fold branch already set the
+    // hand to Settled (lone winner, no showdown). Never override that back to
+    // Showdown here — otherwise the no-card-exposure guarantee would rest solely
+    // on the showdown_reveal `active_count > 1` guard rather than the phase.
+    if hand_state.active_count <= 1 {
+        hand_state.phase = GamePhase::Settled;
+        return Ok(());
+    }
+
     if hand_state.phase == GamePhase::River {
         // All community cards already revealed, go to showdown
         hand_state.phase = GamePhase::Showdown;

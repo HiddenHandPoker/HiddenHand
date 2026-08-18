@@ -59,6 +59,13 @@ pub fn handler(ctx: Context<ShowdownRevealAccounts>, computation_offset: u64) ->
         ctx.accounts.hand_state.phase == GamePhase::Showdown,
         HiddenHandError::InvalidPhase
     );
+    // H-3 defense-in-depth: never reveal when only one player is left in the hand.
+    // A lone winner is decided without a showdown (phase should be Settled), so a
+    // Showdown-phase hand with active_count == 1 must not force-expose their cards.
+    require!(
+        ctx.accounts.hand_state.active_count > 1,
+        HiddenHandError::ShowdownRequiresPlayers
+    );
 
     ctx.accounts.sign_pda_account.bump = ctx.bumps.sign_pda_account;
 

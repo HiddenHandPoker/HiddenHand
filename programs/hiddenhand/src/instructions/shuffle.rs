@@ -82,6 +82,16 @@ pub fn callback(
     ctx: Context<ShuffleCallback>,
     output: SignedComputationOutputs<ShuffleOutput>,
 ) -> Result<()> {
+    // H-2 fix: the shuffle is a one-shot commitment. The queue-time guard only
+    // checks `!is_shuffled`, which is set here in the callback — so several
+    // shuffles can be queued before the first callback lands. Make any duplicate
+    // or stale callback a no-op instead of overwriting the committed deck, or a
+    // late second shuffle would swap the deck out from under already-dealt cards.
+    if ctx.accounts.deck_state.is_shuffled {
+        msg!("Deck already committed for this hand; ignoring duplicate shuffle callback");
+        return Ok(());
+    }
+
     let deck = match output.verify_output(
         &ctx.accounts.cluster_account,
         &ctx.accounts.computation_account,

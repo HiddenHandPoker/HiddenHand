@@ -104,6 +104,7 @@ pub enum HiddenHandError {
     #[msg("Invalid remaining accounts")]
     InvalidRemainingAccounts,
 
+    // Retired (Inco era) — kept for error-code stability, see note below.
     #[msg("Invalid account count - expected multiple of 3 for encryption")]
     InvalidAccountCount,
 
@@ -116,6 +117,9 @@ pub enum HiddenHandError {
     #[msg("Invalid card value - must be 0-51")]
     InvalidCard,
 
+    // Retired (Inco/Ed25519 era) — kept because removing a variant renumbers every
+    // subsequent Anchor error code (6000 + index) and would break the deployed
+    // program's error mapping. Do not remove or reorder.
     #[msg("Signature verification failed")]
     Ed25519VerificationFailed,
 
@@ -128,6 +132,7 @@ pub enum HiddenHandError {
     #[msg("This is not your seat")]
     NotYourSeat,
 
+    // Retired (Inco era) — kept for error-code stability, see note above.
     #[msg("Cards are not encrypted yet")]
     CardsNotEncrypted,
 
@@ -163,4 +168,10 @@ pub enum HiddenHandError {
 
     #[msg("This seat has already been dealt its hole cards")]
     AlreadyDealt,
+
+    #[msg("Not all players in the hand were provided — every active seat and every contributor to the pot must be included")]
+    IncompletePlayerAccounts,
+
+    #[msg("Hand is not stuck — it can still be settled via showdown, so it cannot be aborted")]
+    HandNotStuck,
 }

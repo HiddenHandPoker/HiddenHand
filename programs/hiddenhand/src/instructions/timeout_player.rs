@@ -66,6 +66,15 @@ pub fn handler(ctx: Context<TimeoutPlayer>) -> Result<()> {
         HiddenHandError::InvalidPhase
     );
 
+    // M-2 fix: mirror `player_action` — the action timeout must not fire while the
+    // hand is waiting on a community-card reveal. Otherwise a griefer could call
+    // this in the reveal-wait window to auto-check and reset `last_action_time`,
+    // pushing back the non-authority reveal deadline indefinitely.
+    require!(
+        !hand_state.awaiting_community_reveal,
+        HiddenHandError::AwaitingCommunityReveal
+    );
+
     // Validate it's this player's turn
     require!(
         hand_state.action_on == player_seat.seat_index,
@@ -127,8 +136,13 @@ pub fn handler(ctx: Context<TimeoutPlayer>) -> Result<()> {
 
     // Check if only one player remains (winner by default)
     if hand_state.active_count == 1 {
-        hand_state.phase = GamePhase::Showdown;
-        msg!("Only one player remains - advancing to showdown");
+        // H-3 fix: a lone winner is settled WITHOUT a showdown, exactly like the
+        // `player_action` fold path. Routing to Showdown here (the old behavior)
+        // let a permissionless `showdown_reveal` force-expose the uncontested
+        // winner's hole cards. `showdown` pays the winner via its
+        // (Settled && active_count == 1) branch, no reveal needed.
+        hand_state.phase = GamePhase::Settled;
+        msg!("Only one player remains - hand settled without showdown");
 
         emit!(ActionTaken {
             table_id: table.table_id,

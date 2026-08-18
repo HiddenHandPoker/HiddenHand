@@ -54,8 +54,11 @@ pub struct CollectRake<'info> {
 pub fn handler(ctx: Context<CollectRake>) -> Result<()> {
     // Read-only checks first (immutable borrow)
     let table = &ctx.accounts.table;
+    // L-2 fix: also allow collection after the table has been closed via
+    // `close_inactive_table` (which refunds player chips but leaves accumulated
+    // rake in the vault), otherwise that rake would be permanently stranded.
     require!(
-        table.status == TableStatus::Waiting,
+        table.status == TableStatus::Waiting || table.status == TableStatus::Closed,
         HiddenHandError::HandInProgress
     );
 

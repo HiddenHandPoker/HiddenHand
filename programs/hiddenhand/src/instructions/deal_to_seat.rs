@@ -264,6 +264,10 @@ pub struct DealToSeat<'info> {
         seeds = [SEAT_SEED, table.key().as_ref(), &[seat_index]],
         bump = player_seat.bump,
         constraint = player_seat.table == table.key() @ HiddenHandError::PlayerNotAtTable,
+        // C-1 fix: only the seat's own owner may deal this seat. Without this, any
+        // wallet could deal a victim's hole cards sealed to an attacker-chosen
+        // x25519 key (`seat_pubkey` is a caller-supplied arg) and decrypt them.
+        constraint = player_seat.player == payer.key() @ HiddenHandError::NotYourSeat,
     )]
     pub player_seat: Box<Account<'info, PlayerSeat>>,
 }

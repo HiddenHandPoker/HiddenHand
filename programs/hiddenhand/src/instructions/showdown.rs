@@ -180,6 +180,13 @@ pub fn handler(ctx: Context<Showdown>) -> Result<()> {
     // Also collect ALL bets for side pot calculation (including folded players)
     let mut all_bets: Vec<(u8, u64, bool)> = Vec::new(); // (seat_idx, total_bet, is_active)
 
+    // H-1 fix: bind the caller-supplied `remaining_accounts` to on-chain ground
+    // truth. `present_active_bits` is the OR of every active seat actually passed;
+    // `sum_bets` is the total staked across every passed seat. Checked below so a
+    // caller cannot omit the winner or a contributor to steal / bias the pot.
+    let mut present_active_bits: u8 = 0;
+    let mut sum_bets: u64 = 0;
+
     for (idx, account_info) in ctx.remaining_accounts.iter().enumerate() {
         if results_count >= 6 {
             break;
@@ -196,6 +203,12 @@ pub fn handler(ctx: Context<Showdown>) -> Result<()> {
             if seat.total_bet_this_hand > 0 {
                 all_bets.push((seat.seat_index, seat.total_bet_this_hand, is_active));
             }
+
+            // H-1 accounting: record presence of active seats and total stake.
+            if hand_state.is_player_active(seat.seat_index) {
+                present_active_bits |= 1 << seat.seat_index;
+            }
+            sum_bets = sum_bets.saturating_add(seat.total_bet_this_hand);
 
             // Collect event data for ALL seats
             let hole_1 = if seat.cards_revealed {
@@ -236,6 +249,21 @@ pub fn handler(ctx: Context<Showdown>) -> Result<()> {
     }
 
     let pot = hand_state.pot;
+
+    // H-1 fix: enforce completeness before any distribution.
+    // (1) Every seat still active in the hand must be present, or the caller could
+    //     omit the real winner and auto-scoop as the "sole eligible" player.
+    // (2) The stake summed over every passed seat must equal the pot, or a folded
+    //     contributor could be omitted to inflate side-pot contributor counts.
+    // Duplicate accounts are already rejected above, so no seat is double-counted.
+    require!(
+        present_active_bits == hand_state.active_players,
+        HiddenHandError::IncompletePlayerAccounts
+    );
+    require!(
+        sum_bets == pot,
+        HiddenHandError::IncompletePlayerAccounts
+    );
 
     // Check that all active players have revealed their cards (required for secure showdown)
     // Skip this check if only one player remains (they win by default)

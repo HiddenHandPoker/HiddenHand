@@ -61,8 +61,18 @@ pub fn handler(ctx: Context<LeaveTable>) -> Result<()> {
     let table = &ctx.accounts.table;
     let player_seat = &ctx.accounts.player_seat;
 
+    // L-1 fix: no one may leave while a hand is in progress. You can only
+    // `join_table` while the table is `Waiting`, so once a hand starts every
+    // occupied seat is a participant in it — there is no legitimately-idle seated
+    // player mid-hand. The old `chips == 0` escape let an all-in player close
+    // their seat, forfeiting pot equity and stranding their contribution in the
+    // vault; a `status == Sitting` escape is also unsafe, because during the
+    // `Dealing` phase not-yet-dealt participants are still `Sitting` (status only
+    // flips to `Playing` in `deal_to_seat`), so it would let a live participant
+    // leave and freeze the deal. Both the fund-stranding and the H-1 showdown
+    // completeness invariant require every in-hand seat to stay until settlement.
     require!(
-        table.status != TableStatus::Playing || player_seat.chips == 0,
+        table.status != TableStatus::Playing,
         HiddenHandError::CannotLeaveDuringHand
     );
 
