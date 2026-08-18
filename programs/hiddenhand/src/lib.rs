@@ -85,6 +85,15 @@ pub mod hiddenhand {
         instructions::timeout_deal::handler(ctx)
     }
 
+    /// Emergency-abort a hand stuck at the showdown reveal (or a community reveal)
+    /// because the MPC never completed. Callable by anyone after
+    /// REVEAL_TIMEOUT_SECONDS; refunds every seat's stake, resets seats, and returns
+    /// the table to Waiting. Only fires when the hand is genuinely unsettleable.
+    /// Remaining accounts: every seat that staked into this hand.
+    pub fn timeout_showdown(ctx: Context<TimeoutShowdown>) -> Result<()> {
+        instructions::timeout_showdown::handler(ctx)
+    }
+
     /// Close an inactive table and return all funds to players
     /// Can be called by anyone after 1 hour of inactivity
     pub fn close_inactive_table<'info>(

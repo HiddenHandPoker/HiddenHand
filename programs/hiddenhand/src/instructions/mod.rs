@@ -8,6 +8,7 @@ pub mod start_hand;
 // Timeout handling
 pub mod timeout_player;
 pub mod timeout_deal;
+pub mod timeout_showdown;
 
 // Table management / liveness
 pub mod close_inactive_table;
@@ -44,6 +45,8 @@ pub use start_hand::*;
 pub use timeout_player::*;
 #[allow(ambiguous_glob_reexports)]
 pub use timeout_deal::*;
+#[allow(ambiguous_glob_reexports)]
+pub use timeout_showdown::*;
 #[allow(ambiguous_glob_reexports)]
 pub use close_inactive_table::*;
 #[allow(ambiguous_glob_reexports)]

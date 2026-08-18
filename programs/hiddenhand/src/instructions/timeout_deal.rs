@@ -19,6 +19,7 @@ use anchor_lang::prelude::*;
 
 use crate::constants::*;
 use crate::error::HiddenHandError;
+use crate::events::HandAborted;
 use crate::state::{DeckState, GamePhase, HandState, PlayerSeat, PlayerStatus, Table, TableStatus};
 
 /// Validate a remaining account is a genuine PlayerSeat PDA of this table.
@@ -74,12 +75,26 @@ pub fn handler(ctx: Context<TimeoutDeal>) -> Result<()> {
     );
 
     // Abort: refund any posted blinds and reset every seat to Sitting.
+    // M-1 fix: the refund set is caller-supplied, so we must (a) reject duplicate
+    // seats — otherwise one seat could be refunded twice to fake the total — and
+    // (b) require that the refunded stake equals the pot, so no seat that posted a
+    // blind can be omitted and have its funds permanently destroyed when the pot
+    // is zeroed below.
+    let mut seen_seats: u8 = 0;
+    let mut refunded_total: u64 = 0;
     for account_info in ctx.remaining_accounts.iter() {
-        if validate_seat_account(account_info, &table_key, &program_id).is_some() {
+        if let Some(validated) = validate_seat_account(account_info, &table_key, &program_id) {
+            let bit = 1u8 << validated.seat_index;
+            if seen_seats & bit != 0 {
+                return Err(HiddenHandError::DuplicateAccount.into());
+            }
+            seen_seats |= bit;
+
             let mut data = account_info.try_borrow_mut_data()?;
             if let Ok(mut seat) = PlayerSeat::try_deserialize(&mut &data[..]) {
                 // Refund whatever this seat put in this hand (blinds posted during
                 // deal_to_seat). Undealt seats posted nothing, so this is a no-op.
+                refunded_total = refunded_total.saturating_add(seat.total_bet_this_hand);
                 seat.chips = seat.chips.saturating_add(seat.total_bet_this_hand);
                 seat.current_bet = 0;
                 seat.total_bet_this_hand = 0;
@@ -93,6 +108,13 @@ pub fn handler(ctx: Context<TimeoutDeal>) -> Result<()> {
         }
     }
 
+    // Every seat that staked into this hand must have been refunded before we zero
+    // the pot, or those tokens would be stranded in the vault forever.
+    require!(
+        refunded_total == ctx.accounts.hand_state.pot,
+        HiddenHandError::IncompletePlayerAccounts
+    );
+
     let hand_state = &mut ctx.accounts.hand_state;
     hand_state.phase = GamePhase::Settled;
     hand_state.pot = 0;
@@ -101,6 +123,14 @@ pub fn handler(ctx: Context<TimeoutDeal>) -> Result<()> {
     let table = &mut ctx.accounts.table;
     table.status = TableStatus::Waiting;
     table.last_ready_time = clock.unix_timestamp;
+
+    emit!(HandAborted {
+        table_id: table.table_id,
+        hand_number: hand_state.hand_number,
+        reason: 0, // deal stall
+        refunded_total,
+        timestamp: clock.unix_timestamp,
+    });
 
     msg!(
         "Hand #{} aborted after {}s: a seated player never dealt in. Blinds refunded, table ready for a new hand.",
