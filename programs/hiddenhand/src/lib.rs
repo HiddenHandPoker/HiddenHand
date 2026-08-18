@@ -18,7 +18,7 @@ pub use events::*;
 pub use instructions::*;
 pub use state::*;
 
-declare_id!("9chPz3vJDeU7gr4zBtDreJUpVLKbqwrKoQBQQjT1SF5X");
+declare_id!("GAc5rZPEFfaevbTL6F5jqWAuYQUNVHPfaQ2dRc5tFgSz");
 
 /// HiddenHand - Privacy Poker on Solana
 /// Card shuffle, deal, and reveal run as Arcium MPC circuits (Phase 3b):

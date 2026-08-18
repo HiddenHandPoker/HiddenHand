@@ -6,10 +6,10 @@ resolution = true
 skip-lint = false
 
 [programs.devnet]
-hiddenhand = "9chPz3vJDeU7gr4zBtDreJUpVLKbqwrKoQBQQjT1SF5X"
+hiddenhand = "GAc5rZPEFfaevbTL6F5jqWAuYQUNVHPfaQ2dRc5tFgSz"
 
 [programs.localnet]
-hiddenhand = "9chPz3vJDeU7gr4zBtDreJUpVLKbqwrKoQBQQjT1SF5X"
+hiddenhand = "GAc5rZPEFfaevbTL6F5jqWAuYQUNVHPfaQ2dRc5tFgSz"
 
 [provider]
 cluster = "devnet"

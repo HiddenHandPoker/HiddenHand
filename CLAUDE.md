@@ -44,8 +44,14 @@ tests; `app.yml` enforces the Next build (lint non-blocking, pre-existing debt).
 **Version stack:** `arcis`/`arcium-anchor`/`-client`/`-macros` `=0.11.1`, `anchor-lang 1.0.x` /
 Solana 3.x, `arcium` CLI 0.11.2, `@arcium-hq/client 0.11.2` (frontend), devnet cluster offset **456**.
 
-**Deployment status (Phase 3 complete):** program `9chPz3vJDeU7gr4zBtDreJUpVLKbqwrKoQBQQjT1SF5X`
-deployed to **devnet** with MXE + all 6 comp-defs initialized. A full hand has run end-to-end
+**Deployment status (Phase 3 complete, re-homed 2026-08-18):** program
+`GAc5rZPEFfaevbTL6F5jqWAuYQUNVHPfaQ2dRc5tFgSz` on **devnet**. The previous
+program `9chPz3vJDeU7gr4zBtDreJUpVLKbqwrKoQBQQjT1SF5X` is frozen — its upgrade
+authority key was lost. Upgrade / MXE authority is
+`~/.config/solana/hiddenhand/upgrade-authority.json` (pubkey
+`CbRBAijxZrSre8TZWX1VWeEJSsD4Z2foEpsn1rbAJCdZ`). Program keypair:
+`~/.config/solana/hiddenhand/program.json`. **Never** `solana-keygen new --force`
+onto `id.json` or those files. A full hand has run end-to-end
 through the live MPC network (shuffle → deal → bet → reveals → showdown), with dealt cards
 matching the showdown-revealed cards and the pot conserved. Circuits are hosted (OffChain source)
 at `github.com/criptocbas/hiddenhand-arcium-circuit` — **if you edit a circuit you MUST

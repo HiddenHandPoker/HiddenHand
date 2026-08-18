@@ -7,7 +7,7 @@
 Fully on-chain Texas Hold'em on Solana, where the deck is shuffled and dealt **inside a multi-party computation (MPC) network** ([Arcium](https://arcium.com)). No server, no dealer, no chain observer — **nobody** — ever sees the deck or your hole cards. The privacy isn't a promise. It's a cryptographic guarantee.
 
 [![Live on Devnet](https://img.shields.io/badge/▶_Live_Demo-devnet-14F195?style=for-the-badge)](https://hiddenhand.netlify.app)
-[![Solana](https://img.shields.io/badge/Solana-devnet-9945FF?style=flat-square&logo=solana)](https://explorer.solana.com/address/9chPz3vJDeU7gr4zBtDreJUpVLKbqwrKoQBQQjT1SF5X?cluster=devnet)
+[![Solana](https://img.shields.io/badge/Solana-devnet-9945FF?style=flat-square&logo=solana)](https://explorer.solana.com/address/GAc5rZPEFfaevbTL6F5jqWAuYQUNVHPfaQ2dRc5tFgSz?cluster=devnet)
 [![Arcium MPC](https://img.shields.io/badge/Arcium-MPC-22d3ee?style=flat-square)](https://arcium.com)
 [![Anchor](https://img.shields.io/badge/Anchor-1.0-blue?style=flat-square)](https://www.anchor-lang.com/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow?style=flat-square)](./LICENSE)
@@ -111,7 +111,7 @@ Because each player's cards seal to a key only they hold, **each player deals th
 
 ## Deployment
 
-- **Program (devnet):** [`9chPz3vJDeU7gr4zBtDreJUpVLKbqwrKoQBQQjT1SF5X`](https://explorer.solana.com/address/9chPz3vJDeU7gr4zBtDreJUpVLKbqwrKoQBQQjT1SF5X?cluster=devnet) — MXE + all 6 comp-defs initialized.
+- **Program (devnet):** [`GAc5rZPEFfaevbTL6F5jqWAuYQUNVHPfaQ2dRc5tFgSz`](https://explorer.solana.com/address/GAc5rZPEFfaevbTL6F5jqWAuYQUNVHPfaQ2dRc5tFgSz?cluster=devnet) — MXE + all 6 comp-defs initialized.
 - **Circuits (OffChain source):** hosted at [`criptocbas/hiddenhand-arcium-circuit`](https://github.com/criptocbas/hiddenhand-arcium-circuit). The program pins each circuit by `circuit_hash!()`; the MXE fetches and hash-verifies the `.arcis` at compute time. (Multi-MB circuits can't go on-chain economically — offchain hosting + hash pinning is the pattern.)
 - **Live app:** deployed on Netlify → [hiddenhand.netlify.app](https://hiddenhand.netlify.app).
 

@@ -5,7 +5,7 @@
  * IDL can be found at `target/idl/hiddenhand.json`.
  */
 export type Hiddenhand = {
-  "address": "9chPz3vJDeU7gr4zBtDreJUpVLKbqwrKoQBQQjT1SF5X",
+  "address": "GAc5rZPEFfaevbTL6F5jqWAuYQUNVHPfaQ2dRc5tFgSz",
   "metadata": {
     "name": "hiddenhand",
     "version": "0.1.0",
@@ -2711,6 +2711,86 @@ export type Hiddenhand = {
         }
       ],
       "args": []
+    },
+    {
+      "name": "timeoutShowdown",
+      "docs": [
+        "Emergency-abort a hand stuck at the showdown reveal (or a community reveal)",
+        "because the MPC never completed. Callable by anyone after",
+        "REVEAL_TIMEOUT_SECONDS; refunds every seat's stake, resets seats, and returns",
+        "the table to Waiting. Only fires when the hand is genuinely unsettleable.",
+        "Remaining accounts: every seat that staked into this hand."
+      ],
+      "discriminator": [
+        187,
+        11,
+        4,
+        190,
+        99,
+        87,
+        95,
+        96
+      ],
+      "accounts": [
+        {
+          "name": "caller",
+          "docs": [
+            "Anyone can call once the reveal timeout has elapsed."
+          ],
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "table",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  116,
+                  97,
+                  98,
+                  108,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "table.table_id",
+                "account": "table"
+              }
+            ]
+          }
+        },
+        {
+          "name": "handState",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  104,
+                  97,
+                  110,
+                  100
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "table"
+              },
+              {
+                "kind": "account",
+                "path": "table.hand_number",
+                "account": "table"
+              }
+            ]
+          }
+        }
+      ],
+      "args": []
     }
   ],
   "accounts": [
@@ -2818,6 +2898,19 @@ export type Hiddenhand = {
         223,
         225,
         81
+      ]
+    },
+    {
+      "name": "handAborted",
+      "discriminator": [
+        163,
+        190,
+        151,
+        239,
+        21,
+        30,
+        249,
+        170
       ]
     },
     {
@@ -3143,6 +3236,16 @@ export type Hiddenhand = {
       "code": 6053,
       "name": "alreadyDealt",
       "msg": "This seat has already been dealt its hole cards"
+    },
+    {
+      "code": 6054,
+      "name": "incompletePlayerAccounts",
+      "msg": "Not all players in the hand were provided — every active seat and every contributor to the pot must be included"
+    },
+    {
+      "code": 6055,
+      "name": "handNotStuck",
+      "msg": "Hand is not stuck — it can still be settled via showdown, so it cannot be aborted"
     }
   ],
   "types": [
@@ -3833,6 +3936,58 @@ export type Hiddenhand = {
           },
           {
             "name": "settled"
+          }
+        ]
+      }
+    },
+    {
+      "name": "handAborted",
+      "docs": [
+        "Emitted when a stuck hand is force-aborted by a liveness backstop",
+        "(`timeout_deal` or `timeout_showdown`) and every seat's stake is refunded."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "tableId",
+            "docs": [
+              "Table identifier"
+            ],
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "handNumber",
+            "docs": [
+              "Sequential hand number"
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "reason",
+            "docs": [
+              "0 = deal stall (a seat never dealt in), 1 = reveal stall (MPC reveal never completed)"
+            ],
+            "type": "u8"
+          },
+          {
+            "name": "refundedTotal",
+            "docs": [
+              "Total stake refunded across all seats (equals the pot that was voided)"
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "timestamp",
+            "docs": [
+              "Unix timestamp"
+            ],
+            "type": "i64"
           }
         ]
       }
