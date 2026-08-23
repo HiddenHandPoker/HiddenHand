@@ -95,10 +95,11 @@ pub mod hiddenhand {
         instructions::timeout_player::handler(ctx)
     }
 
-    /// Abort a hand stuck in the Dealing phase because a seated player never ran
-    /// deal_to_seat (AFK). Callable by anyone after DEAL_TIMEOUT_SECONDS; refunds
-    /// posted blinds, resets seats, and returns the table to Waiting.
-    /// Remaining accounts: all occupied player seat accounts.
+    /// Abort a hand stuck in the Dealing phase — shuffle never committed, or a
+    /// seated player never ran deal_to_seat (AFK). Callable by anyone after
+    /// DEAL_TIMEOUT_SECONDS; refunds posted blinds, resets seats, and returns
+    /// the table to Waiting. Remaining accounts: all occupied player seat
+    /// accounts (empty is valid when the pot is still 0).
     pub fn timeout_deal(ctx: Context<TimeoutDeal>) -> Result<()> {
         instructions::timeout_deal::handler(ctx)
     }

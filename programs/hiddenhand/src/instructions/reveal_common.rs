@@ -41,6 +41,17 @@ pub fn authorize_reveal(
     Ok(())
 }
 
+/// Target `community_revealed` counts written by each street callback.
+pub const FLOP_REVEALED: u8 = 3;
+pub const TURN_REVEALED: u8 = 4;
+pub const RIVER_REVEALED: u8 = 5;
+
+/// H-2 equivalent for community streets: a duplicate callback must not rewind
+/// the phase machine once this street's cards are already committed.
+pub fn community_already_committed(community_revealed: u8, target: u8) -> bool {
+    community_revealed >= target
+}
+
 /// After the callback writes the revealed plaintext cards, advance the phase.
 ///
 /// `new_phase` is the street this reveal opens (Flop/Turn/River). If no one can
@@ -110,4 +121,31 @@ fn first_active_left_of_dealer(hand_state: &HandState, max_players: u8) -> u8 {
         pos = (pos + 1) % max_players;
     }
     dealer
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn duplicate_flop_is_noop_once_three_cards_committed() {
+        assert!(!community_already_committed(0, FLOP_REVEALED));
+        assert!(!community_already_committed(2, FLOP_REVEALED));
+        assert!(community_already_committed(3, FLOP_REVEALED));
+        assert!(community_already_committed(4, FLOP_REVEALED));
+        assert!(community_already_committed(5, FLOP_REVEALED));
+    }
+
+    #[test]
+    fn duplicate_turn_is_noop_once_four_cards_committed() {
+        assert!(!community_already_committed(3, TURN_REVEALED));
+        assert!(community_already_committed(4, TURN_REVEALED));
+        assert!(community_already_committed(5, TURN_REVEALED));
+    }
+
+    #[test]
+    fn duplicate_river_is_noop_once_five_cards_committed() {
+        assert!(!community_already_committed(4, RIVER_REVEALED));
+        assert!(community_already_committed(5, RIVER_REVEALED));
+    }
 }

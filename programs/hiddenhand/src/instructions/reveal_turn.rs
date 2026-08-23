@@ -13,7 +13,9 @@ use session_keys::{Session, SessionError, SessionToken};
 
 use crate::constants::*;
 use crate::error::HiddenHandError;
-use crate::instructions::reveal_common::{authorize_reveal, community_reset_and_advance};
+use crate::instructions::reveal_common::{
+    authorize_reveal, community_already_committed, community_reset_and_advance, TURN_REVEALED,
+};
 use crate::state::{DeckState, GamePhase, HandState, Table};
 
 pub const COMP_DEF_OFFSET_REVEAL_TURN: u32 = comp_def_offset("reveal_turn");
@@ -100,8 +102,12 @@ pub fn callback(
 
     let table = &ctx.accounts.table;
     let hand_state = &mut ctx.accounts.hand_state;
+    if community_already_committed(hand_state.community_revealed, TURN_REVEALED) {
+        msg!("Turn already committed; ignoring duplicate reveal_turn callback");
+        return Ok(());
+    }
     hand_state.community_cards[3] = turn;
-    hand_state.community_revealed = 4;
+    hand_state.community_revealed = TURN_REVEALED;
 
     community_reset_and_advance(table, hand_state, GamePhase::Turn, vec![turn])?;
     Ok(())

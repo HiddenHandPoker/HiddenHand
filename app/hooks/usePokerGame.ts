@@ -812,6 +812,17 @@ export function usePokerGame(sessionKey?: SessionKeyParam | null): UsePokerGameR
         const playerTokenAccount = getAssociatedTokenAddressSync(tableMint, publicKey);
 
         // Build join_table instruction
+        // One-wallet-per-table: pass every currently occupied seat so the
+        // program can reject a second seat for this wallet.
+        const occupied = getOccupiedSeats(
+          gameState.table!.occupiedSeats,
+          gameState.table!.maxPlayers
+        );
+        const occupiedSeatMetas = occupied.map((idx) => {
+          const [pda] = getSeatPDA(gameState.tablePDA!, idx);
+          return { pubkey: pda, isSigner: false, isWritable: false };
+        });
+
         const joinIx = await program.methods
           .joinTable(seatIndex, new BN(buyInLamports))
           .accounts({
@@ -824,6 +835,7 @@ export function usePokerGame(sessionKey?: SessionKeyParam | null): UsePokerGameR
             tokenProgram: TOKEN_PROGRAM_ID,
             systemProgram: SystemProgram.programId,
           })
+          .remainingAccounts(occupiedSeatMetas)
           .instruction();
 
         // Build session key creation instruction (bundled in same tx)

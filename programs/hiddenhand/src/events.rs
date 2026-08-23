@@ -160,7 +160,8 @@ pub struct HandAborted {
     pub table_id: [u8; 32],
     /// Sequential hand number
     pub hand_number: u64,
-    /// 0 = deal stall (a seat never dealt in), 1 = reveal stall (MPC reveal never completed)
+    /// 0 = dealing stall (shuffle never landed, or a seat never dealt in);
+    /// 1 = reveal stall (MPC reveal never completed)
     pub reason: u8,
     /// Total stake refunded across all seats (equals the pot that was voided)
     pub refunded_total: u64,

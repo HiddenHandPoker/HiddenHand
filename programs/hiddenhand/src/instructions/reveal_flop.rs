@@ -19,7 +19,9 @@ use session_keys::{Session, SessionError, SessionToken};
 
 use crate::constants::*;
 use crate::error::HiddenHandError;
-use crate::instructions::reveal_common::{authorize_reveal, community_reset_and_advance};
+use crate::instructions::reveal_common::{
+    authorize_reveal, community_already_committed, community_reset_and_advance, FLOP_REVEALED,
+};
 use crate::state::{DeckState, GamePhase, HandState, Table};
 
 pub const COMP_DEF_OFFSET_REVEAL_FLOP: u32 = comp_def_offset("reveal_flop");
@@ -106,10 +108,16 @@ pub fn callback(
 
     let table = &ctx.accounts.table;
     let hand_state = &mut ctx.accounts.hand_state;
+    // Duplicate callback (two queues before the first lands): do not rewind
+    // the phase machine or reset an already-open betting round.
+    if community_already_committed(hand_state.community_revealed, FLOP_REVEALED) {
+        msg!("Flop already committed; ignoring duplicate reveal_flop callback");
+        return Ok(());
+    }
     hand_state.community_cards[0] = flop[0];
     hand_state.community_cards[1] = flop[1];
     hand_state.community_cards[2] = flop[2];
-    hand_state.community_revealed = 3;
+    hand_state.community_revealed = FLOP_REVEALED;
 
     community_reset_and_advance(
         table,

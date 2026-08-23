@@ -32,7 +32,7 @@ and every finding with its fix.
 | Stall | Backstop | Timeout | Outcome |
 |---|---|---|---|
 | Player won't act (betting) | `timeout_player` | 60 s | Auto-check/fold that seat |
-| Seat never deals in | `timeout_deal` | 30 s | Abort hand, refund all stakes |
+| Shuffle never commits, or a seat never deals in | `timeout_deal` | 30 s from last progress | Abort hand, refund all stakes |
 | MPC reveal never completes | `timeout_showdown` | 180 s | Abort hand, refund all stakes |
 | Table abandoned | `close_inactive_table` | 1 h | Close table, return all funds |
 
@@ -130,6 +130,20 @@ pot, and — in the `Showdown` phase — at least one active seat must still be
 unrevealed, so a losing player cannot dodge a decided showdown (`HandNotStuck`).
 
 Both abort paths emit a `HandAborted` event for the on-chain audit trail.
+
+`timeout_deal` also covers a **shuffle stall**: after `start_hand` the table is
+`Playing` with `phase = Dealing` and `is_shuffled = false`. Leave and
+`close_inactive_table` refuse a live table, so without this abort stacks would
+lock until the MXE recovered. The shuffle callback restarts `last_action_time`
+when the deck commits, so a slow shuffle does not eat the 30 s deal window.
+
+Duplicate `reveal_flop` / `reveal_turn` / `reveal_river` callbacks are no-ops
+once that street's `community_revealed` count is already committed — the same
+one-shot pattern as H-2 — so a second in-flight queue cannot rewind the phase
+machine or reset an open betting round.
+
+`join_table` requires remaining occupied seat PDAs and rejects a second seat
+for the same wallet (`PlayerAlreadyAtTable`).
 
 ## Verification
 

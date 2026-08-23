@@ -1,9 +1,14 @@
 //! Deal-phase AFK recovery.
 //!
+//! Covers both Dealing stalls:
+//! - the shuffle MPC never committed (`!deck_state.is_shuffled`)
+//! - a seated player never ran `deal_to_seat` (shuffle committed, blinds may
+//!   have been posted)
+//!
 //! Under Arcium MPC each seated player must run `deal_to_seat` themselves (their
 //! hole cards seal to a key only they hold), so nobody can deal for an AFK
-//! player. If a player never deals in, `dealt_players` never reaches
-//! `active_players` and the hand is stuck in `Dealing` forever.
+//! player. If shuffle never lands, or a player never deals in, the hand is stuck
+//! in `Dealing` with `table.status = Playing` and no leave/close path.
 //!
 //! `timeout_deal` lets ANYONE, after `DEAL_TIMEOUT_SECONDS` of no progress,
 //! cleanly ABORT such a stuck hand: any blinds that were posted (during the
@@ -13,7 +18,8 @@
 //! hand that never finished dealing.
 //!
 //! Pass every occupied `PlayerSeat` account as `remaining_accounts` (any order)
-//! so their blinds can be refunded and their per-hand state reset.
+//! so their blinds can be refunded and their per-hand state reset. When the
+//! stall is pre-shuffle the pot is still 0, so an empty remaining set is valid.
 
 use anchor_lang::prelude::*;
 
@@ -58,21 +64,19 @@ pub fn handler(ctx: Context<TimeoutDeal>) -> Result<()> {
         ctx.accounts.table.status == TableStatus::Playing,
         HiddenHandError::HandNotInProgress
     );
-    // Only the deal-in stall (deck already shuffled, still in Dealing). The
-    // pre-shuffle stall is handled by the shuffle/start-hand timeouts. Once every
-    // seat has dealt in, the program advances to PreFlop, so phase == Dealing
-    // here already implies at least one seat is still undealt.
+    // Dealing-phase stall: either the shuffle MPC never committed the deck, or a
+    // seated player never ran deal_to_seat. There is no separate shuffle-abort
+    // instruction — both cases leave the table `Playing` with no leave/close
+    // path, so this is the permissionless refund. Once every seat has dealt in,
+    // the program advances to PreFlop, so phase == Dealing already implies the
+    // hand never opened betting.
     require!(
         ctx.accounts.hand_state.phase == GamePhase::Dealing,
         HiddenHandError::InvalidPhase
     );
-    require!(
-        ctx.accounts.deck_state.is_shuffled,
-        HiddenHandError::DeckNotShuffled
-    );
     let elapsed = clock.unix_timestamp - ctx.accounts.hand_state.last_action_time;
     require!(
-        elapsed >= DEAL_TIMEOUT_SECONDS,
+        dealing_hand_is_abortable(ctx.accounts.hand_state.phase, elapsed, DEAL_TIMEOUT_SECONDS),
         HiddenHandError::TimeoutNotReached
     );
 
@@ -129,7 +133,7 @@ pub fn handler(ctx: Context<TimeoutDeal>) -> Result<()> {
     emit!(HandAborted {
         table_id: table.table_id,
         hand_number: hand_state.hand_number,
-        reason: 0, // deal stall
+        reason: 0, // dealing stall (shuffle never landed, or a seat never dealt in)
         refunded_total,
         timestamp: clock.unix_timestamp,
     });
@@ -169,4 +173,44 @@ pub struct TimeoutDeal<'info> {
     )]
     pub deck_state: Account<'info, DeckState>,
     // remaining_accounts: every occupied PlayerSeat (to refund blinds + reset).
+    // Pre-shuffle abort has pot == 0, so an empty set is complete.
+}
+
+/// Dealing-phase abort is allowed once the timeout elapses, whether or not
+/// the shuffle callback has landed. PreFlop+ is a different backstop.
+pub fn dealing_hand_is_abortable(phase: GamePhase, elapsed: i64, timeout: i64) -> bool {
+    phase == GamePhase::Dealing && elapsed >= timeout
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn abort_allowed_before_shuffle_once_timeout_elapses() {
+        assert!(dealing_hand_is_abortable(
+            GamePhase::Dealing,
+            DEAL_TIMEOUT_SECONDS,
+            DEAL_TIMEOUT_SECONDS
+        ));
+        assert!(!dealing_hand_is_abortable(
+            GamePhase::Dealing,
+            DEAL_TIMEOUT_SECONDS - 1,
+            DEAL_TIMEOUT_SECONDS
+        ));
+    }
+
+    #[test]
+    fn abort_rejected_once_betting_has_opened() {
+        assert!(!dealing_hand_is_abortable(
+            GamePhase::PreFlop,
+            DEAL_TIMEOUT_SECONDS * 4,
+            DEAL_TIMEOUT_SECONDS
+        ));
+        assert!(!dealing_hand_is_abortable(
+            GamePhase::Showdown,
+            DEAL_TIMEOUT_SECONDS * 4,
+            DEAL_TIMEOUT_SECONDS
+        ));
+    }
 }

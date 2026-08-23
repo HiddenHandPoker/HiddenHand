@@ -66,10 +66,16 @@ pub fn handler(ctx: Context<Shuffle>, computation_offset: u64) -> Result<()> {
         vec![ShuffleCallback::callback_ix(
             computation_offset,
             &ctx.accounts.mxe_account,
-            &[CallbackAccount {
-                pubkey: ctx.accounts.deck_state.key(),
-                is_writable: true,
-            }],
+            &[
+                CallbackAccount {
+                    pubkey: ctx.accounts.deck_state.key(),
+                    is_writable: true,
+                },
+                CallbackAccount {
+                    pubkey: ctx.accounts.hand_state.key(),
+                    is_writable: true,
+                },
+            ],
         )?],
         1,
         0,
@@ -103,10 +109,17 @@ pub fn callback(
         }
     };
 
+    let clock = Clock::get()?;
     let deck_state = &mut ctx.accounts.deck_state;
     deck_state.deck = deck.ciphertexts;
     deck_state.deck_nonce = deck.nonce;
     deck_state.is_shuffled = true;
+
+    // Restart the deal-timeout clock from shuffle commit, not start_hand.
+    // Otherwise a 20s shuffle eats the 30s DEAL_TIMEOUT window and anyone can
+    // abort the hand before the first player deals in.
+    let hand_state = &mut ctx.accounts.hand_state;
+    hand_state.last_action_time = clock.unix_timestamp;
 
     emit!(DeckShuffled {
         hand_number: deck_state.hand_number,
@@ -187,6 +200,9 @@ pub struct ShuffleCallback<'info> {
     pub instructions_sysvar: UncheckedAccount<'info>,
     #[account(mut)]
     pub deck_state: Account<'info, DeckState>,
+    /// Bound to this deck's hand so a callback cannot bump another table's clock.
+    #[account(mut, constraint = hand_state.key() == deck_state.hand @ HiddenHandError::InvalidPhase)]
+    pub hand_state: Account<'info, HandState>,
 }
 
 #[init_computation_definition_accounts("shuffle", payer)]
