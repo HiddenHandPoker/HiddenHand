@@ -44,10 +44,10 @@ const WALLET_PATH = process.env.ANCHOR_WALLET || path.join(os.homedir(), ".confi
 const IDL = require(path.join(__dirname, "..", "lib", "idl", "hiddenhand.json"));
 const PROGRAM_ID = new PublicKey(IDL.address);
 
-const CIRCUITS = ["shuffle", "deal_to_seat", "reveal_flop", "reveal_turn", "reveal_river", "showdown_reveal"];
+const CIRCUITS = ["shuffle", "deal_to_seat_v2", "reveal_flop", "reveal_turn", "reveal_river", "showdown_reveal"];
 const INIT_METHOD = {
   shuffle: "initShuffleCompDef",
-  deal_to_seat: "initDealToSeatCompDef",
+  deal_to_seat_v2: "initDealToSeatCompDef",
   reveal_flop: "initRevealFlopCompDef",
   reveal_turn: "initRevealTurnCompDef",
   reveal_river: "initRevealRiverCompDef",
@@ -127,11 +127,18 @@ async function main() {
   // single transient blip doesn't kill a ~3-minute multi-step flow.
   const fetchWithRetry = async (url, opts) => {
     let lastErr;
-    for (let i = 0; i < 6; i++) {
-      try { return await fetch(url, opts); }
-      catch (e) { lastErr = e; await sleep(400 * (i + 1)); }
+    for (let i = 0; i < 8; i++) {
+      try {
+        const res = await fetch(url, opts);
+        if (res.status === 429) {
+          await sleep(500 * (i + 1) * (i + 1));
+          continue;
+        }
+        return res;
+      } catch (e) { lastErr = e; await sleep(400 * (i + 1)); }
     }
-    throw lastErr;
+    if (lastErr) throw lastErr;
+    throw new Error("RPC retries exhausted (429)");
   };
   const connection = new Connection(RPC, { commitment: "confirmed", fetch: fetchWithRetry });
   const authority = loadKp(WALLET_PATH);
@@ -207,6 +214,7 @@ async function main() {
     const ata = splToken.getAssociatedTokenAddressSync(mint, p.publicKey);
     await pProg.methods.joinTable(i, new BN(200_000_000))
       .accounts({ player: p.publicKey, table: tPda, playerSeat: seatPda(tPda, i), playerTokenAccount: ata, vault: vaultPda(tPda), mint, tokenProgram: TOKEN_PROGRAM_ID, systemProgram: SystemProgram.programId })
+      .remainingAccounts(i === 0 ? [] : [{ pubkey: seatPda(tPda, 0), isSigner: false, isWritable: false }])
       .rpc({ commitment: "confirmed" });
     log(`  seat ${i} joined by ${p.publicKey.toBase58().slice(0, 4)}`);
   }
@@ -215,7 +223,7 @@ async function main() {
   const table = await program.account.table.fetch(tPda);
   const handNo = table.handNumber.toNumber() + 1;
   const hPda = handPda(tPda, handNo), dPda = deckPda(tPda, handNo);
-  await program.methods.startHand().accounts({ caller: authority.publicKey, table: tPda, handState: hPda, deckState: dPda, systemProgram: SystemProgram.programId }).rpc({ commitment: "confirmed" });
+  await program.methods.startHand().accounts({ caller: authority.publicKey, table: tPda, handState: hPda, deckState: dPda, systemProgram: SystemProgram.programId }).remainingAccounts([0, 1].map((i) => ({ pubkey: seatPda(tPda, i), isSigner: false, isWritable: false }))).rpc({ commitment: "confirmed" });
   log(`\n--- hand #${handNo} started ---`);
 
   // ---- 6. shuffle (MPC) ----
@@ -233,7 +241,7 @@ async function main() {
     const nonce = randomBytes(16);
     off = newOffset();
     await pProg.methods.dealToSeat(off, i, Array.from(x25[i].pk), new BN(deserializeLE(nonce).toString()))
-      .accountsPartial({ payer: p.publicKey, ...arciumQueueAccounts(off, "deal_to_seat"), table: tPda, handState: hPda, deckState: dPda, playerSeat: seatPda(tPda, i) })
+      .accountsPartial({ payer: p.publicKey, ...arciumQueueAccounts(off, "deal_to_seat_v2"), table: tPda, handState: hPda, deckState: dPda, playerSeat: seatPda(tPda, i) })
       .rpc({ skipPreflight: true, commitment: "confirmed" });
     await awaitComputationFinalization(pProv, off, PROGRAM_ID, "confirmed");
     await sleep(2500); // let the callback tx land + confirm

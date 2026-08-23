@@ -27,6 +27,14 @@ import { BN, type AnchorProvider, type Program, type Idl } from "@anchor-lang/co
  */
 export const CLUSTER_OFFSET = 456; // Arcium.toml [clusters.devnet]; mainnet is 2026
 
+/**
+ * Encrypted-instruction name for hole-card dealing. Comp-def offsets are a
+ * name hash, so this is a fresh offset (`deal_to_seat_v2`) after the original
+ * `deal_to_seat` definition on cluster 456 could not be closed. The Solana
+ * instruction remains `dealToSeat`.
+ */
+export const CIRCUIT_DEAL_TO_SEAT = "deal_to_seat_v2";
+
 // ============================================================
 // Card decoding (pure — no SDK, safe to import anywhere)
 // ============================================================
@@ -246,7 +254,7 @@ function u32le(bytes: Uint8Array): number {
  * alongside the instruction's own accounts (payer, table, hand_state, …).
  *
  * `circuitName` must match the `#[instruction]` fn name exactly
- * (shuffle | deal_to_seat | reveal_flop | reveal_turn | reveal_river | showdown_reveal).
+ * (shuffle | deal_to_seat_v2 | reveal_flop | reveal_turn | reveal_river | showdown_reveal).
  */
 export async function queueAccounts(
   programId: PublicKey,

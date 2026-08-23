@@ -25,6 +25,7 @@ import {
   fetchMXEPublicKey,
   decryptHoleCards,
   queueAccounts,
+  CIRCUIT_DEAL_TO_SEAT,
   awaitFinalization,
   scanRecentEvents,
   newComputationOffset,
@@ -788,7 +789,7 @@ export function usePokerGame(sessionKey?: SessionKeyParam | null): UsePokerGameR
 
       const computationOffset = newComputationOffset();
       const nonce = newNonce();
-      const arcium = await buildQueueAccounts("deal_to_seat", computationOffset);
+      const arcium = await buildQueueAccounts(CIRCUIT_DEAL_TO_SEAT, computationOffset);
 
       const tx = await program.methods
         .dealToSeat(

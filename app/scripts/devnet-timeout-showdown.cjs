@@ -93,19 +93,19 @@ async function main() {
   const x25 = players.map(() => { const sk = x25519.utils.randomSecretKey(); return { sk, pk: x25519.getPublicKey(sk) }; });
   for (let i = 0; i < 2; i++) {
     const { program: pProg } = programFor(connection, players[i]);
-    await pProg.methods.joinTable(i, new BN(200_000_000)).accounts({ player: players[i].publicKey, table: tPda, playerSeat: seatPda(tPda, i), playerTokenAccount: splToken.getAssociatedTokenAddressSync(mint, players[i].publicKey), vault: vaultPda(tPda), mint, tokenProgram: TOKEN_PROGRAM_ID, systemProgram: SystemProgram.programId }).rpc({ commitment: "confirmed" });
+    await pProg.methods.joinTable(i, new BN(200_000_000)).accounts({ player: players[i].publicKey, table: tPda, playerSeat: seatPda(tPda, i), playerTokenAccount: splToken.getAssociatedTokenAddressSync(mint, players[i].publicKey), vault: vaultPda(tPda), mint, tokenProgram: TOKEN_PROGRAM_ID, systemProgram: SystemProgram.programId }).remainingAccounts(i === 0 ? [] : [{ pubkey: seatPda(tPda, 0), isSigner: false, isWritable: false }]).rpc({ commitment: "confirmed" });
   }
   const table = await program.account.table.fetch(tPda);
   const handNo = table.handNumber.toNumber() + 1;
   const hPda = handPda(tPda, handNo), dPda = deckPda(tPda, handNo);
-  await program.methods.startHand().accounts({ caller: authority.publicKey, table: tPda, handState: hPda, deckState: dPda, systemProgram: SystemProgram.programId }).rpc({ commitment: "confirmed" });
+  await program.methods.startHand().accounts({ caller: authority.publicKey, table: tPda, handState: hPda, deckState: dPda, systemProgram: SystemProgram.programId }).remainingAccounts([0, 1].map((i) => ({ pubkey: seatPda(tPda, i), isSigner: false, isWritable: false }))).rpc({ commitment: "confirmed" });
   let off = newOffset();
   await program.methods.shuffle(off).accountsPartial({ payer: authority.publicKey, ...arciumQueueAccounts(off, "shuffle"), table: tPda, handState: hPda, deckState: dPda }).rpc({ skipPreflight: true, commitment: "confirmed" });
   await awaitComputationFinalization(provider, off, PROGRAM_ID, "confirmed");
   for (let i = 0; i < 2; i++) {
     const { program: pProg, provider: pProv } = programFor(connection, players[i]);
     off = newOffset();
-    await pProg.methods.dealToSeat(off, i, Array.from(x25[i].pk), new BN(deserializeLE(randomBytes(16)).toString())).accountsPartial({ payer: players[i].publicKey, ...arciumQueueAccounts(off, "deal_to_seat"), table: tPda, handState: hPda, deckState: dPda, playerSeat: seatPda(tPda, i) }).rpc({ skipPreflight: true, commitment: "confirmed" });
+    await pProg.methods.dealToSeat(off, i, Array.from(x25[i].pk), new BN(deserializeLE(randomBytes(16)).toString())).accountsPartial({ payer: players[i].publicKey, ...arciumQueueAccounts(off, "deal_to_seat_v2"), table: tPda, handState: hPda, deckState: dPda, playerSeat: seatPda(tPda, i) }).rpc({ skipPreflight: true, commitment: "confirmed" });
     await awaitComputationFinalization(pProv, off, PROGRAM_ID, "confirmed");
   }
   log(`  hand set up and dealt`);

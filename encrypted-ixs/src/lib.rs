@@ -59,8 +59,14 @@ mod circuits {
     /// that seat's key. Called once per active player. `seat_index` is public (which
     /// deck positions to read: 2i and 2i+1); the card *values* stay secret. This is a
     /// small re-feed circuit, same size class as the reveals.
+    ///
+    /// Named `deal_to_seat_v2` because the original `deal_to_seat` computation
+    /// definition on cluster 456 cannot be closed (shared execpool zombies trip
+    /// `ComputationDefinitionHasActiveComputations`). Comp-def offsets are a
+    /// name hash, so this is a fresh offset; the Solana instruction is still
+    /// `deal_to_seat`.
     #[instruction]
-    pub fn deal_to_seat(
+    pub fn deal_to_seat_v2(
         deck_ctxt: Enc<Mxe, Deck>,
         seat: Shared,
         seat_index: u8,

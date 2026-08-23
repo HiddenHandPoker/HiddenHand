@@ -518,16 +518,16 @@ export type Hiddenhand = {
       ]
     },
     {
-      "name": "dealToSeatCallback",
+      "name": "dealToSeatV2Callback",
       "discriminator": [
-        12,
-        177,
-        21,
-        174,
-        146,
-        209,
-        175,
-        50
+        183,
+        15,
+        242,
+        231,
+        8,
+        95,
+        138,
+        174
       ],
       "accounts": [
         {
@@ -573,7 +573,7 @@ export type Hiddenhand = {
                   "kind": "type",
                   "type": {
                     "defined": {
-                      "name": "dealToSeatOutput"
+                      "name": "dealToSeatV2Output"
                     }
                   }
                 }
@@ -3785,7 +3785,7 @@ export type Hiddenhand = {
       }
     },
     {
-      "name": "dealToSeatOutput",
+      "name": "dealToSeatV2Output",
       "docs": [
         "The output of the callback instruction. Provided as a struct with ordered fields",
         "as anchor does not support tuples and tuple structs yet."

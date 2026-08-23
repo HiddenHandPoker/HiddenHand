@@ -184,10 +184,10 @@ pub mod hiddenhand {
         )
     }
 
-    #[arcium_callback(encrypted_ix = "deal_to_seat")]
-    pub fn deal_to_seat_callback(
-        ctx: Context<DealToSeatCallback>,
-        output: SignedComputationOutputs<DealToSeatOutput>,
+    #[arcium_callback(encrypted_ix = "deal_to_seat_v2")]
+    pub fn deal_to_seat_v2_callback(
+        ctx: Context<DealToSeatV2Callback>,
+        output: SignedComputationOutputs<DealToSeatV2Output>,
     ) -> Result<()> {
         instructions::deal_to_seat::callback(ctx, output)
     }

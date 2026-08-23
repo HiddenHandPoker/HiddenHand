@@ -1,4 +1,11 @@
-//! MPC deal — Arcium circuit `deal_to_seat`.
+//! MPC deal — Arcium circuit `deal_to_seat_v2`.
+//!
+//! The public Anchor instruction is still `deal_to_seat`. The encrypted
+//! instruction was renamed so we could init a fresh computation definition:
+//! cluster 456's execpool has long-stuck foreign computations, and
+//! `close-computation-definition` treats any older `queued_slot` as in-flight
+//! (`ComputationDefinitionHasActiveComputations`). The original `deal_to_seat`
+//! def stays deactivated and unused.
 //!
 //! Deals ONE seat's two hole cards from the persisted MXE deck, sealed to that
 //! seat's client x25519 key. Called once per seated player. `seat_index` is public
@@ -23,10 +30,10 @@ use crate::error::HiddenHandError;
 use crate::events::HandStarted;
 use crate::state::{DeckState, GamePhase, HandState, PlayerSeat, PlayerStatus, Table, TableStatus};
 
-pub const COMP_DEF_OFFSET_DEAL_TO_SEAT: u32 = comp_def_offset("deal_to_seat");
+pub const COMP_DEF_OFFSET_DEAL_TO_SEAT: u32 = comp_def_offset("deal_to_seat_v2");
 
 const URL_DEAL_TO_SEAT: &str =
-    "https://raw.githubusercontent.com/criptocbas/hiddenhand-arcium-circuit/main/deal_to_seat.arcis";
+    "https://raw.githubusercontent.com/criptocbas/hiddenhand-arcium-circuit/main/deal_to_seat_v2.arcis";
 
 // DeckState layout: [8 discriminator][64 deck][16 deck_nonce][...]. deck is the
 // first field, so the ciphertext lives at byte offset 8 for the `.account()` re-feed.
@@ -38,7 +45,7 @@ pub fn init_deal_to_seat_comp_def(ctx: Context<InitDealToSeatCompDef>) -> Result
         ctx.accounts,
         Some(CircuitSource::OffChain(OffChainCircuitSource {
             source: URL_DEAL_TO_SEAT.to_string(),
-            hash: circuit_hash!("deal_to_seat"),
+            hash: circuit_hash!("deal_to_seat_v2"),
         })),
     )?;
     Ok(())
@@ -100,7 +107,7 @@ pub fn handler(
         ctx.accounts,
         computation_offset,
         args,
-        vec![DealToSeatCallback::callback_ix(
+        vec![DealToSeatV2Callback::callback_ix(
             computation_offset,
             &ctx.accounts.mxe_account,
             &[
@@ -126,14 +133,14 @@ pub fn handler(
 }
 
 pub fn callback(
-    ctx: Context<DealToSeatCallback>,
-    output: SignedComputationOutputs<DealToSeatOutput>,
+    ctx: Context<DealToSeatV2Callback>,
+    output: SignedComputationOutputs<DealToSeatV2Output>,
 ) -> Result<()> {
     let hole = match output.verify_output(
         &ctx.accounts.cluster_account,
         &ctx.accounts.computation_account,
     ) {
-        Ok(DealToSeatOutput { field_0 }) => field_0,
+        Ok(DealToSeatV2Output { field_0 }) => field_0,
         Err(e) => {
             msg!("verify_output failed: {}", e);
             return Err(HiddenHandError::AbortedComputation.into());
@@ -242,7 +249,7 @@ fn blind_positions(table: &Table) -> (u8, u8) {
     }
 }
 
-#[queue_computation_accounts("deal_to_seat", payer)]
+#[queue_computation_accounts("deal_to_seat_v2", payer)]
 #[derive(Accounts)]
 #[instruction(computation_offset: u64, seat_index: u8)]
 pub struct DealToSeat<'info> {
@@ -308,9 +315,9 @@ pub struct DealToSeat<'info> {
     pub player_seat: Box<Account<'info, PlayerSeat>>,
 }
 
-#[callback_accounts("deal_to_seat")]
+#[callback_accounts("deal_to_seat_v2")]
 #[derive(Accounts)]
-pub struct DealToSeatCallback<'info> {
+pub struct DealToSeatV2Callback<'info> {
     pub arcium_program: Program<'info, Arcium>,
     #[account(address = derive_comp_def_pda!(COMP_DEF_OFFSET_DEAL_TO_SEAT))]
     pub comp_def_account: Account<'info, ComputationDefinitionAccount>,
@@ -330,7 +337,7 @@ pub struct DealToSeatCallback<'info> {
     pub player_seat: Account<'info, PlayerSeat>,
 }
 
-#[init_computation_definition_accounts("deal_to_seat", payer)]
+#[init_computation_definition_accounts("deal_to_seat_v2", payer)]
 #[derive(Accounts)]
 pub struct InitDealToSeatCompDef<'info> {
     #[account(mut)]
