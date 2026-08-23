@@ -83,77 +83,60 @@ export interface WalletSigner {
 
 const KEY_CACHE = new Map<string, EncryptionKeys>();
 
+/** Bump this when rotating the derivation message so leftover v1 keys are unused. */
+const ENC_KEY_VERSION = 2;
+
 function keyCacheId(walletPubkey: PublicKey, programId: PublicKey): string {
-  return `arcium-enc-key:${programId.toBase58()}:${walletPubkey.toBase58()}`;
+  return `arcium-enc-key:v${ENC_KEY_VERSION}:${programId.toBase58()}:${walletPubkey.toBase58()}`;
 }
 
-function toHex(bytes: Uint8Array): string {
-  return Array.from(bytes)
-    .map((b) => b.toString(16).padStart(2, "0"))
-    .join("");
-}
-
-function fromHex(hex: string): Uint8Array {
-  const out = new Uint8Array(hex.length / 2);
-  for (let i = 0; i < out.length; i++) {
-    out[i] = parseInt(hex.slice(i * 2, i * 2 + 2), 16);
+function wipePersistedKeyMaterial(walletPubkey: PublicKey, programId: PublicKey): void {
+  if (typeof window === "undefined") return;
+  // Never persist the SK. Drop any leftover plaintext keys from earlier builds.
+  const prefixes = [
+    `arcium-enc-key:${programId.toBase58()}:${walletPubkey.toBase58()}`,
+    keyCacheId(walletPubkey, programId),
+  ];
+  for (const id of prefixes) {
+    window.localStorage.removeItem(id);
   }
-  return out;
 }
 
 /**
  * Derive a deterministic x25519 keypair for this wallet + program.
  *
  * The private key is `sha256(wallet_signature)`, so it is fully recoverable from
- * the wallet at any time — losing the cache just costs one more signature popup.
- * Cached in-memory and in localStorage so a player signs at most once per browser
- * session (not once per hand). Only the seat owner can decrypt cards sealed to
- * this public key.
+ * the wallet at any time — losing the in-memory cache just costs one more
+ * signature popup. Kept in RAM only: `HoleDealt` ciphertexts are public logs,
+ * so a persisted SK would decrypt historical and future hole cards after XSS.
  */
 export async function deriveEncryptionKeys(
   wallet: WalletSigner,
   programId: PublicKey
 ): Promise<EncryptionKeys> {
   const cacheId = keyCacheId(wallet.publicKey, programId);
+  wipePersistedKeyMaterial(wallet.publicKey, programId);
 
   const mem = KEY_CACHE.get(cacheId);
   if (mem) return mem;
 
-  if (typeof window !== "undefined") {
-    const stored = window.localStorage.getItem(cacheId);
-    if (stored) {
-      const { x25519 } = await import("@arcium-hq/client");
-      const privateKey = fromHex(stored);
-      const publicKey = x25519.getPublicKey(privateKey);
-      const keys = { privateKey, publicKey };
-      KEY_CACHE.set(cacheId, keys);
-      return keys;
-    }
-  }
-
   const { x25519 } = await import("@arcium-hq/client");
   const { sha256 } = await import("@noble/hashes/sha2");
 
-  const message = `HiddenHand encryption key for ${programId.toBase58()}`;
+  const message = `HiddenHand encryption key v${ENC_KEY_VERSION} for ${programId.toBase58()}`;
   const signature = await wallet.signMessage(new TextEncoder().encode(message));
   const privateKey = sha256(signature).slice(0, 32);
   const publicKey = x25519.getPublicKey(privateKey);
   const keys = { privateKey, publicKey };
 
   KEY_CACHE.set(cacheId, keys);
-  if (typeof window !== "undefined") {
-    window.localStorage.setItem(cacheId, toHex(privateKey));
-  }
   return keys;
 }
 
 /** Forget cached encryption keys (e.g. on wallet disconnect). */
 export function clearEncryptionKeys(walletPubkey: PublicKey, programId: PublicKey): void {
-  const cacheId = keyCacheId(walletPubkey, programId);
-  KEY_CACHE.delete(cacheId);
-  if (typeof window !== "undefined") {
-    window.localStorage.removeItem(cacheId);
-  }
+  KEY_CACHE.delete(keyCacheId(walletPubkey, programId));
+  wipePersistedKeyMaterial(walletPubkey, programId);
 }
 
 // ============================================================
@@ -172,8 +155,12 @@ export async function fetchMXEPublicKey(
 ): Promise<Uint8Array | null> {
   const { getMXEPublicKey } = await import("@arcium-hq/client");
   for (let i = 0; i < attempts; i++) {
-    const key = await getMXEPublicKey(provider, programId);
-    if (key) return key;
+    try {
+      const key = await getMXEPublicKey(provider, programId);
+      if (key) return key;
+    } catch {
+      // MXE account may not be visible yet on a cold RPC.
+    }
     await new Promise((r) => setTimeout(r, delayMs));
   }
   return null;
@@ -210,25 +197,23 @@ export async function decryptHoleCards(
 // Computation offsets + nonces
 // ============================================================
 
+function randomBytes(length: number): Uint8Array {
+  const bytes = new Uint8Array(length);
+  if (typeof globalThis.crypto?.getRandomValues !== "function") {
+    throw new Error("Web Crypto is required for Arcium nonces and computation offsets");
+  }
+  globalThis.crypto.getRandomValues(bytes);
+  return bytes;
+}
+
 /** Fresh 8-byte random computation offset (u64) for a queue_computation call. */
 export function newComputationOffset(): BN {
-  const bytes = new Uint8Array(8);
-  if (typeof globalThis.crypto !== "undefined") {
-    globalThis.crypto.getRandomValues(bytes);
-  } else {
-    for (let i = 0; i < 8; i++) bytes[i] = Math.floor(Math.random() * 256);
-  }
-  return new BN(bytes, "le");
+  return new BN(randomBytes(8), "le");
 }
 
 /** Fresh 16-byte random nonce, returned both as raw bytes and as a u128 BN. */
 export function newNonce(): { bytes: Uint8Array; bn: BN } {
-  const bytes = new Uint8Array(16);
-  if (typeof globalThis.crypto !== "undefined") {
-    globalThis.crypto.getRandomValues(bytes);
-  } else {
-    for (let i = 0; i < 16; i++) bytes[i] = Math.floor(Math.random() * 256);
-  }
+  const bytes = randomBytes(16);
   return { bytes, bn: new BN(bytes, "le") };
 }
 
@@ -369,7 +354,7 @@ export async function scanRecentEvents(
   connection: Connection,
   program: Program<Idl>,
   programId: PublicKey,
-  limit = 15
+  limit = 40
 ): Promise<DecodedEvent[]> {
   const sigs = await connection.getSignaturesForAddress(programId, { limit });
   const out: DecodedEvent[] = [];
@@ -377,4 +362,33 @@ export async function scanRecentEvents(
     out.push(...(await fetchCallbackEvents(connection, program, s.signature)));
   }
   return out;
+}
+
+export interface HoleDealtFields {
+  encPubkey: number[];
+  nonce: number[];
+  card0: number[];
+  card1: number[];
+}
+
+/** Pull a HoleDealt payload addressed to `encPubkey` out of decoded events. */
+export function findHoleDealtForKey(
+  events: DecodedEvent[],
+  encPubkey: Uint8Array
+): HoleDealtFields | null {
+  const myPubHex = Buffer.from(encPubkey).toString("hex");
+  for (const ev of events) {
+    if (ev.name !== "holeDealt" && ev.name !== "HoleDealt") continue;
+    const d = ev.data as {
+      encPubkey?: number[];
+      enc_pubkey?: number[];
+      nonce: number[];
+      card0: number[];
+      card1: number[];
+    };
+    const pub = d.encPubkey ?? d.enc_pubkey ?? [];
+    if (Buffer.from(pub).toString("hex") !== myPubHex) continue;
+    return { encPubkey: pub, nonce: d.nonce, card0: d.card0, card1: d.card1 };
+  }
+  return null;
 }

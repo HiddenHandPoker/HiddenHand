@@ -30,6 +30,8 @@ import {
   newComputationOffset,
   newNonce,
   isRealCard,
+  findHoleDealtForKey,
+  clearEncryptionKeys,
   type EncryptionKeys,
 } from "@/lib/arcium";
 import { Transaction, Keypair } from "@solana/web3.js";
@@ -174,6 +176,8 @@ export interface UsePokerGameResult {
   startHand: () => Promise<string>;
   shuffleDeck: () => Promise<string>;
   dealMeIn: () => Promise<void>;
+  /** Rescan for HoleDealt and decrypt — does not re-queue MPC. */
+  retryDecrypt: () => Promise<void>;
   revealHands: () => Promise<string>;
   playerAction: (action: ActionType) => Promise<string>;
   showdown: () => Promise<string>;
@@ -258,18 +262,43 @@ export interface SessionKeyParam {
 // A player's decrypted hole cards live ONLY client-side (from the one-time
 // HoleDealt event). A page refresh would lose them, and the on-chain "dealt"
 // bit blocks re-dealing — so cache them in sessionStorage (same browser, the
-// player's own cards) keyed by table+hand+seat, and restore on load.
-function holeCardsKey(tablePda: PublicKey, handNumber: number, seat: number): string {
-  return `hh_holecards:${tablePda.toBase58()}:${handNumber}:${seat}`;
+// player's own cards) keyed by wallet+table+hand+seat, and restore on load.
+function holeCardsKey(
+  wallet: PublicKey,
+  tablePda: PublicKey,
+  handNumber: number,
+  seat: number
+): string {
+  return `hh_holecards:${wallet.toBase58()}:${tablePda.toBase58()}:${handNumber}:${seat}`;
 }
-function saveHoleCards(tablePda: PublicKey, handNumber: number, seat: number, cards: [number, number]): void {
+function saveHoleCards(
+  wallet: PublicKey,
+  tablePda: PublicKey,
+  handNumber: number,
+  seat: number,
+  cards: [number, number]
+): void {
   if (typeof window === "undefined") return;
-  try { window.sessionStorage.setItem(holeCardsKey(tablePda, handNumber, seat), JSON.stringify(cards)); } catch {}
+  try {
+    window.sessionStorage.setItem(
+      holeCardsKey(wallet, tablePda, handNumber, seat),
+      JSON.stringify(cards)
+    );
+  } catch {
+    // sessionStorage full or unavailable
+  }
 }
-function loadHoleCards(tablePda: PublicKey, handNumber: number, seat: number): [number, number] | null {
+function loadHoleCards(
+  wallet: PublicKey,
+  tablePda: PublicKey,
+  handNumber: number,
+  seat: number
+): [number, number] | null {
   if (typeof window === "undefined") return null;
   try {
-    const raw = window.sessionStorage.getItem(holeCardsKey(tablePda, handNumber, seat));
+    const raw = window.sessionStorage.getItem(
+      holeCardsKey(wallet, tablePda, handNumber, seat)
+    );
     if (!raw) return null;
     const c = JSON.parse(raw);
     if (Array.isArray(c) && c.length === 2 && typeof c[0] === "number" && typeof c[1] === "number") {
@@ -294,6 +323,27 @@ export function usePokerGame(sessionKey?: SessionKeyParam | null): UsePokerGameR
   const encKeysRef = useRef<EncryptionKeys | null>(null);
   // Guard so we fire the batched showdown reveal at most once.
   const showdownRevealInProgressRef = useRef<boolean>(false);
+  const dealInProgressRef = useRef<boolean>(false);
+  const shuffleInProgressRef = useRef<boolean>(false);
+  const lastWalletRef = useRef<string | null>(null);
+
+  // Drop in-memory encryption keys on wallet change / disconnect.
+  useEffect(() => {
+    const next = publicKey?.toBase58() ?? null;
+    const prev = lastWalletRef.current;
+    if (prev && prev !== next && program) {
+      try {
+        clearEncryptionKeys(new PublicKey(prev), program.programId);
+      } catch {
+        // ignore malformed prev
+      }
+      encKeysRef.current = null;
+    }
+    if (!next) {
+      encKeysRef.current = null;
+    }
+    lastWalletRef.current = next;
+  }, [publicKey, program]);
 
   // Keep the ref in sync with gameState.encryptionHandNumber
   useEffect(() => {
@@ -489,9 +539,19 @@ export function usePokerGame(sessionKey?: SessionKeyParam | null): UsePokerGameR
       // bit set) but have no cards in memory (e.g. after a page reload), restore
       // them from the sessionStorage cache written at deal time.
       let restoredCards: [number | null, number | null] | null = null;
-      if (!resetEncryptionState && currentPlayerSeat !== null && handState &&
-          (handState.dealtPlayers & (1 << currentPlayerSeat)) !== 0) {
-        restoredCards = loadHoleCards(gameState.tablePDA, currentHandNumber, currentPlayerSeat);
+      if (
+        publicKey &&
+        !resetEncryptionState &&
+        currentPlayerSeat !== null &&
+        handState &&
+        (handState.dealtPlayers & (1 << currentPlayerSeat)) !== 0
+      ) {
+        restoredCards = loadHoleCards(
+          publicKey,
+          gameState.tablePDA,
+          currentHandNumber,
+          currentPlayerSeat
+        );
       }
 
       setGameState((prev) => ({
@@ -525,7 +585,25 @@ export function usePokerGame(sessionKey?: SessionKeyParam | null): UsePokerGameR
         awaitingCommunityReveal: handState?.awaitingCommunityReveal ?? false,
         // Reset reveal state when not awaiting
         isRevealingCommunity: (handState?.awaitingCommunityReveal ?? false) ? prev.isRevealingCommunity : false,
+        isShuffling: deckState?.isShuffled ? false : prev.isShuffling,
       }));
+
+      if (deckState?.isShuffled) shuffleInProgressRef.current = false;
+      if (!handState?.awaitingCommunityReveal) communityRevealInProgressRef.current = false;
+      const allRevealed =
+        phase !== "Showdown" ||
+        players
+          .filter((p) => p.status === "playing" || p.status === "allin")
+          .every((p) => p.cardsRevealed);
+      if (allRevealed) showdownRevealInProgressRef.current = false;
+      if (
+        currentPlayerSeat !== null &&
+        handState &&
+        (handState.dealtPlayers & (1 << currentPlayerSeat)) !== 0 &&
+        restoredCards
+      ) {
+        dealInProgressRef.current = false;
+      }
 
       setError(null);
     } catch (e) {
@@ -596,6 +674,10 @@ export function usePokerGame(sessionKey?: SessionKeyParam | null): UsePokerGameR
     if (!program || !provider || !publicKey || !gameState.tablePDA || !gameState.table) {
       throw new Error("Table not ready");
     }
+    if (shuffleInProgressRef.current || gameState.isDeckShuffled) {
+      return "";
+    }
+    shuffleInProgressRef.current = true;
 
     setLoading(true);
     setError(null);
@@ -634,6 +716,7 @@ export function usePokerGame(sessionKey?: SessionKeyParam | null): UsePokerGameR
       await refreshState();
       return tx;
     } catch (e) {
+      shuffleInProgressRef.current = false;
       setGameState((prev) => ({ ...prev, isShuffling: false }));
       const message = parseAnchorError(e);
       setError(message);
@@ -641,7 +724,7 @@ export function usePokerGame(sessionKey?: SessionKeyParam | null): UsePokerGameR
     } finally {
       setLoading(false);
     }
-  }, [program, provider, publicKey, gameState.tablePDA, gameState.table, buildQueueAccounts, refreshState]);
+  }, [program, provider, publicKey, gameState.tablePDA, gameState.table, gameState.isDeckShuffled, buildQueueAccounts, refreshState]);
 
   // ============================================================
   // Arcium MPC: deal this player's own hole cards (deal_to_seat) and decrypt
@@ -649,14 +732,46 @@ export function usePokerGame(sessionKey?: SessionKeyParam | null): UsePokerGameR
   // the cards seal to a key only they hold. Once every seated player has dealt
   // in, the program advances the hand to PreFlop.
   // ============================================================
+  const applyDecryptedHoleCards = useCallback(
+    (seatIndex: number, decrypted: [number, number]) => {
+      if (!publicKey || !gameState.tablePDA || !gameState.table) return;
+      saveHoleCards(
+        publicKey,
+        gameState.tablePDA,
+        gameState.table.handNumber.toNumber(),
+        seatIndex,
+        decrypted
+      );
+      dealInProgressRef.current = false;
+      setGameState((prev) => ({
+        ...prev,
+        isDecrypting: false,
+        decryptedCards: decrypted,
+        encryptionHandNumber: gameState.table!.handNumber.toNumber(),
+      }));
+    },
+    [publicKey, gameState.tablePDA, gameState.table]
+  );
+
+  const scanAndDecryptHoleCards = useCallback(async (): Promise<[number, number] | null> => {
+    if (!program || !provider || !publicKey) return null;
+    const { keys, mxePublicKey } = await ensureCrypto();
+    const events = await scanRecentEvents(provider.connection, program, program.programId);
+    const dealt = findHoleDealtForKey(events, keys.publicKey);
+    if (!dealt) return null;
+    return decryptHoleCards(keys.privateKey, mxePublicKey, dealt.card0, dealt.card1, dealt.nonce);
+  }, [program, provider, publicKey, ensureCrypto]);
+
   const dealToOwnSeat = useCallback(async (): Promise<void> => {
     if (!program || !provider || !publicKey || !gameState.tablePDA || !gameState.table || gameState.currentPlayerSeat === null) {
       throw new Error("Not at table");
     }
-
+    if (dealInProgressRef.current) return;
+    dealInProgressRef.current = true;
+    setError(null);
     setGameState((prev) => ({ ...prev, isDecrypting: true }));
     try {
-      const { keys, mxePublicKey } = await ensureCrypto();
+      const { keys } = await ensureCrypto();
 
       const handNumber = BigInt(gameState.table.handNumber.toNumber());
       const [handPDA] = getHandPDA(gameState.tablePDA, handNumber);
@@ -692,39 +807,52 @@ export function usePokerGame(sessionKey?: SessionKeyParam | null): UsePokerGameR
       // awaitFinalization's returned sig is NOT reliably the one carrying the
       // event — scan the recent program txs for it instead (verified on devnet).
       await awaitFinalization(provider, computationOffset, program.programId);
-      await new Promise((r) => setTimeout(r, 2500)); // let the callback tx land
-      const events = await scanRecentEvents(provider.connection, program, program.programId);
-
-      const myPubHex = Buffer.from(keys.publicKey).toString("hex");
-      let decrypted: [number, number] | null = null;
-      for (const ev of events) {
-        if (ev.name !== "holeDealt" && ev.name !== "HoleDealt") continue;
-        const d = ev.data as { encPubkey?: number[]; enc_pubkey?: number[]; nonce: number[]; card0: number[]; card1: number[] };
-        const encPubkey = d.encPubkey ?? d.enc_pubkey ?? [];
-        if (Buffer.from(encPubkey).toString("hex") !== myPubHex) continue;
-        decrypted = await decryptHoleCards(keys.privateKey, mxePublicKey, d.card0, d.card1, d.nonce);
-        break;
-      }
+      await new Promise((r) => setTimeout(r, 2500));
+      const decrypted = await scanAndDecryptHoleCards();
 
       if (!decrypted) {
-        throw new Error("Dealt, but no matching HoleDealt event found to decrypt");
+        setGameState((prev) => ({ ...prev, isDecrypting: false }));
+        dealInProgressRef.current = false;
+        const message =
+          "Dealt, but the HoleDealt event was not found yet. Use Retry decrypt — do not re-queue.";
+        setError(message);
+        throw new Error(message);
       }
 
-      // Persist so a page refresh doesn't lose our only copy of these cards.
-      saveHoleCards(gameState.tablePDA, gameState.table.handNumber.toNumber(), seatIndex, decrypted);
+      applyDecryptedHoleCards(seatIndex, decrypted);
+      await refreshState();
+    } catch (e) {
+      dealInProgressRef.current = false;
+      setGameState((prev) => ({ ...prev, isDecrypting: false }));
+      const message =
+        e instanceof Error && e.message.includes("HoleDealt")
+          ? e.message
+          : parseAnchorError(e);
+      setError(message);
+      throw e;
+    }
+  }, [program, provider, publicKey, gameState.tablePDA, gameState.table, gameState.currentPlayerSeat, ensureCrypto, buildQueueAccounts, refreshState, scanAndDecryptHoleCards, applyDecryptedHoleCards]);
 
-      setGameState((prev) => ({
-        ...prev,
-        isDecrypting: false,
-        decryptedCards: decrypted,
-        encryptionHandNumber: gameState.table!.handNumber.toNumber(),
-      }));
+  const retryDecrypt = useCallback(async (): Promise<void> => {
+    if (!publicKey || gameState.currentPlayerSeat === null) {
+      throw new Error("Not at table");
+    }
+    setError(null);
+    setGameState((prev) => ({ ...prev, isDecrypting: true }));
+    try {
+      const decrypted = await scanAndDecryptHoleCards();
+      if (!decrypted) {
+        const message = "Still no matching HoleDealt event. Wait a few seconds and retry decrypt.";
+        setError(message);
+        throw new Error(message);
+      }
+      applyDecryptedHoleCards(gameState.currentPlayerSeat, decrypted);
       await refreshState();
     } catch (e) {
       setGameState((prev) => ({ ...prev, isDecrypting: false }));
       throw e;
     }
-  }, [program, provider, publicKey, gameState.tablePDA, gameState.table, gameState.currentPlayerSeat, ensureCrypto, buildQueueAccounts, refreshState]);
+  }, [publicKey, gameState.currentPlayerSeat, scanAndDecryptHoleCards, applyDecryptedHoleCards, refreshState]);
 
   // Create a new table
   const createTable = useCallback(
@@ -1048,12 +1176,11 @@ export function usePokerGame(sessionKey?: SessionKeyParam | null): UsePokerGameR
       await refreshState();
       return tx;
     } catch (e) {
+      showdownRevealInProgressRef.current = false;
       const message = parseAnchorError(e);
       setError(message);
       setGameState((prev) => ({ ...prev, isRevealing: false }));
       throw e;
-    } finally {
-      showdownRevealInProgressRef.current = false;
     }
   }, [program, provider, publicKey, gameState.tablePDA, gameState.table, gameState.phase, buildQueueAccounts, refreshState]);
 
@@ -1138,7 +1265,6 @@ export function usePokerGame(sessionKey?: SessionKeyParam | null): UsePokerGameR
 
       setGameState((prev) => ({ ...prev, isRevealingCommunity: false, awaitingCommunityReveal: false }));
       await refreshState();
-      setTimeout(() => { communityRevealInProgressRef.current = false; }, 1000);
       return tx;
     } catch (e) {
       communityRevealInProgressRef.current = false;
@@ -1627,6 +1753,7 @@ export function usePokerGame(sessionKey?: SessionKeyParam | null): UsePokerGameR
     leaveTable,
     startHand,
     shuffleDeck,
+    retryDecrypt,
     dealMeIn,
     revealHands,
     playerAction,

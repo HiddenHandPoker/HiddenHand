@@ -90,6 +90,7 @@ export default function TablePage({ params }: { params: Promise<{ tableId: strin
     startHand,
     shuffleDeck,
     dealMeIn,
+    retryDecrypt,
     revealHands,
     playerAction,
     showdown,
@@ -453,7 +454,8 @@ export default function TablePage({ params }: { params: Promise<{ tableId: strin
     gameState.phase !== "Showdown" &&
     gameState.phase !== "Settled" &&
     !allPlayersAllIn &&
-    !gameState.awaitingCommunityReveal; // Block actions while revealing community cards
+    !gameState.awaitingCommunityReveal &&
+    gameState.decryptedCards[0] !== null; // Don't act until hole cards are on screen
 
   // Calculate action panel values (never negative)
   const toCall = Math.max(0, gameState.currentBet - (currentPlayer?.currentBet ?? 0));
@@ -1317,7 +1319,7 @@ export default function TablePage({ params }: { params: Promise<{ tableId: strin
                         console.error("Deal-in failed:", e);
                       }
                     }}
-                    disabled={loading}
+                    disabled={loading || gameState.isDecrypting}
                     className="btn-info px-6 py-3 rounded-xl font-semibold disabled:opacity-50 flex items-center gap-2 mx-auto"
                   >
                     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1331,10 +1333,47 @@ export default function TablePage({ params }: { params: Promise<{ tableId: strin
             </div>
           )}
 
+          {/* Dealt on-chain but HoleDealt never landed in this client. Retry
+              decrypt only — re-queue is rejected with AlreadyDealt. */}
+          {currentPlayer && gameState.currentPlayerSeat !== null && gameState.handState &&
+           gameState.isDeckShuffled && gameState.decryptedCards[0] === null &&
+           gameState.tableStatus === "Playing" &&
+           (gameState.handState.dealtPlayers & (1 << (gameState.currentPlayerSeat ?? 0))) !== 0 && (
+            <div className="max-w-md mx-auto glass border border-orange-500/30 rounded-2xl p-5 text-center">
+              <p className="text-orange-300 font-semibold mb-2">Hole cards not on this device yet</p>
+              <p className="text-[var(--text-muted)] text-sm mb-4">
+                You are dealt in on-chain, but this tab never saw the decrypt event.
+                Retry decrypt — do not try to deal again.
+              </p>
+              {gameState.isDecrypting ? (
+                <div className="text-cyan-400 text-sm flex items-center justify-center gap-2">
+                  <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                  Scanning for your sealed cards…
+                </div>
+              ) : (
+                <button
+                  onClick={async () => {
+                    try {
+                      await retryDecrypt();
+                      addGameEvent("privacy", "Decrypted hole cards");
+                    } catch (e) {
+                      console.error("Retry decrypt failed:", e);
+                    }
+                  }}
+                  disabled={loading}
+                  className="btn-info px-6 py-3 rounded-xl font-semibold disabled:opacity-50"
+                >
+                  Retry decrypt
+                </button>
+              )}
+            </div>
+          )}
+
           {/* Waiting on other players to deal themselves in. Shown once I've
               dealt in but the hand can't advance until everyone has. */}
           {gameState.phase === "Dealing" && gameState.isDeckShuffled && gameState.handState &&
            gameState.currentPlayerSeat !== null &&
+           gameState.decryptedCards[0] !== null &&
            (gameState.handState.dealtPlayers & (1 << (gameState.currentPlayerSeat ?? 0))) !== 0 &&
            gameState.handState.dealtPlayers !== gameState.handState.activePlayers && (() => {
             const active = gameState.handState.activePlayers;
