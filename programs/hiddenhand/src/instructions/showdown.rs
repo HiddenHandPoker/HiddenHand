@@ -68,7 +68,7 @@ fn calculate_side_pots(all_bets: &[(u8, u64, bool)]) -> Vec<SidePot> {
     let mut sorted: Vec<(u8, u64, bool)> = all_bets.to_vec();
     sorted.sort_by_key(|b| b.1); // sort by bet amount ascending
 
-    let mut side_pots = Vec::new();
+    let mut side_pots: Vec<SidePot> = Vec::new();
     let mut prev_level = 0u64;
 
     for i in 0..sorted.len() {
@@ -91,10 +91,18 @@ fn calculate_side_pots(all_bets: &[(u8, u64, bool)]) -> Vec<SidePot> {
             .collect();
 
         if pot_amount > 0 {
-            side_pots.push(SidePot {
-                amount: pot_amount,
-                eligible,
-            });
+            if eligible.is_empty() {
+                // Folded unmatched excess is dead money — fold it into the
+                // previous pot rather than burning it when the pot is zeroed.
+                if let Some(prev) = side_pots.last_mut() {
+                    prev.amount = prev.amount.saturating_add(pot_amount);
+                }
+            } else {
+                side_pots.push(SidePot {
+                    amount: pot_amount,
+                    eligible,
+                });
+            }
         }
 
         prev_level = bet;
@@ -670,5 +678,18 @@ mod tests {
         // Level 300: 200 * 1 = 200
         assert_eq!(pots[1].amount, 200);
         assert_eq!(pots[1].eligible, vec![2]);
+    }
+
+    #[test]
+    fn folded_unmatched_excess_is_dead_money_not_burned() {
+        // A overbet then folded; B is the only remaining player at a lower stack.
+        let bets = vec![(0u8, 300u64, false), (1, 100, true)];
+        let pots = calculate_side_pots(&bets);
+
+        assert_eq!(pots.len(), 1);
+        assert_eq!(pots[0].amount, 400);
+        assert_eq!(pots[0].eligible, vec![1]);
+        let total: u64 = pots.iter().map(|p| p.amount).sum();
+        assert_eq!(total, 400);
     }
 }

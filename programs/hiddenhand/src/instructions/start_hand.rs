@@ -2,7 +2,7 @@ use anchor_lang::prelude::*;
 
 use crate::constants::*;
 use crate::error::HiddenHandError;
-use crate::state::{DeckState, GamePhase, HandState, Table, TableStatus};
+use crate::state::{DeckState, GamePhase, HandState, PlayerSeat, Table, TableStatus};
 
 #[derive(Accounts)]
 pub struct StartHand<'info> {
@@ -36,6 +36,8 @@ pub struct StartHand<'info> {
     pub deck_state: Account<'info, DeckState>,
 
     pub system_program: Program<'info, System>,
+    // remaining_accounts: every occupied PlayerSeat (readonly). Used to sit out
+    // 0-chip seats so busted players are not dealt free hands.
 }
 
 /// Start a new hand
@@ -59,15 +61,49 @@ pub fn handler(ctx: Context<StartHand>) -> Result<()> {
         );
     }
 
-    // Validate enough players
-    require!(
-        table.current_players >= MIN_PLAYERS,
-        HiddenHandError::NotEnoughPlayers
-    );
-
     require!(
         table.status == TableStatus::Waiting,
         HiddenHandError::HandAlreadyInProgress
+    );
+
+    // Occupied seats must be passed so 0-chip players can be sat out of this hand.
+    let program_id = crate::ID;
+    let table_key = table.key();
+    let mut present: u8 = 0;
+    let mut with_chips: u8 = 0;
+    let mut with_chips_count: u8 = 0;
+    for account_info in ctx.remaining_accounts.iter() {
+        require!(
+            account_info.owner == &program_id,
+            HiddenHandError::InvalidRemainingAccounts
+        );
+        let data = account_info.try_borrow_data()?;
+        let seat = PlayerSeat::try_deserialize(&mut &data[..])
+            .map_err(|_| HiddenHandError::InvalidRemainingAccounts)?;
+        require!(seat.table == table_key, HiddenHandError::PlayerNotAtTable);
+        let (expected_pda, _) = Pubkey::find_program_address(
+            &[SEAT_SEED, table_key.as_ref(), &[seat.seat_index]],
+            &program_id,
+        );
+        require!(
+            *account_info.key == expected_pda,
+            HiddenHandError::InvalidRemainingAccounts
+        );
+        let bit = 1u8 << seat.seat_index;
+        require!(present & bit == 0, HiddenHandError::DuplicateAccount);
+        present |= bit;
+        if seat.chips > 0 {
+            with_chips |= bit;
+            with_chips_count = with_chips_count.saturating_add(1);
+        }
+    }
+    require!(
+        present == table.occupied_seats,
+        HiddenHandError::IncompletePlayerAccounts
+    );
+    require!(
+        with_chips_count >= MIN_PLAYERS,
+        HiddenHandError::NotEnoughPlayers
     );
 
     // Increment hand number
@@ -126,9 +162,9 @@ pub fn handler(ctx: Context<StartHand>) -> Result<()> {
     hand_state.action_on = action_pos;
     hand_state.community_cards = vec![255, 255, 255, 255, 255]; // 255 = not revealed
     hand_state.community_revealed = 0;
-    hand_state.active_players = table.occupied_seats;
+    hand_state.active_players = with_chips;
     hand_state.acted_this_round = 0;
-    hand_state.active_count = table.current_players;
+    hand_state.active_count = with_chips_count;
     hand_state.all_in_players = 0; // No one is all-in at start
     hand_state.last_action_time = clock.unix_timestamp;
     hand_state.hand_start_time = clock.unix_timestamp;

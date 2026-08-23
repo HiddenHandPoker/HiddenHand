@@ -67,8 +67,19 @@ mod circuits {
         seat_index: u8,
     ) -> Enc<Shared, HoleCards> {
         let deck = deck_ctxt.to_arcis().unpack();
-        let i = seat_index as usize;
-        seat.from_arcis(HoleCards { card0: deck[2 * i], card1: deck[2 * i + 1] })
+        // Public mux over the 9 hole slots so a bad seat_index cannot alias the
+        // board (2*9 = 18 is the flop) or abort on OOB. Out-of-range seats get
+        // the HIDDEN sentinel, which the client already treats as "not a card".
+        let mut card0 = HIDDEN;
+        let mut card1 = HIDDEN;
+        for s in 0..9 {
+            let is_seat = seat_index == s as u8;
+            if is_seat {
+                card0 = deck[2 * s];
+                card1 = deck[2 * s + 1];
+            }
+        }
+        seat.from_arcis(HoleCards { card0, card1 })
     }
 
     /// Circuit 2 — reveal the flop (deck[18..21]) from the persisted deck.

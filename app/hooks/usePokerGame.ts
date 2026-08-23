@@ -1100,6 +1100,16 @@ export function usePokerGame(sessionKey?: SessionKeyParam | null): UsePokerGameR
       const [handPDA] = getHandPDA(gameState.tablePDA, handNumber);
       const [deckPDA] = getDeckPDA(gameState.tablePDA, handNumber);
 
+      const occupied = getOccupiedSeats(
+        gameState.table.occupiedSeats,
+        gameState.table.maxPlayers
+      );
+      const seatMetas = occupied.map((idx) => ({
+        pubkey: getSeatPDA(gameState.tablePDA!, idx)[0],
+        isSigner: false,
+        isWritable: false,
+      }));
+
       const tx = await program.methods
         .startHand()
         .accounts({
@@ -1109,6 +1119,7 @@ export function usePokerGame(sessionKey?: SessionKeyParam | null): UsePokerGameR
           deckState: deckPDA,
           systemProgram: SystemProgram.programId,
         })
+        .remainingAccounts(seatMetas)
         .rpc();
 
       await provider.connection.confirmTransaction(tx, "confirmed");

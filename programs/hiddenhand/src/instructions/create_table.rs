@@ -69,6 +69,18 @@ pub fn handler(
 
     require!(rake_bps <= MAX_RAKE_BPS, HiddenHandError::RakeExceedsLimit);
 
+    // Freeze authority can lock the vault mid-hand. Transfer-fee / transfer-hook
+    // Token-2022 mints credit chips while the vault receives less. Stick to a
+    // vanilla mint (no freeze) on the classic Token program.
+    require!(
+        ctx.accounts.mint.freeze_authority.is_none(),
+        HiddenHandError::InvalidTokenMint
+    );
+    require!(
+        ctx.accounts.token_program.key() == anchor_spl::token::ID,
+        HiddenHandError::InvalidTokenMint
+    );
+
     let table = &mut ctx.accounts.table;
     let clock = Clock::get()?;
     let mint = &ctx.accounts.mint;

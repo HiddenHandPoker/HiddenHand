@@ -205,7 +205,7 @@ pub struct RevealFlopCallback<'info> {
     /// CHECK: instructions_sysvar, checked by the account constraint.
     pub instructions_sysvar: UncheckedAccount<'info>,
     pub table: Account<'info, Table>,
-    #[account(mut)]
+    #[account(mut, constraint = hand_state.table == table.key() @ HiddenHandError::InvalidPhase)]
     pub hand_state: Account<'info, HandState>,
 }
 
