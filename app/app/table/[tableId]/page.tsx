@@ -255,6 +255,8 @@ export default function TablePage({ params }: { params: Promise<{ tableId: strin
     }
   }, []);
 
+  const autoJoinLock = useRef(false);
+
   // Auto-set buy-in to table minimum when table loads
   useEffect(() => {
     if (gameState.table) {
@@ -595,12 +597,15 @@ export default function TablePage({ params }: { params: Promise<{ tableId: strin
     }
   };
 
-  // Handle join table
-  const handleJoinTable = async () => {
-    if (selectedSeat === null) return;
+  // Handle join table. Optional overrides are used by Quick Play auto-join so
+  // we don't race the prefill state.
+  const handleJoinTable = async (opts?: { seat?: number; buyIn?: number }) => {
+    const seat = opts?.seat ?? selectedSeat;
+    const buy = opts?.buyIn ?? buyInSol;
+    if (seat === null || seat === undefined) return;
 
     // Check deposit limits
-    const buyInBase = displayToBaseUnits(buyInSol, tableToken);
+    const buyInBase = displayToBaseUnits(buy, tableToken);
     const { allowed, reason } = checkDepositAllowed(buyInBase);
     if (!allowed) {
       setDepositLimitMsg(reason ?? "Deposit limit exceeded.");
@@ -610,8 +615,8 @@ export default function TablePage({ params }: { params: Promise<{ tableId: strin
 
     try {
       await withToast(
-        () => joinTable(selectedSeat, buyInBase),
-        `Joining table with ${buyInSol} ${tableToken.symbol}...`,
+        () => joinTable(seat, buyInBase),
+        `Joining table with ${buy} ${tableToken.symbol}...`,
         "Joined table"
       );
       recordDeposit(buyInBase);
@@ -620,6 +625,55 @@ export default function TablePage({ params }: { params: Promise<{ tableId: strin
       console.error("Join failed:", e);
     }
   };
+
+  // Quick Play lands with ?buyIn=&seat=&auto=1 after the user already confirmed
+  // in the lobby modal. Sit automatically once the table, wallet, and balance
+  // are ready. Click-to-sit does not set auto=1 — it only prefills the seat.
+  useEffect(() => {
+    if (autoJoinLock.current) return;
+    if (typeof window === "undefined") return;
+    if (!connected || !publicKey) return;
+    if (!gameState.table || gameState.tableStatus !== "Waiting") return;
+    if (currentPlayer) return;
+    if (loading) return;
+    if (usdcBalance === null) return;
+
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("auto") !== "1") return;
+
+    const seat = Number(params.get("seat"));
+    const buy = Number(params.get("buyIn"));
+    if (!Number.isInteger(seat) || seat < 0) return;
+    if (!Number.isFinite(buy) || buy <= 0) return;
+
+    if (seat >= gameState.table.maxPlayers) return;
+    if ((Number(gameState.table.occupiedSeats) & (1 << seat)) !== 0) return;
+
+    const minBuy = baseUnitsToDisplay(gameState.table.minBuyIn.toNumber(), tableToken);
+    const maxBuy = baseUnitsToDisplay(gameState.table.maxBuyIn.toNumber(), tableToken);
+    if (buy < minBuy || buy > maxBuy) return;
+
+    const buyInBase = displayToBaseUnits(buy, tableToken);
+    if (usdcBalance < buyInBase) return;
+    if (!checkDepositAllowed(buyInBase).allowed) return;
+
+    autoJoinLock.current = true;
+    const url = new URL(window.location.href);
+    url.searchParams.delete("auto");
+    window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
+    void handleJoinTable({ seat, buyIn: buy });
+  }, [
+    connected,
+    publicKey,
+    gameState.table,
+    gameState.tableStatus,
+    gameState.players,
+    currentPlayer,
+    loading,
+    usdcBalance,
+    tableToken,
+    checkDepositAllowed,
+  ]);
 
   // Map game state players to component format
   // Map game state players to component format (memoized to avoid recalculating every render)
@@ -936,7 +990,7 @@ export default function TablePage({ params }: { params: Promise<{ tableId: strin
                         <span className="text-[var(--text-muted)] text-sm">{tableToken.symbol}</span>
                       </div>
                       <button
-                        onClick={handleJoinTable}
+                        onClick={() => void handleJoinTable()}
                         disabled={loading || selectedSeat === null || buyInSol < baseUnitsToDisplay(gameState.table.minBuyIn.toNumber(), tableToken) || buyInSol > baseUnitsToDisplay(gameState.table.maxBuyIn.toNumber(), tableToken)}
                         className="btn-info px-5 py-2.5 rounded-xl text-sm font-semibold disabled:opacity-50"
                       >

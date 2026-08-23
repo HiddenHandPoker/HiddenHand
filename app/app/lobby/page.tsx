@@ -156,6 +156,7 @@ export default function LobbyPage() {
       const q = new URLSearchParams({
         buyIn: String(displayBuyIn),
         seat: String(seat),
+        auto: "1",
       });
       router.push(`/table/${encodeURIComponent(table.tableId)}?${q.toString()}`);
     },
