@@ -549,6 +549,17 @@ export type Hiddenhand = {
         {
           "name": "instructionsSysvar",
           "address": "Sysvar1nstructions1111111111111111111111111"
+        },
+        {
+          "name": "table"
+        },
+        {
+          "name": "handState",
+          "writable": true
+        },
+        {
+          "name": "playerSeat",
+          "writable": true
         }
       ],
       "args": [
@@ -2415,6 +2426,13 @@ export type Hiddenhand = {
         {
           "name": "deckState",
           "writable": true
+        },
+        {
+          "name": "handState",
+          "docs": [
+            "Bound to this deck's hand so a callback cannot bump another table's clock."
+          ],
+          "writable": true
         }
       ],
       "args": [
@@ -2503,10 +2521,11 @@ export type Hiddenhand = {
     {
       "name": "timeoutDeal",
       "docs": [
-        "Abort a hand stuck in the Dealing phase because a seated player never ran",
-        "deal_to_seat (AFK). Callable by anyone after DEAL_TIMEOUT_SECONDS; refunds",
-        "posted blinds, resets seats, and returns the table to Waiting.",
-        "Remaining accounts: all occupied player seat accounts."
+        "Abort a hand stuck in the Dealing phase — shuffle never committed, or a",
+        "seated player never ran deal_to_seat (AFK). Callable by anyone after",
+        "DEAL_TIMEOUT_SECONDS; refunds posted blinds, resets seats, and returns",
+        "the table to Waiting. Remaining accounts: all occupied player seat",
+        "accounts (empty is valid when the pot is still 0)."
       ],
       "discriminator": [
         100,
@@ -3971,7 +3990,8 @@ export type Hiddenhand = {
           {
             "name": "reason",
             "docs": [
-              "0 = deal stall (a seat never dealt in), 1 = reveal stall (MPC reveal never completed)"
+              "0 = dealing stall (shuffle never landed, or a seat never dealt in);",
+              "1 = reveal stall (MPC reveal never completed)"
             ],
             "type": "u8"
           },
@@ -4298,16 +4318,18 @@ export type Hiddenhand = {
           {
             "name": "dealtPlayers",
             "docs": [
-              "Bitmap of players whose hole cards have been dealt this hand.",
-              "Set per seat by the `deal_to_seat` callback; when it equals `active_players`,",
-              "dealing is complete and the phase advances to PreFlop."
+              "Bitmap of players whose hole cards have been committed this hand.",
+              "Set in the `deal_to_seat` **callback** after MPC succeeds."
             ],
             "type": "u8"
           },
           {
             "name": "dealQueued",
             "docs": [
-              "Bitmap of seats that have queued deal_to_seat this hand."
+              "Bitmap of seats that have queued `deal_to_seat` this hand. Set at queue",
+              "time so a seat cannot double-queue; `dealt_players` follows in the",
+              "callback. A queued-but-not-dealt seat can still be refunded via",
+              "`timeout_deal` because the phase stays Dealing until every callback lands."
             ],
             "type": "u8"
           },
@@ -4382,7 +4404,7 @@ export type Hiddenhand = {
           {
             "name": "tableId",
             "docs": [
-              "Table this deal belongs to."
+              "Table this deal belongs to (clients must not attach a foreign HoleDealt)."
             ],
             "type": {
               "array": [
