@@ -17,7 +17,7 @@ import { QuickPlayModal } from "@/components/lobby/QuickPlayModal";
 import { generateTableId, getTablePDA, getVaultPDA } from "@/lib/program";
 import { SystemProgram } from "@solana/web3.js";
 import { BN } from "@anchor-lang/core";
-import { getDefaultToken, baseUnitsToDisplay, TOKEN_PROGRAM_ID } from "@/lib/tokens";
+import { getDefaultToken, getTokenByMint, baseUnitsToDisplay, TOKEN_PROGRAM_ID } from "@/lib/tokens";
 import { getRakeForBlinds } from "@/lib/rake";
 import { usePlayerStats } from "@/hooks/usePlayerStats";
 import { useResponsibleGaming } from "@/hooks/useResponsibleGaming";
@@ -144,7 +144,20 @@ export default function LobbyPage() {
   // Quick Play: join existing table
   const handleQuickJoin = useCallback(
     (table: LobbyTable, buyIn: number) => {
-      router.push(`/table/${encodeURIComponent(table.tableId)}`);
+      const token = getTokenByMint(table.tokenMint) ?? getDefaultToken();
+      const displayBuyIn = baseUnitsToDisplay(buyIn, token);
+      let seat = 0;
+      for (let i = 0; i < table.maxPlayers; i++) {
+        if ((table.occupiedSeats & (1 << i)) === 0) {
+          seat = i;
+          break;
+        }
+      }
+      const q = new URLSearchParams({
+        buyIn: String(displayBuyIn),
+        seat: String(seat),
+      });
+      router.push(`/table/${encodeURIComponent(table.tableId)}?${q.toString()}`);
     },
     [router]
   );

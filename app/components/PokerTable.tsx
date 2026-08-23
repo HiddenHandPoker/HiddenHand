@@ -44,6 +44,7 @@ interface PokerTableProps {
   token?: TokenInfo;
   // Player stats for HUD tooltips
   playerStatsMap?: Map<string, PlayerStats>;
+  onEmptySeatClick?: (seatIndex: number) => void;
 }
 
 // Seat positions around the table (for 6-max)
@@ -87,6 +88,7 @@ export const PokerTable: FC<PokerTableProps> = ({
   winAmount,
   token = getDefaultToken(),
   playerStatsMap,
+  onEmptySeatClick,
 }) => {
   const isMobile = useIsMobileLandscape();
   const SEAT_POSITIONS = isMobile ? SEAT_POSITIONS_MOBILE : SEAT_POSITIONS_DESKTOP;
@@ -356,6 +358,11 @@ export const PokerTable: FC<PokerTableProps> = ({
               token={token}
               playerStats={player?.player && playerStatsMap ? playerStatsMap.get(player.player) : undefined}
               compact={isMobile}
+              onSit={
+                (!player || player.status === "empty") && onEmptySeatClick
+                  ? () => onEmptySeatClick(idx)
+                  : undefined
+              }
             />
           </div>
         );

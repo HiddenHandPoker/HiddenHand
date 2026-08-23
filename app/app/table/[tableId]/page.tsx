@@ -239,10 +239,31 @@ export default function TablePage({ params }: { params: Promise<{ tableId: strin
   const { betTrigger, winTrigger, triggerBetAnimation, triggerWinAnimation } = useChipAnimations();
   const prevBetsRef = useRef<Map<number, number>>(new Map());
 
+  // Prefill from Quick Play / click-to-sit query params.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    const buy = params.get("buyIn");
+    const seat = params.get("seat");
+    if (buy) {
+      const n = Number(buy);
+      if (Number.isFinite(n) && n > 0) setBuyInSol(n);
+    }
+    if (seat !== null && seat !== "") {
+      const n = Number(seat);
+      if (Number.isInteger(n) && n >= 0) setSelectedSeat(n);
+    }
+  }, []);
+
   // Auto-set buy-in to table minimum when table loads
   useEffect(() => {
     if (gameState.table) {
       const minBuyIn = baseUnitsToDisplay(gameState.table.minBuyIn.toNumber(), tableToken);
+      const params =
+        typeof window !== "undefined"
+          ? new URLSearchParams(window.location.search)
+          : null;
+      if (params?.get("buyIn")) return;
       // Set to min buy-in if current value is below minimum
       if (buyInSol < minBuyIn) {
         setBuyInSol(minBuyIn);
@@ -883,7 +904,7 @@ export default function TablePage({ params }: { params: Promise<{ tableId: strin
 
                   {/* Join if not at table */}
                   {!currentPlayer && gameState.tableStatus === "Waiting" && (
-                    <div className="flex items-center gap-3 flex-wrap">
+                    <div id="join-panel" className="flex items-center gap-3 flex-wrap">
                       <select
                         value={selectedSeat ?? ""}
                         onChange={(e) =>
@@ -1315,6 +1336,17 @@ export default function TablePage({ params }: { params: Promise<{ tableId: strin
               winAmount={celebrationWinAmount}
               token={tableToken}
               playerStatsMap={playerStatsMap}
+              onEmptySeatClick={
+                connected && !currentPlayer && gameState.tableStatus === "Waiting"
+                  ? (seat) => {
+                      setSelectedSeat(seat);
+                      document.getElementById("join-panel")?.scrollIntoView({
+                        behavior: "smooth",
+                        block: "center",
+                      });
+                    }
+                  : undefined
+              }
             />
           )}
 

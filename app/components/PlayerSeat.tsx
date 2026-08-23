@@ -26,6 +26,8 @@ interface PlayerSeatProps {
   token?: TokenInfo;
   playerStats?: PlayerStats | null; // On-chain stats for HUD tooltip
   compact?: boolean; // Mobile compact mode
+  /** Empty seats: sit here (Waiting tables). */
+  onSit?: () => void;
 }
 
 export const PlayerSeat: FC<PlayerSeatProps> = ({
@@ -47,6 +49,7 @@ export const PlayerSeat: FC<PlayerSeatProps> = ({
   token = getDefaultToken(),
   playerStats,
   compact = false,
+  onSit,
 }) => {
   const [showHUD, setShowHUD] = useState(false);
   const [showNotes, setShowNotes] = useState(false);
@@ -157,7 +160,21 @@ export const PlayerSeat: FC<PlayerSeatProps> = ({
         ${isTurn ? "animate-turn" : ""}
         ${isFolded ? "opacity-40" : ""}
         ${isCurrentPlayer && !isEmpty ? "ring-2 ring-[var(--felt-highlight)] ring-opacity-60" : ""}
+        ${isEmpty && onSit ? "cursor-pointer touch-target" : ""}
       `}
+      role={isEmpty && onSit ? "button" : undefined}
+      tabIndex={isEmpty && onSit ? 0 : undefined}
+      onClick={isEmpty && onSit ? onSit : undefined}
+      onKeyDown={
+        isEmpty && onSit
+          ? (e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                onSit();
+              }
+            }
+          : undefined
+      }
       onMouseEnter={() => !isEmpty && !isCurrentPlayer && player && setShowHUD(true)}
       onMouseLeave={() => setShowHUD(false)}
       onContextMenu={handleContextMenu}
@@ -277,7 +294,9 @@ export const PlayerSeat: FC<PlayerSeatProps> = ({
               />
             </svg>
           </div>
-          <p className={`text-[var(--text-secondary)] ${compact ? "text-[7px]" : "text-[10px]"} uppercase tracking-wider`}>Empty</p>
+          <p className={`text-[var(--text-secondary)] ${compact ? "text-[7px]" : "text-[10px]"} uppercase tracking-wider`}>
+            {onSit ? "Sit" : "Empty"}
+          </p>
         </div>
       ) : (
         <div className={`flex flex-col items-center ${compact ? "gap-1" : "gap-2"}`}>
