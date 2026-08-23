@@ -25,7 +25,7 @@ import { BN, type AnchorProvider, type Program, type Idl } from "@anchor-lang/co
  * Arcium cluster offset. Devnet = 456 (from Arcium.toml `[clusters.devnet]`).
  * Mainnet would be a different offset; keep in sync with deployment.
  */
-export const CLUSTER_OFFSET = 456;
+export const CLUSTER_OFFSET = 456; // Arcium.toml [clusters.devnet]; mainnet is 2026
 
 // ============================================================
 // Card decoding (pure — no SDK, safe to import anywhere)

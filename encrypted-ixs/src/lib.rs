@@ -3,7 +3,7 @@ use arcis::*;
 /// HiddenHand — full Texas Hold'em card lifecycle as Arcium MPC circuits.
 ///
 /// DESIGN: the shuffled 52-card deck is the single source of truth. It is shuffled
-/// once in-MPC (`shuffle_and_deal`), sealed to the MXE (`Enc<Mxe, Deck>`), stored
+/// once in-MPC (`shuffle`), sealed to the MXE (`Enc<Mxe, Deck>`), stored
 /// on-chain as opaque ciphertext, and re-fed into every later circuit. No party —
 /// not even a chain observer — can read the deck. Card *positions* consumed are
 /// public; card *values* never are. This closes the deck-reconstruction hole that
@@ -18,9 +18,8 @@ use arcis::*;
 ///    nothing to fairness since the deck is already uniformly shuffled. Trivial to
 ///    add as index offsets later if we want visual parity with live poker.)
 ///
-/// We always deal 9 hole slots even if fewer seats are occupied; empty seats get a
-/// throwaway client key and their sealed cards are ignored by the program. This keeps
-/// the community indices constant regardless of table size.
+/// Hole slots 0..8 are reserved so community indices stay at 18–22 regardless of
+/// table size. Empty seats are not dealt; their slots stay in the MXE deck.
 #[encrypted]
 mod circuits {
     use arcis::*;

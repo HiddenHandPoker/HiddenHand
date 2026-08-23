@@ -38,3 +38,9 @@ jobs:
 
       - name: unit tests
         run: cargo test -p hiddenhand
+
+      # Circuit compile (`arcium build`) is not in this job: it needs the Arcium
+      # CLI + Docker ARX image. Pin arcium-hq/setup-arcium@v0.13.2 in a follow-up
+      # once the crate pin moves off 0.11.1. After any circuit edit you must
+      # `arcium build` locally and re-push the exact .arcis to
+      # github.com/criptocbas/hiddenhand-arcium-circuit.
