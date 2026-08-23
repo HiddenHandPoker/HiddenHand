@@ -78,10 +78,15 @@ pub struct HandState {
     /// Set to true when betting round completes and phase needs to advance
     pub awaiting_community_reveal: bool,
 
-    /// Bitmap of players whose hole cards have been dealt this hand.
-    /// Set per seat by `deal_to_seat`; when it equals `active_players`,
-    /// dealing is complete and the phase advances to PreFlop.
+    /// Bitmap of players whose hole cards have been committed this hand.
+    /// Set in the `deal_to_seat` **callback** after MPC succeeds.
     pub dealt_players: u8,
+
+    /// Bitmap of seats that have queued `deal_to_seat` this hand. Set at queue
+    /// time so a seat cannot double-queue; `dealt_players` follows in the
+    /// callback. A queued-but-not-dealt seat can still be refunded via
+    /// `timeout_deal` because the phase stays Dealing until every callback lands.
+    pub deal_queued: u8,
 
     /// PDA bump
     pub bump: u8,
@@ -107,6 +112,7 @@ impl HandState {
         8 +  // hand_start_time (i64)
         1 +  // awaiting_community_reveal
         1 +  // dealt_players
+        1 +  // deal_queued
         1; // bump
 
     /// Check if player is still active in hand

@@ -134,6 +134,7 @@ pub fn handler(ctx: Context<StartHand>) -> Result<()> {
     hand_state.hand_start_time = clock.unix_timestamp;
     hand_state.awaiting_community_reveal = false;
     hand_state.dealt_players = 0;
+    hand_state.deal_queued = 0;
     hand_state.bump = ctx.bumps.hand_state;
 
     // Initialize deck state.

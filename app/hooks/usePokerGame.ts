@@ -85,7 +85,8 @@ export interface HandStateAccount {
   lastActionTime: BN;  // Unix timestamp (seconds)
   handStartTime: BN;   // Unix timestamp (seconds)
   awaitingCommunityReveal: boolean; // Whether waiting for community card reveal
-  dealtPlayers: number; // Bitmap of seats that have run deal_to_seat this hand
+  dealtPlayers: number; // Bitmap of seats whose deal callback has committed
+  dealQueued: number; // Bitmap of seats that have queued deal_to_seat
   bump: number;
 }
 
@@ -757,10 +758,16 @@ export function usePokerGame(sessionKey?: SessionKeyParam | null): UsePokerGameR
     if (!program || !provider || !publicKey) return null;
     const { keys, mxePublicKey } = await ensureCrypto();
     const events = await scanRecentEvents(provider.connection, program, program.programId);
-    const dealt = findHoleDealtForKey(events, keys.publicKey);
+    const tableId = gameState.table
+      ? Uint8Array.from(gameState.table.tableId)
+      : undefined;
+    const dealt = findHoleDealtForKey(events, keys.publicKey, {
+      tableId,
+      seatIndex: gameState.currentPlayerSeat ?? undefined,
+    });
     if (!dealt) return null;
     return decryptHoleCards(keys.privateKey, mxePublicKey, dealt.card0, dealt.card1, dealt.nonce);
-  }, [program, provider, publicKey, ensureCrypto]);
+  }, [program, provider, publicKey, ensureCrypto, gameState.table, gameState.currentPlayerSeat]);
 
   const dealToOwnSeat = useCallback(async (): Promise<void> => {
     if (!program || !provider || !publicKey || !gameState.tablePDA || !gameState.table || gameState.currentPlayerSeat === null) {

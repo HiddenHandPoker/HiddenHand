@@ -374,7 +374,8 @@ export interface HoleDealtFields {
 /** Pull a HoleDealt payload addressed to `encPubkey` out of decoded events. */
 export function findHoleDealtForKey(
   events: DecodedEvent[],
-  encPubkey: Uint8Array
+  encPubkey: Uint8Array,
+  match?: { tableId?: Uint8Array; handNumber?: number; seatIndex?: number }
 ): HoleDealtFields | null {
   const myPubHex = Buffer.from(encPubkey).toString("hex");
   for (const ev of events) {
@@ -385,9 +386,25 @@ export function findHoleDealtForKey(
       nonce: number[];
       card0: number[];
       card1: number[];
+      tableId?: number[];
+      table_id?: number[];
+      handNumber?: { toNumber?: () => number } | number;
+      hand_number?: { toNumber?: () => number } | number;
+      seatIndex?: number;
+      seat_index?: number;
     };
     const pub = d.encPubkey ?? d.enc_pubkey ?? [];
     if (Buffer.from(pub).toString("hex") !== myPubHex) continue;
+    if (match?.tableId) {
+      const tid = d.tableId ?? d.table_id;
+      if (tid && Buffer.from(tid).toString("hex") !== Buffer.from(match.tableId).toString("hex")) {
+        continue;
+      }
+    }
+    if (match?.seatIndex !== undefined) {
+      const seat = d.seatIndex ?? d.seat_index;
+      if (seat !== undefined && seat !== match.seatIndex) continue;
+    }
     return { encPubkey: pub, nonce: d.nonce, card0: d.card0, card1: d.card1 };
   }
   return null;

@@ -6,14 +6,13 @@
 //! callback emits a single `HoleDealt` event that the caller decrypts with their
 //! own key. The deck is unchanged, so it is not re-persisted.
 //!
-//! This also carries the blind/phase-transition bookkeeping that the old VRF
-//! callback did: the first time a given seat is dealt we reset its per-hand state,
-//! post its blind if it is SB/BB, and — once every active seat has been dealt —
-//! advance the hand from `Dealing` to `PreFlop`.
+//! Blind posting and the Dealing→PreFlop transition run in the **callback**,
+//! after MPC succeeds. Queue time only sets `deal_queued` so a failed computation
+//! does not open betting or lock the seat without cards.
 
 use anchor_lang::prelude::*;
 use arcium_anchor::prelude::*;
-use arcium_client::idl::arcium::types::{CircuitSource, OffChainCircuitSource};
+use arcium_client::idl::arcium::types::{CallbackAccount, CircuitSource, OffChainCircuitSource};
 use arcium_macros::circuit_hash;
 
 use crate::ArciumSignerAccount;
@@ -68,67 +67,24 @@ pub fn handler(
         ctx.accounts.player_seat.seat_index == seat_index,
         HiddenHandError::InvalidSeat
     );
-    // This seat must be one dealt into the hand and not yet dealt.
+    // This seat must be one dealt into the hand and not yet queued.
     require!(
         ctx.accounts.hand_state.is_player_active(seat_index),
         HiddenHandError::PlayerNotInHand
     );
     require!(
-        (ctx.accounts.hand_state.dealt_players & (1 << seat_index)) == 0,
+        (ctx.accounts.hand_state.deal_queued & (1 << seat_index)) == 0,
         HiddenHandError::AlreadyDealt
     );
 
     ctx.accounts.sign_pda_account.bump = ctx.bumps.sign_pda_account;
 
-    // --- Per-hand seat reset + blind posting (bookkeeping the VRF callback used to do) ---
+    // Mark queued now so a second queue is rejected. Blinds, dealt_players, and
+    // PreFlop wait for the callback — if MPC aborts, timeout_deal can still fire.
     let clock = Clock::get()?;
-    let table = &ctx.accounts.table;
-    let (sb_pos, bb_pos) = blind_positions(table);
-
-    let seat = &mut ctx.accounts.player_seat;
-    seat.current_bet = 0;
-    seat.total_bet_this_hand = 0;
-    seat.has_acted = false;
-    seat.cards_revealed = false;
-    seat.revealed_card_1 = 255;
-    seat.revealed_card_2 = 255;
-    seat.status = PlayerStatus::Playing;
-
-    let mut blind_posted: u64 = 0;
-    if seat_index == sb_pos {
-        blind_posted = seat.place_bet(table.small_blind);
-        msg!("SB (seat {}) posts {}", seat_index, blind_posted);
-    } else if seat_index == bb_pos {
-        blind_posted = seat.place_bet(table.big_blind);
-        msg!("BB (seat {}) posts {}", seat_index, blind_posted);
-    }
-
     let hand_state = &mut ctx.accounts.hand_state;
-    hand_state.pot = hand_state.pot.saturating_add(blind_posted);
-    hand_state.dealt_players |= 1 << seat_index;
+    hand_state.deal_queued |= 1 << seat_index;
     hand_state.last_action_time = clock.unix_timestamp;
-
-    // If every active seat has now been dealt, open the betting.
-    if hand_state.dealt_players == hand_state.active_players {
-        hand_state.phase = GamePhase::PreFlop;
-
-        emit!(HandStarted {
-            table_id: table.table_id,
-            hand_number: hand_state.hand_number,
-            timestamp: clock.unix_timestamp,
-            dealer_position: hand_state.dealer_position,
-            small_blind_seat: sb_pos,
-            big_blind_seat: bb_pos,
-            small_blind_amount: table.small_blind,
-            big_blind_amount: table.big_blind,
-            active_players: hand_state.active_players,
-            player_count: hand_state.active_count,
-        });
-        msg!(
-            "All seats dealt — phase PreFlop, action on seat {}",
-            hand_state.action_on
-        );
-    }
 
     // --- Queue the MPC deal for this seat ---
     // deck (Enc<Mxe>), then the seat's Shared key + nonce, then plaintext seat_index.
@@ -147,7 +103,20 @@ pub fn handler(
         vec![DealToSeatCallback::callback_ix(
             computation_offset,
             &ctx.accounts.mxe_account,
-            &[],
+            &[
+                CallbackAccount {
+                    pubkey: ctx.accounts.table.key(),
+                    is_writable: false,
+                },
+                CallbackAccount {
+                    pubkey: ctx.accounts.hand_state.key(),
+                    is_writable: true,
+                },
+                CallbackAccount {
+                    pubkey: ctx.accounts.player_seat.key(),
+                    is_writable: true,
+                },
+            ],
         )?],
         1,
         0,
@@ -171,13 +140,77 @@ pub fn callback(
         }
     };
 
-    // The caller matches this to their seat by their own encryption key.
+    let table = &ctx.accounts.table;
+    let seat_index = ctx.accounts.player_seat.seat_index;
+    let already = (ctx.accounts.hand_state.dealt_players & (1 << seat_index)) != 0;
+    if !already {
+        commit_deal(
+            table,
+            &mut ctx.accounts.hand_state,
+            &mut ctx.accounts.player_seat,
+        )?;
+    }
+
     emit!(crate::events::HoleDealt {
         enc_pubkey: hole.encryption_key,
         nonce: hole.nonce.to_le_bytes(),
         card0: hole.ciphertexts[0],
         card1: hole.ciphertexts[1],
+        table_id: table.table_id,
+        hand_number: ctx.accounts.hand_state.hand_number,
+        seat_index,
     });
+    Ok(())
+}
+
+/// Seat reset, blinds, dealt bit, and PreFlop transition. Runs in the callback
+/// so a failed MPC does not open betting or consume AlreadyDealt without cards.
+fn commit_deal(table: &Table, hand_state: &mut HandState, seat: &mut PlayerSeat) -> Result<()> {
+    let clock = Clock::get()?;
+    let seat_index = seat.seat_index;
+    let (sb_pos, bb_pos) = blind_positions(table);
+
+    seat.current_bet = 0;
+    seat.total_bet_this_hand = 0;
+    seat.has_acted = false;
+    seat.cards_revealed = false;
+    seat.revealed_card_1 = 255;
+    seat.revealed_card_2 = 255;
+    seat.status = PlayerStatus::Playing;
+
+    let mut blind_posted: u64 = 0;
+    if seat_index == sb_pos {
+        blind_posted = seat.place_bet(table.small_blind);
+        msg!("SB (seat {}) posts {}", seat_index, blind_posted);
+    } else if seat_index == bb_pos {
+        blind_posted = seat.place_bet(table.big_blind);
+        msg!("BB (seat {}) posts {}", seat_index, blind_posted);
+    }
+
+    hand_state.pot = hand_state.pot.saturating_add(blind_posted);
+    hand_state.dealt_players |= 1 << seat_index;
+    hand_state.last_action_time = clock.unix_timestamp;
+
+    if hand_state.dealt_players == hand_state.active_players {
+        hand_state.phase = GamePhase::PreFlop;
+
+        emit!(HandStarted {
+            table_id: table.table_id,
+            hand_number: hand_state.hand_number,
+            timestamp: clock.unix_timestamp,
+            dealer_position: hand_state.dealer_position,
+            small_blind_seat: sb_pos,
+            big_blind_seat: bb_pos,
+            small_blind_amount: table.small_blind,
+            big_blind_amount: table.big_blind,
+            active_players: hand_state.active_players,
+            player_count: hand_state.active_count,
+        });
+        msg!(
+            "All seats dealt — phase PreFlop, action on seat {}",
+            hand_state.action_on
+        );
+    }
     Ok(())
 }
 
@@ -290,6 +323,11 @@ pub struct DealToSeatCallback<'info> {
     #[account(address = ::arcium_anchor::solana_instructions_sysvar::ID)]
     /// CHECK: instructions_sysvar, checked by the account constraint.
     pub instructions_sysvar: UncheckedAccount<'info>,
+    pub table: Account<'info, Table>,
+    #[account(mut, constraint = hand_state.table == table.key() @ HiddenHandError::InvalidPhase)]
+    pub hand_state: Account<'info, HandState>,
+    #[account(mut, constraint = player_seat.table == table.key() @ HiddenHandError::PlayerNotAtTable)]
+    pub player_seat: Account<'info, PlayerSeat>,
 }
 
 #[init_computation_definition_accounts("deal_to_seat", payer)]

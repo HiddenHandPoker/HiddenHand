@@ -150,6 +150,12 @@ pub struct HoleDealt {
     pub card0: [u8; 32],
     /// Sealed second hole card (one field element).
     pub card1: [u8; 32],
+    /// Table this deal belongs to (clients must not attach a foreign HoleDealt).
+    pub table_id: [u8; 32],
+    /// Hand number this deal belongs to.
+    pub hand_number: u64,
+    /// Seat that was dealt.
+    pub seat_index: u8,
 }
 
 /// Emitted when a stuck hand is force-aborted by a liveness backstop

@@ -4299,8 +4299,15 @@ export type Hiddenhand = {
             "name": "dealtPlayers",
             "docs": [
               "Bitmap of players whose hole cards have been dealt this hand.",
-              "Set per seat by `deal_to_seat`; when it equals `active_players`,",
+              "Set per seat by the `deal_to_seat` callback; when it equals `active_players`,",
               "dealing is complete and the phase advances to PreFlop."
+            ],
+            "type": "u8"
+          },
+          {
+            "name": "dealQueued",
+            "docs": [
+              "Bitmap of seats that have queued deal_to_seat this hand."
             ],
             "type": "u8"
           },
@@ -4371,6 +4378,32 @@ export type Hiddenhand = {
                 32
               ]
             }
+          },
+          {
+            "name": "tableId",
+            "docs": [
+              "Table this deal belongs to."
+            ],
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "handNumber",
+            "docs": [
+              "Hand number this deal belongs to."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "seatIndex",
+            "docs": [
+              "Seat that was dealt."
+            ],
+            "type": "u8"
           }
         ]
       }

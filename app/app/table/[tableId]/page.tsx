@@ -1286,7 +1286,7 @@ export default function TablePage({ params }: { params: Promise<{ tableId: strin
            gameState.isDeckShuffled && gameState.decryptedCards[0] === null &&
            gameState.tableStatus === "Playing" &&
            (gameState.handState.activePlayers & (1 << (gameState.currentPlayerSeat ?? 0))) !== 0 &&
-           (gameState.handState.dealtPlayers & (1 << (gameState.currentPlayerSeat ?? 0))) === 0 && (
+           ((gameState.handState.dealQueued ?? 0) & (1 << (gameState.currentPlayerSeat ?? 0))) === 0 && (
             <div className="max-w-md mx-auto glass border border-cyan-500/30 rounded-2xl p-5 text-center">
               <div className="flex items-center justify-center gap-2 mb-3">
                 <svg className="w-5 h-5 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1330,6 +1330,19 @@ export default function TablePage({ params }: { params: Promise<{ tableId: strin
                   </button>
                 </Tooltip>
               )}
+            </div>
+          )}
+
+          {/* Queued deal_to_seat; callback (blinds + HoleDealt) has not landed. */}
+          {currentPlayer && gameState.currentPlayerSeat !== null && gameState.handState &&
+           gameState.decryptedCards[0] === null &&
+           ((gameState.handState.dealQueued ?? 0) & (1 << (gameState.currentPlayerSeat ?? 0))) !== 0 &&
+           (gameState.handState.dealtPlayers & (1 << (gameState.currentPlayerSeat ?? 0))) === 0 && (
+            <div className="max-w-md mx-auto glass border border-cyan-500/30 rounded-2xl p-5 text-center">
+              <div className="text-cyan-400 text-sm flex items-center justify-center gap-2">
+                <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                Sealing your hole cards in MPC (~15-20s)…
+              </div>
             </div>
           )}
 

@@ -361,6 +361,7 @@ mod tests {
             hand_start_time: 0,
             awaiting_community_reveal: false,
             dealt_players: 0,
+            deal_queued: 0,
             bump: 0,
         }
     }

@@ -72,40 +72,52 @@ pub fn handler(ctx: Context<ShowdownRevealAccounts>, computation_offset: u64) ->
     let table_key = ctx.accounts.table.key();
     let program_id = crate::ID;
 
-    // Build the public reveal mask from the seat accounts. A seat is revealed if
-    // it is still active in the hand and not folded.
+    // Build the public reveal mask from the seat accounts. Every active seat
+    // must be present (H-1 analogue at queue time) so a caller cannot under-
+    // reveal and stall showdown. A seat is revealed if it is still active and
+    // not folded.
     let mut reveal_mask = [false; 9];
     let mut callback_accounts: Vec<CallbackAccount> = Vec::new();
+    let mut present_active: u8 = 0;
+    let mut seen: u8 = 0;
+    require!(
+        !ctx.remaining_accounts.is_empty(),
+        HiddenHandError::IncompletePlayerAccounts
+    );
     for account_info in ctx.remaining_accounts.iter() {
-        if account_info.owner != &program_id {
-            continue;
-        }
+        require!(
+            account_info.owner == &program_id,
+            HiddenHandError::InvalidRemainingAccounts
+        );
         let data = account_info.try_borrow_data()?;
-        let seat = match PlayerSeat::try_deserialize(&mut &data[..]) {
-            Ok(s) => s,
-            Err(_) => continue,
-        };
-        if seat.table != table_key {
-            continue;
-        }
+        let seat = PlayerSeat::try_deserialize(&mut &data[..])
+            .map_err(|_| HiddenHandError::InvalidRemainingAccounts)?;
+        require!(seat.table == table_key, HiddenHandError::PlayerNotAtTable);
         let (expected_pda, _) = Pubkey::find_program_address(
             &[SEAT_SEED, table_key.as_ref(), &[seat.seat_index]],
             &program_id,
         );
-        if *account_info.key != expected_pda {
-            continue;
-        }
-        let idx = seat.seat_index as usize;
-        if idx < 9 {
-            let still_in = ctx.accounts.hand_state.is_player_active(seat.seat_index)
-                && seat.status != PlayerStatus::Folded;
-            reveal_mask[idx] = still_in;
+        require!(
+            *account_info.key == expected_pda,
+            HiddenHandError::InvalidRemainingAccounts
+        );
+        require!(seat.seat_index < 9, HiddenHandError::InvalidSeat);
+        let bit = 1u8 << seat.seat_index;
+        require!(seen & bit == 0, HiddenHandError::DuplicateAccount);
+        seen |= bit;
+        if ctx.accounts.hand_state.is_player_active(seat.seat_index) {
+            present_active |= bit;
+            reveal_mask[seat.seat_index as usize] = seat.status != PlayerStatus::Folded;
         }
         callback_accounts.push(CallbackAccount {
             pubkey: *account_info.key,
             is_writable: true,
         });
     }
+    require!(
+        present_active == ctx.accounts.hand_state.active_players,
+        HiddenHandError::IncompletePlayerAccounts
+    );
 
     // deck (Enc<Mxe>) first, then the 9 mask bools — matches circuit param order.
     let mut b = ArgBuilder::new()
