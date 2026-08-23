@@ -63,8 +63,8 @@ export const TableCard: FC<TableCardProps> = ({ table, isOwnTable }) => {
                 <span
                   className={`w-2 h-2 rounded-full ${
                     isWaiting
-                      ? "bg-[var(--status-active)]"
-                      : "bg-[var(--status-warning)]"
+                      ? "bg-[var(--status-warning)]"
+                      : "bg-[var(--status-active)]"
                   }`}
                 />
                 <span className="text-[var(--text-secondary)]">

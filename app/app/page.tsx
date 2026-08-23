@@ -193,7 +193,7 @@ export default function Home() {
                   </svg>
                 ),
                 title: "On Solana",
-                desc: "Sub-second transactions. Every bet, fold, and showdown on-chain.",
+                desc: "Bets settle on-chain. Shuffle, deal, and board reveals take a few seconds in MPC — that's the dealer, not a hang.",
               },
             ].map((feature, idx) => (
               <div

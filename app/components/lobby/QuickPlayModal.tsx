@@ -239,7 +239,7 @@ export const QuickPlayModal: FC<QuickPlayModalProps> = ({
             {status === "searching" ? (
               <>
                 <div className="animate-spin h-4 w-4 border-2 border-black/30 border-t-black rounded-full" />
-                Joining...
+                Opening table...
               </>
             ) : status === "creating" ? (
               <>
@@ -251,7 +251,7 @@ export const QuickPlayModal: FC<QuickPlayModalProps> = ({
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
                 </svg>
-                Find Me a Seat
+                Open a table
               </>
             )}
           </button>

@@ -21,6 +21,15 @@ export const ProvablyFairBadge: FC<ProvablyFairBadgeProps> = ({
         className="relative inline-flex items-center"
         onMouseEnter={() => setShowTooltip(true)}
         onMouseLeave={() => setShowTooltip(false)}
+        onClick={() => setShowTooltip((v) => !v)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            setShowTooltip((v) => !v);
+          }
+        }}
+        role="button"
+        tabIndex={0}
       >
         <div
           className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium cursor-help transition-all duration-300"

@@ -284,7 +284,7 @@ export const ActionPanel: FC<ActionPanelProps> = ({
               <button
                 onClick={onCheck}
                 disabled={isLoading}
-                className="flex-1 btn-info py-3 rounded-xl font-bold uppercase text-sm tracking-wide disabled:opacity-50 transition-all touch-target"
+                className="flex-[1.3] btn-gold py-3 rounded-xl font-bold uppercase text-sm tracking-wide disabled:opacity-50 transition-all touch-target"
               >
                 Check
               </button>
@@ -292,7 +292,7 @@ export const ActionPanel: FC<ActionPanelProps> = ({
               <button
                 onClick={onCall}
                 disabled={isLoading}
-                className="flex-1 btn-info py-3 rounded-xl font-bold uppercase text-sm tracking-wide disabled:opacity-50 transition-all touch-target"
+                className="flex-[1.3] btn-gold py-3 rounded-xl font-bold uppercase text-sm tracking-wide disabled:opacity-50 transition-all touch-target"
               >
                 <span>{playerChips >= toCall ? "Call" : "All-In"}</span>
                 <span className="block text-[10px] opacity-80 font-normal">
@@ -318,7 +318,9 @@ export const ActionPanel: FC<ActionPanelProps> = ({
             <button
               onClick={handleAllInClick}
               disabled={isLoading}
-              className="flex-1 btn-gold py-3 rounded-xl font-bold uppercase text-sm tracking-wide disabled:opacity-50 transition-all animate-pulse-gold touch-target"
+              className={`flex-1 py-3 rounded-xl font-bold uppercase text-sm tracking-wide disabled:opacity-50 transition-all touch-target ${
+                timeLeft <= 10 ? "btn-gold animate-pulse-gold" : "btn-action"
+              }`}
             >
               All In
             </button>
@@ -412,7 +414,7 @@ export const ActionPanel: FC<ActionPanelProps> = ({
             <button
               onClick={onCheck}
               disabled={isLoading}
-              className="btn-info py-4 rounded-xl font-bold uppercase tracking-wide disabled:opacity-50 disabled:cursor-not-allowed transition-all flex flex-col items-center gap-0.5"
+              className="btn-gold py-4 rounded-xl font-bold uppercase tracking-wide disabled:opacity-50 disabled:cursor-not-allowed transition-all flex flex-col items-center gap-0.5"
             >
               <span>Check</span>
               <span className="text-[10px] opacity-50 font-normal normal-case tracking-normal kbd-hint">K</span>
@@ -421,7 +423,7 @@ export const ActionPanel: FC<ActionPanelProps> = ({
             <button
               onClick={onCall}
               disabled={isLoading}
-              className="btn-info py-4 rounded-xl font-bold uppercase tracking-wide disabled:opacity-50 disabled:cursor-not-allowed transition-all flex flex-col items-center gap-0.5"
+              className="btn-gold py-4 rounded-xl font-bold uppercase tracking-wide disabled:opacity-50 disabled:cursor-not-allowed transition-all flex flex-col items-center gap-0.5"
             >
               <span>{playerChips >= toCall ? "Call" : "Call All-In"}</span>
               <span className="text-xs opacity-80">
@@ -434,7 +436,9 @@ export const ActionPanel: FC<ActionPanelProps> = ({
           <button
             onClick={handleAllInClick}
             disabled={isLoading}
-            className="btn-gold py-4 rounded-xl font-bold uppercase tracking-wide disabled:opacity-50 disabled:cursor-not-allowed transition-all animate-pulse-gold flex flex-col items-center gap-0.5"
+            className={`py-4 rounded-xl font-bold uppercase tracking-wide disabled:opacity-50 disabled:cursor-not-allowed transition-all flex flex-col items-center gap-0.5 ${
+              timeLeft <= 10 ? "btn-gold animate-pulse-gold" : "btn-action"
+            }`}
           >
             <span>All In</span>
             <span className="text-[10px] opacity-50 font-normal normal-case tracking-normal kbd-hint">A</span>

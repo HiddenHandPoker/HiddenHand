@@ -149,7 +149,7 @@ export const TransactionToast: FC<TransactionToastProps> = ({
   };
 
   return (
-    <div className="fixed bottom-4 right-4 z-50 flex flex-col gap-2 max-w-sm">
+    <div className="fixed top-4 right-4 z-50 flex flex-col gap-2 max-w-sm">
       {transactions.map((tx) => {
         const config = statusConfig[tx.status];
         const shortSig = `${tx.signature.slice(0, 8)}...${tx.signature.slice(-8)}`;

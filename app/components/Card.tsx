@@ -147,7 +147,7 @@ const CardBack: FC<{ config: typeof sizeConfig.md; encrypted?: boolean; size: st
     <div className={`absolute bottom-1 right-1 w-1.5 h-1.5 border-r border-b ${encrypted ? "border-cyan-400/40" : "border-gold-dark/40"} rounded-br`} />
 
     {/* Lock badge for encrypted cards */}
-    {encrypted && size !== "sm" && size !== "xs" && (
+    {encrypted && (
       <div
         className="absolute -top-1 -right-1 w-4 h-4 rounded-full flex items-center justify-center z-20"
         style={{

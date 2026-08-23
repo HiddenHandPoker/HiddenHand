@@ -44,6 +44,7 @@ import { BreakReminder } from "@/components/BreakReminder";
 import { SelfExclusionBanner } from "@/components/SelfExclusionBanner";
 import { RotateDeviceOverlay } from "@/components/RotateDeviceOverlay";
 import { useIsMobileLandscape, useIsMobile } from "@/hooks/useIsMobile";
+import { GameStatusBar } from "@/components/GameStatusBar";
 
 export default function TablePage({ params }: { params: Promise<{ tableId: string }> }) {
   const { tableId } = React.use(params);
@@ -461,6 +462,51 @@ export default function TablePage({ params }: { params: Promise<{ tableId: strin
   const toCall = Math.max(0, gameState.currentBet - (currentPlayer?.currentBet ?? 0));
   const canCheck = toCall <= 0;
 
+  const mpcLabel = gameState.isShuffling
+    ? "Shuffling 52 cards in MPC…"
+    : gameState.isDecrypting
+      ? "Sealing your hole cards…"
+      : gameState.isRevealingCommunity
+        ? "Board reveal queued…"
+        : gameState.isRevealing
+          ? "Publishing hands from the sealed deck…"
+          : gameState.awaitingCommunityReveal && !gameState.isAuthority
+            ? "Waiting for host to reveal the board"
+            : null;
+  const actionLabel = isPlayerTurn
+    ? "Action: You"
+    : gameState.phase === "Dealing"
+      ? "Waiting to deal in"
+      : gameState.awaitingCommunityReveal
+        ? "Waiting on the board"
+        : `Action: Seat ${(gameState.actionOn ?? 0) + 1}`;
+
+  const autoDealRef = useRef(false);
+  useEffect(() => {
+    if (!currentPlayer || gameState.currentPlayerSeat === null || !gameState.handState) return;
+    if (!gameState.isDeckShuffled) {
+      autoDealRef.current = false;
+      return;
+    }
+    const seat = gameState.currentPlayerSeat;
+    const queued = ((gameState.handState.dealQueued ?? 0) & (1 << seat)) !== 0;
+    if (queued || gameState.isDecrypting || gameState.decryptedCards[0] !== null) return;
+    if ((gameState.handState.activePlayers & (1 << seat)) === 0) return;
+    if (autoDealRef.current) return;
+    autoDealRef.current = true;
+    dealMeIn().catch(() => {
+      autoDealRef.current = false;
+    });
+  }, [
+    currentPlayer,
+    gameState.currentPlayerSeat,
+    gameState.handState,
+    gameState.isDeckShuffled,
+    gameState.isDecrypting,
+    gameState.decryptedCards,
+    dealMeIn,
+  ]);
+
   // Check if we're in a betting phase (for showing timers)
   const isBettingPhase = ["PreFlop", "Flop", "Turn", "River"].includes(gameState.phase);
 
@@ -769,7 +815,11 @@ export default function TablePage({ params }: { params: Promise<{ tableId: strin
                   <div>
                     <div className="flex items-center gap-2">
                       <span className="text-[var(--gold-light)] font-semibold text-sm">Spectating</span>
-                      <span className="text-[var(--text-muted)] text-xs">&mdash; Select a seat below to join</span>
+                      <span className="text-[var(--text-muted)] text-xs">
+                        {gameState.tableStatus === "Playing"
+                          ? "— Watch only. Sit when this hand ends."
+                          : "— Pick a seat in the join panel to sit down."}
+                      </span>
                     </div>
                     <p className="text-[var(--text-muted)] text-xs mt-0.5">
                       Hole cards are sealed in MPC &mdash; only seated players can see their hands
@@ -1185,7 +1235,7 @@ export default function TablePage({ params }: { params: Promise<{ tableId: strin
             gameState.players.filter((p) => p.status !== "empty" && p.chips > 0).length >= 2 && (
             <AuthorityTimeoutPanel
               lastTimestamp={gameState.lastReadyTime}
-              delayBeforeShowing={DEAL_TIMEOUT_SECONDS}
+              delayBeforeShowing={0}
               timeoutSeconds={ACTION_TIMEOUT_SECONDS}
               waitingMessage="Waiting for authority to start hand..."
               readyMessage="Timeout reached - you can start the hand"
@@ -1202,7 +1252,7 @@ export default function TablePage({ params }: { params: Promise<{ tableId: strin
             gameState.phase === "Dealing" && !gameState.isDeckShuffled && (
             <AuthorityTimeoutPanel
               lastTimestamp={gameState.lastActionTime}
-              delayBeforeShowing={Math.floor(DEAL_TIMEOUT_SECONDS / 2)}
+              delayBeforeShowing={0}
               timeoutSeconds={DEAL_TIMEOUT_SECONDS}
               waitingMessage="Waiting for authority to shuffle the deck..."
               readyMessage="Timeout reached - you can shuffle the deck"
@@ -1226,6 +1276,20 @@ export default function TablePage({ params }: { params: Promise<{ tableId: strin
               phase={gameState.phase}
               onShowdown={showdown}
               isLoading={loading}
+            />
+          )}
+
+          {gameState.table && gameState.tableStatus === "Playing" && (
+            <GameStatusBar
+              phase={gameState.phase}
+              potLabel={`${fmt(gameState.pot)} ${tableToken.symbol}`}
+              toCallLabel={
+                isBettingPhase && toCall > 0
+                  ? `${fmt(toCall)} ${tableToken.symbol}`
+                  : null
+              }
+              actionLabel={actionLabel}
+              mpcLabel={mpcLabel}
             />
           )}
 
@@ -1521,20 +1585,21 @@ export default function TablePage({ params }: { params: Promise<{ tableId: strin
               <div className="flex items-center justify-center gap-3 mb-2">
                 <div className="w-5 h-5 border-2 border-purple-400 border-t-transparent rounded-full animate-spin" />
                 <span className="text-purple-300 font-semibold">
-                  {gameState.phase === "PreFlop" ? "Revealing Flop..." :
-                   gameState.phase === "Flop" ? "Revealing Turn..." :
-                   gameState.phase === "Turn" ? "Revealing River..." :
-                   "Revealing cards..."}
+                  {gameState.isRevealingCommunity
+                    ? (gameState.phase === "PreFlop" ? "Revealing flop via MPC…" :
+                       gameState.phase === "Flop" ? "Revealing turn via MPC…" :
+                       gameState.phase === "Turn" ? "Revealing river via MPC…" :
+                       "Revealing the board…")
+                    : (gameState.isAuthority
+                      ? "Host is about to reveal the next street"
+                      : "Waiting for the host to reveal the board")}
                 </span>
               </div>
               <p className="text-[var(--text-muted)] text-sm">
-                Revealing the board from the sealed deck via Arcium MPC
+                {gameState.isRevealingCommunity
+                  ? "The board is being revealed from the sealed deck."
+                  : "Anyone can take over this reveal if the host is AFK for 60s."}
               </p>
-              {gameState.isRevealingCommunity && (
-                <p className="text-purple-400 text-xs mt-2">
-                  Submitting verification to blockchain...
-                </p>
-              )}
             </div>
           )}
 
