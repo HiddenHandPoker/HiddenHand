@@ -1,10 +1,10 @@
 "use client";
 
-import { FC, useState, useEffect, useRef, useCallback } from "react";
+import { FC, useState, useEffect, useRef } from "react";
 import { ConfirmDialog } from "./ConfirmDialog";
-import { type TokenInfo, getDefaultToken, baseUnitsToDisplay } from "@/lib/tokens";
+import { type TokenInfo, getDefaultToken, baseUnitsToDisplay, displayToBaseUnits } from "@/lib/tokens";
 import { ACTION_TIMEOUT_SECONDS, TIMER_UPDATE_INTERVAL_MS } from "@/lib/constants";
-import { useIsTouch } from "@/hooks/useIsMobile";
+import { RAISE_PRESETS, raisePresetDisabled, raisePresetValue } from "@/lib/raisePad";
 
 interface ActionPanelProps {
   isPlayerTurn: boolean;
@@ -12,6 +12,7 @@ interface ActionPanelProps {
   toCall: number;
   minRaise: number;
   playerChips: number;
+  pot?: number;
   onFold: () => void;
   onCheck: () => void;
   onCall: () => void;
@@ -29,6 +30,7 @@ export const ActionPanel: FC<ActionPanelProps> = ({
   toCall,
   minRaise,
   playerChips,
+  pot = 0,
   onFold,
   onCheck,
   onCall,
@@ -39,7 +41,6 @@ export const ActionPanel: FC<ActionPanelProps> = ({
   lastActionTime = null,
   mobile = false,
 }) => {
-  const isTouch = useIsTouch();
   const fmt = (baseUnits: number) => baseUnitsToDisplay(baseUnits, token).toFixed(2);
   const minRaiseTotal = toCall + minRaise;
   const [raiseAmount, setRaiseAmount] = useState(minRaiseTotal);
@@ -68,7 +69,10 @@ export const ActionPanel: FC<ActionPanelProps> = ({
   }, [minRaiseTotal]);
 
   const raiseInputRef = useRef<HTMLInputElement>(null);
+  const raiseNumberRef = useRef<HTMLInputElement>(null);
   const canRaise = playerChips > toCall;
+  const isAllInRaise = raiseAmount >= playerChips;
+  const canConfirmRaise = isAllInRaise || raiseAmount - toCall >= minRaise;
 
   const handleAllInClick = () => {
     setShowAllInConfirm(true);
@@ -88,9 +92,14 @@ export const ActionPanel: FC<ActionPanelProps> = ({
       const tag = (e.target as HTMLElement)?.tagName;
       if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") {
         // Allow Enter in raise input
-        if (e.key === "Enter" && (e.target as HTMLElement) === raiseInputRef.current) {
+        if (
+          e.key === "Enter" &&
+          ((e.target as HTMLElement) === raiseInputRef.current ||
+            (e.target as HTMLElement) === raiseNumberRef.current)
+        ) {
           e.preventDefault();
-          onRaise(raiseAmount);
+          if (raiseAmount >= playerChips) onAllIn();
+          else if (raiseAmount - toCall >= minRaise) onRaise(raiseAmount);
         }
         return;
       }
@@ -110,7 +119,7 @@ export const ActionPanel: FC<ActionPanelProps> = ({
         case "r":
           if (canRaise) {
             e.preventDefault();
-            raiseInputRef.current?.focus();
+            (raiseNumberRef.current ?? raiseInputRef.current)?.focus();
           }
           break;
         case "a":
@@ -122,7 +131,7 @@ export const ActionPanel: FC<ActionPanelProps> = ({
 
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [isPlayerTurn, isLoading, canCheck, canRaise, raiseAmount, showAllInConfirm, onFold, onCheck, onCall, onRaise]);
+  }, [isPlayerTurn, isLoading, canCheck, canRaise, raiseAmount, showAllInConfirm, onFold, onCheck, onCall, onRaise, onAllIn, playerChips, minRaise, toCall]);
 
   if (!isPlayerTurn) {
     return (
@@ -174,55 +183,76 @@ export const ActionPanel: FC<ActionPanelProps> = ({
         </div>
       </div>
 
-      {/* Quick bet buttons */}
+      {/* Pot-fraction presets */}
       <div className="grid grid-cols-4 gap-2">
-        {[
-          { label: "Min", value: minRaiseTotal },
-          { label: "2x", value: Math.min(minRaiseTotal * 2, playerChips) },
-          { label: "3x", value: Math.min(minRaiseTotal * 3, playerChips) },
-          { label: "Max", value: playerChips },
-        ].map((preset) => (
-          <button
-            key={preset.label}
-            onClick={() => setRaiseAmount(preset.value)}
-            className={`
-              py-2 rounded-lg text-sm font-semibold transition-all touch-target
-              ${raiseAmount === preset.value
-                ? "bg-[var(--gold-main)] text-black"
-                : "btn-action hover:border-[var(--gold-main)]"
-              }
-            `}
-          >
-            {preset.label}
-          </button>
-        ))}
+        {RAISE_PRESETS.map((preset) => {
+          const value = raisePresetValue(preset.id, pot, toCall, playerChips);
+          const disabled = raisePresetDisabled(preset.id, value, toCall, minRaise, playerChips);
+          return (
+            <button
+              key={preset.id}
+              type="button"
+              disabled={disabled}
+              onClick={() => setRaiseAmount(value)}
+              className={`
+                py-2 rounded-lg font-semibold transition-all touch-target whitespace-nowrap
+                ${mobile ? "text-[11px] px-0.5" : "text-sm"}
+                ${disabled
+                  ? "opacity-40 cursor-not-allowed btn-action"
+                  : raiseAmount === value
+                    ? "bg-[var(--gold-main)] text-black"
+                    : "btn-action hover:border-[var(--gold-main)]"
+                }
+              `}
+            >
+              {preset.label}
+            </button>
+          );
+        })}
       </div>
 
-      {/* Custom slider with visual track */}
-      <div className="relative py-2">
-        {/* Track background */}
-        <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 h-2 bg-[var(--bg-dark)] rounded-full border border-white/5" />
-
-        {/* Filled track */}
-        <div
-          className="absolute top-1/2 -translate-y-1/2 left-0 h-2 rounded-full"
-          style={{
-            width: `${Math.max(0, Math.min(100, raisePercentage))}%`,
-            background: "linear-gradient(90deg, var(--gold-dark) 0%, var(--gold-main) 50%, var(--gold-light) 100%)",
-          }}
-        />
-
-        {/* Input range */}
+      {/* Custom numeric raise */}
+      <div className="flex items-center gap-2">
         <input
-          ref={raiseInputRef}
-          type="range"
-          min={minRaiseTotal}
-          max={playerChips}
-          value={raiseAmount}
-          onChange={(e) => setRaiseAmount(Number(e.target.value))}
-          className="relative z-10 w-full"
+          ref={raiseNumberRef}
+          type="number"
+          min={baseUnitsToDisplay(minRaiseTotal, token)}
+          max={baseUnitsToDisplay(playerChips, token)}
+          step={0.01}
+          value={Number(baseUnitsToDisplay(raiseAmount, token).toFixed(2))}
+          onChange={(e) => {
+            const display = Number(e.target.value);
+            if (!Number.isFinite(display)) return;
+            const base = displayToBaseUnits(display, token);
+            setRaiseAmount(Math.min(playerChips, Math.max(0, base)));
+          }}
+          className="flex-1 bg-[var(--bg-dark)] text-[var(--text-primary)] px-3 py-2 rounded-lg text-sm border border-white/5"
         />
+        <span className="text-[var(--text-muted)] text-sm">{token.symbol}</span>
       </div>
+
+      {/* Custom slider with visual track — desktop; mobile uses the numeric input */}
+      {!mobile && (
+        <div className="relative py-2">
+          <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 h-2 bg-[var(--bg-dark)] rounded-full border border-white/5" />
+          <div
+            className="absolute top-1/2 -translate-y-1/2 left-0 h-2 rounded-full"
+            style={{
+              width: `${Math.max(0, Math.min(100, raisePercentage))}%`,
+              background: "linear-gradient(90deg, var(--gold-dark) 0%, var(--gold-main) 50%, var(--gold-light) 100%)",
+            }}
+          />
+          <input
+            ref={raiseInputRef}
+            type="range"
+            min={minRaiseTotal}
+            max={playerChips}
+            value={raiseAmount}
+            onChange={(e) => setRaiseAmount(Number(e.target.value))}
+            className="relative z-10 w-full"
+          />
+        </div>
+      )}
 
       {/* Raise confirm/cancel buttons */}
       <div className={`flex gap-2 ${mobile ? "" : ""}`}>
@@ -235,11 +265,15 @@ export const ActionPanel: FC<ActionPanelProps> = ({
           </button>
         )}
         <button
-          onClick={() => { onRaise(raiseAmount); setShowRaiseDrawer(false); }}
-          disabled={isLoading}
+          onClick={() => {
+            if (isAllInRaise) onAllIn();
+            else onRaise(raiseAmount);
+            setShowRaiseDrawer(false);
+          }}
+          disabled={isLoading || !canConfirmRaise}
           className={`${mobile ? "flex-1" : "w-full"} btn-success py-3 sm:py-4 rounded-xl font-bold uppercase tracking-wide disabled:opacity-50 disabled:cursor-not-allowed transition-all`}
         >
-          Raise to {fmt(raiseAmount)} {token.symbol}
+          {isAllInRaise ? "All-In" : `Raise to ${fmt(raiseAmount)} ${token.symbol}`}
           <span className="text-[10px] opacity-50 font-normal normal-case tracking-normal ml-2 kbd-hint">R / Enter</span>
         </button>
       </div>

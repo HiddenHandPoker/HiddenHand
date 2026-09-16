@@ -6,6 +6,7 @@ import { useWallet } from "@solana/wallet-adapter-react";
 import { WalletButton } from "@/components/WalletButton";
 import { PokerTable } from "@/components/PokerTable";
 import { ActionPanel } from "@/components/ActionPanel";
+import { SitSheet } from "@/components/SitSheet";
 import { SpectatorView } from "@/components/SpectatorView";
 import { useState, useEffect, useRef, useMemo } from "react";
 import { usePokerGame, type ActionType } from "@/hooks/usePokerGame";
@@ -222,6 +223,7 @@ export default function TablePage({ params }: { params: Promise<{ tableId: strin
   // UI state
   const [buyInSol, setBuyInSol] = useState(10); // Default buy-in in display units (e.g. $10 USDC)
   const [selectedSeat, setSelectedSeat] = useState<number | null>(null);
+  const [showSitSheet, setShowSitSheet] = useState(false);
   const [showSwapModal, setShowSwapModal] = useState(false);
   const [depositLimitMsg, setDepositLimitMsg] = useState<string | null>(null);
 
@@ -248,7 +250,10 @@ export default function TablePage({ params }: { params: Promise<{ tableId: strin
     }
     if (seat !== null && seat !== "") {
       const n = Number(seat);
-      if (Number.isInteger(n) && n >= 0) setSelectedSeat(n);
+      if (Number.isInteger(n) && n >= 0) {
+        setSelectedSeat(n);
+        if (params.get("auto") !== "1") setShowSitSheet(true);
+      }
     }
   }, []);
 
@@ -335,6 +340,12 @@ export default function TablePage({ params }: { params: Promise<{ tableId: strin
   const currentPlayer = gameState.players.find(
     (p) => p.player === publicKey?.toString()
   );
+
+  useEffect(() => {
+    if (currentPlayer || gameState.tableStatus !== "Waiting") {
+      setShowSitSheet(false);
+    }
+  }, [currentPlayer, gameState.tableStatus]);
 
   // Check if all remaining players are all-in (no more betting possible)
   const activePlayers = gameState.players.filter(
@@ -618,6 +629,7 @@ export default function TablePage({ params }: { params: Promise<{ tableId: strin
       );
       recordDeposit(buyInBase);
       setSelectedSeat(null);
+      setShowSitSheet(false);
     } catch (e) {
       console.error("Join failed:", e);
     }
@@ -625,7 +637,7 @@ export default function TablePage({ params }: { params: Promise<{ tableId: strin
 
   // Quick Play lands with ?buyIn=&seat=&auto=1 after the user already confirmed
   // in the lobby modal. Sit automatically once the table, wallet, and balance
-  // are ready. Click-to-sit does not set auto=1 — it only prefills the seat.
+  // are ready. Click-to-sit does not set auto=1 — it opens the sit sheet.
   useEffect(() => {
     if (autoJoinLock.current) return;
     if (typeof window === "undefined") return;
@@ -914,7 +926,7 @@ export default function TablePage({ params }: { params: Promise<{ tableId: strin
                       <span className="text-[var(--text-muted)] text-xs">
                         {gameState.tableStatus === "Playing"
                           ? "— Watch only. Sit when this hand ends."
-                          : "— Pick a seat in the join panel to sit down."}
+                          : "— Click an empty seat to sit down."}
                       </span>
                     </div>
                     <p className="text-[var(--text-muted)] text-xs mt-0.5">
@@ -977,84 +989,10 @@ export default function TablePage({ params }: { params: Promise<{ tableId: strin
                     </span>
                   </div>
 
-                  {/* Join if not at table */}
                   {!currentPlayer && gameState.tableStatus === "Waiting" && (
-                    <div id="join-panel" className="flex items-center gap-3 flex-wrap">
-                      <select
-                        value={selectedSeat ?? ""}
-                        onChange={(e) =>
-                          setSelectedSeat(
-                            e.target.value ? Number(e.target.value) : null
-                          )
-                        }
-                        className="bg-[var(--bg-dark)] text-[var(--text-primary)] px-4 py-2.5 rounded-xl text-sm border border-white/5"
-                      >
-                        <option value="">Select seat</option>
-                        {gameState.players
-                          .filter((p) => p.status === "empty")
-                          .map((p) => (
-                            <option key={p.seatIndex} value={p.seatIndex}>
-                              Seat {p.seatIndex + 1}
-                            </option>
-                          ))}
-                      </select>
-                      <div className="flex items-center gap-2">
-                        <input
-                          type="number"
-                          value={buyInSol}
-                          onChange={(e) => setBuyInSol(Number(e.target.value))}
-                          min={baseUnitsToDisplay(gameState.table.minBuyIn.toNumber(), tableToken)}
-                          max={baseUnitsToDisplay(gameState.table.maxBuyIn.toNumber(), tableToken)}
-                          step={0.01}
-                          className="bg-[var(--bg-dark)] text-[var(--text-primary)] px-4 py-2.5 rounded-xl text-sm w-24 border border-white/5"
-                        />
-                        <span className="text-[var(--text-muted)] text-sm">{tableToken.symbol}</span>
-                      </div>
-                      <button
-                        onClick={() => void handleJoinTable()}
-                        disabled={loading || selectedSeat === null || buyInSol < baseUnitsToDisplay(gameState.table.minBuyIn.toNumber(), tableToken) || buyInSol > baseUnitsToDisplay(gameState.table.maxBuyIn.toNumber(), tableToken)}
-                        className="btn-info px-5 py-2.5 rounded-xl text-sm font-semibold disabled:opacity-50"
-                      >
-                        Join
-                      </button>
-                      {/* Get USDC button — shows when wallet balance is insufficient for buy-in */}
-                      {usdcBalance !== null && usdcBalance < displayToBaseUnits(buyInSol, tableToken) && (
-                        <button
-                          onClick={() => setShowSwapModal(true)}
-                          className="px-4 py-2.5 rounded-xl text-sm font-semibold flex items-center gap-2 bg-[#2775CA]/20 border border-[#2775CA]/40 text-[#5B9BD5] hover:bg-[#2775CA]/30 transition-colors"
-                        >
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
-                          </svg>
-                          Get {tableToken.symbol}
-                        </button>
-                      )}
-                      {/* Warning if buy-in out of range */}
-                      {(buyInSol < baseUnitsToDisplay(gameState.table.minBuyIn.toNumber(), tableToken) || buyInSol > baseUnitsToDisplay(gameState.table.maxBuyIn.toNumber(), tableToken)) && (
-                        <span className="text-[var(--status-warning)] text-xs">
-                          Buy-in must be {fmt(gameState.table.minBuyIn.toNumber())} - {fmt(gameState.table.maxBuyIn.toNumber())} {tableToken.symbol}
-                        </span>
-                      )}
-                      {/* Balance indicator when insufficient */}
-                      {usdcBalance !== null && usdcBalance < displayToBaseUnits(buyInSol, tableToken) && (
-                        <span className="text-[var(--status-warning)] text-xs w-full">
-                          Balance: {baseUnitsToDisplay(usdcBalance, tableToken).toFixed(2)} {tableToken.symbol} (need {buyInSol.toFixed(2)})
-                        </span>
-                      )}
-                      {depositLimitMsg && (
-                        <div className="w-full glass-dark border border-amber-500/30 rounded-xl px-4 py-2 flex items-start gap-2">
-                          <svg className="w-4 h-4 text-amber-400 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                          </svg>
-                          <span className="text-amber-300 text-xs">{depositLimitMsg}</span>
-                          <button onClick={() => setDepositLimitMsg(null)} className="text-amber-400/60 hover:text-amber-300 ml-auto flex-shrink-0">
-                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                            </svg>
-                          </button>
-                        </div>
-                      )}
-                    </div>
+                    <span className="text-[var(--text-muted)] text-sm">
+                      Click an empty seat to sit
+                    </span>
                   )}
 
                   {/* Leave table. The program forbids leaving mid-hand (every
@@ -1261,11 +1199,13 @@ export default function TablePage({ params }: { params: Promise<{ tableId: strin
               onEmptySeatClick={
                 connected && !currentPlayer && gameState.tableStatus === "Waiting"
                   ? (seat) => {
+                      const minBuy = gameState.table
+                        ? baseUnitsToDisplay(gameState.table.minBuyIn.toNumber(), tableToken)
+                        : buyInSol;
                       setSelectedSeat(seat);
-                      document.getElementById("join-panel")?.scrollIntoView({
-                        behavior: "smooth",
-                        block: "center",
-                      });
+                      setBuyInSol(minBuy);
+                      setDepositLimitMsg(null);
+                      setShowSitSheet(true);
                     }
                   : undefined
               }
@@ -1608,6 +1548,7 @@ export default function TablePage({ params }: { params: Promise<{ tableId: strin
                 canCheck={canCheck}
                 toCall={toCall}
                 minRaise={gameState.minRaise}
+                pot={gameState.pot}
                 playerChips={currentPlayer.chips}
                 onFold={() => handleAction("fold")}
                 onCheck={() => handleAction("check")}
@@ -1743,6 +1684,33 @@ export default function TablePage({ params }: { params: Promise<{ tableId: strin
         onDismiss={dismissTransaction}
         cluster={NETWORK === "localnet" ? "localnet" : "devnet"}
       />
+
+      {showSitSheet && selectedSeat !== null && gameState.table && (
+        <SitSheet
+          isOpen
+          seatIndex={selectedSeat}
+          buyIn={buyInSol}
+          minBuyIn={baseUnitsToDisplay(gameState.table.minBuyIn.toNumber(), tableToken)}
+          maxBuyIn={baseUnitsToDisplay(gameState.table.maxBuyIn.toNumber(), tableToken)}
+          token={tableToken}
+          balance={usdcBalance}
+          loading={loading}
+          compact={isMobileLandscape}
+          depositLimitMsg={depositLimitMsg}
+          onBuyInChange={(value) => {
+            setBuyInSol(value);
+            setDepositLimitMsg(null);
+          }}
+          onSit={() => void handleJoinTable({ seat: selectedSeat, buyIn: buyInSol })}
+          onClose={() => {
+            setShowSitSheet(false);
+            setSelectedSeat(null);
+          }}
+          onGetToken={() => setShowSwapModal(true)}
+          onDismissLimit={() => setDepositLimitMsg(null)}
+          onFaucetSuccess={() => void refreshBalance()}
+        />
+      )}
 
       {/* Swap Modal (Jupiter Plugin) — for getting USDC before joining */}
       <SwapModal
