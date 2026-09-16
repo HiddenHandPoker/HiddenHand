@@ -48,6 +48,7 @@ import { RotateDeviceOverlay } from "@/components/RotateDeviceOverlay";
 import { useIsMobileLandscape, useIsMobile } from "@/hooks/useIsMobile";
 import { GameStatusBar, mpcStatusLabel, DECK_EXPLORER, formatDeckCipherPrefix } from "@/components/GameStatusBar";
 import { getDeckPDA } from "@/lib/program";
+import { selectLiveHandCompleted } from "@/lib/actionTakenScope";
 
 export default function TablePage({ params }: { params: Promise<{ tableId: string }> }) {
   const { tableId } = React.use(params);
@@ -425,7 +426,7 @@ export default function TablePage({ params }: { params: Promise<{ tableId: strin
     if (!sawThisHandRef.current) return;
     const n = gameState.table?.handNumber.toNumber();
     if (!n) return;
-    const match = onChainHistory.find((h) => h.handNumber === n);
+    const match = selectLiveHandCompleted(onChainHistory, n, gameState.tablePDA);
     if (!match) return;
     setCompletedOverlay(match);
 
@@ -441,7 +442,7 @@ export default function TablePage({ params }: { params: Promise<{ tableId: strin
       }
     }
     if (eventNames.size > 0) setNamedBySeat(eventNames);
-  }, [onChainHistory, gameState.table]);
+  }, [onChainHistory, gameState.table, gameState.tablePDA]);
 
   useEffect(() => {
     if (!completedOverlay) return;

@@ -79,6 +79,9 @@ export interface TableState {
   players: SpectatorPlayer[];
   lastActionTime: number | null;
   lastReadyTime: number | null;
+  // Hand bitmaps (0 when no live hand)
+  dealtPlayers: number;
+  activePlayers: number;
   // Deck state
   isDeckShuffled: boolean;
   awaitingCommunityReveal: boolean;
@@ -148,6 +151,8 @@ const initialState: TableState = {
   players: [],
   lastActionTime: null,
   lastReadyTime: null,
+  dealtPlayers: 0,
+  activePlayers: 0,
   isDeckShuffled: false,
   awaitingCommunityReveal: false,
   deckCipherPrefix: null,
@@ -358,6 +363,8 @@ export function useTableState(tableId: string): UseTableStateResult {
         players,
         lastActionTime: handState?.lastActionTime?.toNumber() ?? null,
         lastReadyTime: table.lastReadyTime?.toNumber() ?? null,
+        dealtPlayers: handState?.dealtPlayers ?? 0,
+        activePlayers: handState?.activePlayers ?? 0,
         isDeckShuffled: deckState?.isShuffled ?? false,
         awaitingCommunityReveal: handState?.awaitingCommunityReveal ?? false,
         deckCipherPrefix: formatDeckCipherPrefix(deckState?.deck),

@@ -5,7 +5,7 @@ import { WalletProvider } from "@/contexts/WalletProvider";
 
 export const metadata: Metadata = {
   title: "HiddenHand - Privacy Poker on Solana",
-  description: "The only poker game where the house can't see your cards.",
+  description: "Privacy poker on Solana. Hole cards sealed in Arcium MPC.",
 };
 
 export const viewport: Viewport = {

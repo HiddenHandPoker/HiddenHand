@@ -316,7 +316,9 @@ async function loadHoleCards(
   return null;
 }
 
-/** Other client or crank already advanced this protocol step. */
+/** Other client or crank already advanced this protocol step.
+ *  UnauthorizedAuthority / TimeoutNotReached: pre-upgrade binary still
+ *  rejects seated non-authority callers; swallow so auto-queue does not toast. */
 function isProtocolRaceError(error: unknown): boolean {
   const raw = error instanceof Error ? error.message : String(error);
   return (
@@ -325,7 +327,9 @@ function isProtocolRaceError(error: unknown): boolean {
     raw.includes("CommunityNotReady") ||
     raw.includes("InvalidPhase") ||
     raw.includes("HandNotInProgress") ||
-    raw.includes("TableNotWaiting")
+    raw.includes("TableNotWaiting") ||
+    raw.includes("UnauthorizedAuthority") ||
+    raw.includes("TimeoutNotReached")
   );
 }
 
@@ -335,11 +339,7 @@ function swallowProtocolRace(
   refresh: () => Promise<void>
 ): void {
   const errorMsg = e instanceof Error ? e.message : String(e);
-  if (
-    isProtocolRaceError(e) ||
-    errorMsg.includes("Not awaiting") ||
-    errorMsg.includes("TimeoutNotReached")
-  ) {
+  if (isProtocolRaceError(e) || errorMsg.includes("Not awaiting")) {
     console.log(`[${label}] skipped (other client or crank won the race)`);
     void refresh();
     return;
@@ -1412,6 +1412,13 @@ export function usePokerGame(sessionKey?: SessionKeyParam | null): UsePokerGameR
       await refreshState();
       return tx;
     } catch (e) {
+      if (isProtocolRaceError(e)) {
+        // Keep in-progress so polling does not re-queue on the pre-upgrade binary.
+        setError(null);
+        setGameState((prev) => ({ ...prev, isRevealing: false }));
+        await refreshState();
+        return "";
+      }
       showdownRevealInProgressRef.current = false;
       const message = parseAnchorError(e);
       setError(message);
@@ -1618,9 +1625,9 @@ export function usePokerGame(sessionKey?: SessionKeyParam | null): UsePokerGameR
   }, [publicKey, isProtocolLeader, gameState.awaitingCommunityReveal, gameState.isRevealingCommunity, gameState.handState?.lastActionTime, gameState.phase, revealCommunityCards, refreshState]);
 
   // Auto-queue showdown_reveal once the hand reaches Showdown with 2+ players
-  // still in. Same debounce/ref guard as community auto-reveal. Anyone at the
-  // table may pay the queue; the circuit is permissionless.
+  // still in. Protocol leader only — unseated wallets must not pay MPC fees.
   useEffect(() => {
+    if (!publicKey || !isProtocolLeader) return;
     if (gameState.phase !== "Showdown") return;
     if (gameState.isRevealing || showdownRevealInProgressRef.current) return;
     const activeCount = gameState.handState?.activeCount ?? 0;
@@ -1637,16 +1644,11 @@ export function usePokerGame(sessionKey?: SessionKeyParam | null): UsePokerGameR
         .then((sig) => {
           if (sig) console.log("[Auto-reveal] Showdown hands revealed:", sig);
         })
-        .catch((e) => {
-          const errorMsg = e instanceof Error ? e.message : String(e);
-          if (!errorMsg.includes("Reveal is only available")) {
-            console.error("[Auto-reveal] Showdown reveal failed:", e);
-          }
-        });
+        .catch((e) => swallowProtocolRace(e, "Auto-showdown-reveal", refreshState));
     }, 500);
 
     return () => clearTimeout(timeout);
-  }, [gameState.phase, gameState.isRevealing, gameState.handState?.activeCount, gameState.players, revealHands]);
+  }, [publicKey, isProtocolLeader, gameState.phase, gameState.isRevealing, gameState.handState?.activeCount, gameState.players, revealHands, refreshState]);
 
   // Leader auto-queue: start_hand when two stacked players are waiting.
   // After a settled hand (handNumber > 0) wait 3s so results stay on screen.

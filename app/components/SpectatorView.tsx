@@ -7,6 +7,7 @@ import { GameStatusBar, mpcStatusLabel } from "./GameStatusBar";
 import { ShowdownOverlay } from "./WinCelebration";
 import { useTableState, type SpectatorPlayer } from "@/hooks/useTableState";
 import { useHandHistory, type HandHistoryEntry } from "@/hooks/useHandHistory";
+import { selectLiveHandCompleted } from "@/lib/actionTakenScope";
 import { getTokenByMint, getDefaultToken, baseUnitsToDisplay, type TokenInfo } from "@/lib/tokens";
 import { evaluateHand, getHandDescription, namedHands, bestHandSeats } from "@/lib/handEval";
 
@@ -127,7 +128,7 @@ export const SpectatorView: FC<SpectatorViewProps> = ({
     if (!sawThisHandRef.current) return;
     const n = state.handNumber;
     if (!n) return;
-    const match = onChainHistory.find((h) => h.handNumber === n);
+    const match = selectLiveHandCompleted(onChainHistory, n, state.tablePDA);
     if (!match) return;
     setCompletedOverlay(match);
 
@@ -143,7 +144,7 @@ export const SpectatorView: FC<SpectatorViewProps> = ({
       }
     }
     if (eventNames.size > 0) setNamedBySeat(eventNames);
-  }, [onChainHistory, state.handNumber]);
+  }, [onChainHistory, state.handNumber, state.tablePDA]);
 
   useEffect(() => {
     if (!completedOverlay) return;
@@ -220,16 +221,35 @@ export const SpectatorView: FC<SpectatorViewProps> = ({
     isRevealing,
     awaitingCommunityReveal: state.awaitingCommunityReveal,
     isDeckShuffled: state.isDeckShuffled,
-    dealtPlayers: 0,
-    activePlayers: 0,
+    dealtPlayers: state.dealtPlayers,
+    activePlayers: state.activePlayers,
     allRemainingRevealed,
     pot: state.pot,
   });
+  const tableSees = useMemo((): [number | null, number | null] | null => {
+    if (state.phase !== "Showdown" && state.phase !== "Settled") return null;
+    for (const p of state.players) {
+      if (p.status !== "playing" && p.status !== "allin") continue;
+      const [a, b] = p.revealedCards;
+      if (
+        p.cardsRevealed &&
+        a !== null &&
+        b !== null &&
+        a >= 0 &&
+        a <= 51 &&
+        b >= 0 &&
+        b <= 51
+      ) {
+        return [a, b];
+      }
+    }
+    return null;
+  }, [state.phase, state.players]);
   const houseSees = {
     cipherPrefix: state.deckCipherPrefix,
     explorerUrl: state.deckExplorerUrl,
     youSee: [null, null] as [null, null],
-    tableSees: null,
+    tableSees,
   };
 
   return (

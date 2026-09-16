@@ -5,6 +5,7 @@ import { useConnection } from "@solana/wallet-adapter-react";
 import { PublicKey } from "@solana/web3.js";
 import { Program, BN, Idl } from "@anchor-lang/core";
 import {
+  filterHistoryByTable,
   parseActionTakenFromBuffer as parseActionTakenPayload,
   selectLiveActions,
   tableIdToHex,
@@ -57,6 +58,8 @@ export interface PlayerResult {
 }
 
 export interface HandHistoryEntry {
+  /** Hex of on-chain `table_id: [u8; 32]` — live feed is program-wide. */
+  tableId: string;
   handNumber: number;
   timestamp: Date;
   communityCards: number[];
@@ -163,7 +166,9 @@ function matchDisc(data: Uint8Array, expected: readonly number[]): boolean {
 //   + chips_won[8] + chips_bet[8] + folded[1] + all_in[1]
 function parseHandCompletedFromBuffer(data: Uint8Array, signature: string): HandHistoryEntry | null {
   try {
-    let offset = 32; // skip table_id
+    const tableId = tableIdToHex(data.subarray(0, 32));
+    if (!tableId) return null;
+    let offset = 32;
     const handNumber = readU64LE(data, offset); offset += 8;
     const timestamp = readI64LE(data, offset); offset += 8;
 
@@ -207,7 +212,7 @@ function parseHandCompletedFromBuffer(data: Uint8Array, signature: string): Hand
       });
     }
 
-    return { handNumber, timestamp: new Date(timestamp * 1000), communityCards, totalPot, players, signature };
+    return { tableId, handNumber, timestamp: new Date(timestamp * 1000), communityCards, totalPot, players, signature };
   } catch (e) {
     console.error("[HandHistory] HandCompleted parse error:", e);
     return null;
@@ -401,7 +406,11 @@ export function useHandHistory(
   }, []);
 
   // Parse Anchor-decoded HandCompleted event data
-  const parseEventData = useCallback((eventData: any, signature?: string): HandHistoryEntry => {
+  const parseEventData = useCallback((eventData: any, signature?: string): HandHistoryEntry | null => {
+    const tableId = tableIdToHex(eventData.tableId ?? eventData.table_id);
+    // Fail closed: missing table_id must not enter history (onLogs will).
+    if (!tableId) return null;
+
     const players: PlayerResult[] = [];
     const resultsCount = eventData.resultsCount || eventData.results_count || 0;
 
@@ -429,6 +438,7 @@ export function useHandHistory(
       .filter((c: number) => c !== 255);
 
     return {
+      tableId,
       handNumber: Number(eventData.handNumber ?? eventData.hand_number ?? 0),
       timestamp: new Date(Number(eventData.timestamp ?? 0) * 1000),
       communityCards,
@@ -489,7 +499,7 @@ export function useHandHistory(
             const { hands, timeline } = parseEventsFromDataLog(dataLog, sig);
 
             for (const hand of hands) {
-              if (!historicalHands.some(h => h.handNumber === hand.handNumber)) {
+              if (!historicalHands.some(h => h.handNumber === hand.handNumber && h.tableId === hand.tableId)) {
                 historicalHands.push(hand);
               }
             }
@@ -508,7 +518,7 @@ export function useHandHistory(
         setHistory(prev => {
           const merged = [...historicalHands];
           for (const h of prev) {
-            if (!merged.some(m => m.handNumber === h.handNumber)) {
+            if (!merged.some(m => m.handNumber === h.handNumber && m.tableId === h.tableId)) {
               merged.push(h);
             }
           }
@@ -556,8 +566,9 @@ export function useHandHistory(
       // Anchor addEventListener for each event type
       const handCompletedId = program.addEventListener("HandCompleted" as any, (event: any, slot: number, signature: string) => {
         const entry = parseEventData(event, signature);
+        if (!entry) return;
         setHistory(prev => {
-          if (prev.some(h => h.handNumber === entry.handNumber)) return prev;
+          if (prev.some(h => h.handNumber === entry.handNumber && h.tableId === entry.tableId)) return prev;
           return [entry, ...prev].slice(0, 50);
         });
       });
@@ -652,7 +663,7 @@ export function useHandHistory(
 
               for (const hand of hands) {
                 setHistory(prev => {
-                  if (prev.some(h => h.handNumber === hand.handNumber)) return prev;
+                  if (prev.some(h => h.handNumber === hand.handNumber && h.tableId === hand.tableId)) return prev;
                   return [hand, ...prev].slice(0, 50);
                 });
               }
@@ -716,8 +727,13 @@ export function useHandHistory(
     );
   }, [handTimelines, handNumber, tablePDA]);
 
+  const scopedHistory = useMemo(
+    () => filterHistoryByTable(history, tablePDA),
+    [history, tablePDA],
+  );
+
   return {
-    history,
+    history: scopedHistory,
     handTimelines,
     liveActions,
     isListening,

@@ -150,3 +150,24 @@ export function selectLiveActions<T extends { type: string; timestamp: Date; tab
     .slice()
     .sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
 }
+
+/** Program-wide HandCompleted listeners leak other tables at the same handNumber. */
+export function filterHistoryByTable<T extends { tableId?: string }>(
+  history: readonly T[],
+  tablePDA: PublicKey | null | undefined,
+): T[] {
+  if (!tablePDA) return [];
+  return history.filter((h) => actionTakenMatchesTable(h.tableId, tablePDA));
+}
+
+/** Current-hand HandCompleted for this table only. Missing table_id fails closed. */
+export function selectLiveHandCompleted<T extends { tableId?: string; handNumber: number }>(
+  history: readonly T[],
+  handNumber: number | null | undefined,
+  tablePDA: PublicKey | null | undefined,
+): T | undefined {
+  if (handNumber == null || handNumber <= 0 || !tablePDA) return undefined;
+  return history.find(
+    (h) => h.handNumber === handNumber && actionTakenMatchesTable(h.tableId, tablePDA),
+  );
+}

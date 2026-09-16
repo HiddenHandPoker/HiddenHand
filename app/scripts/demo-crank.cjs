@@ -432,7 +432,7 @@ async function main() {
     return true;
   }
 
-  async function revealStreet(phase, hPda, dPda) {
+  async function revealStreet(phase, table, hPda, dPda) {
     const spec = {
       preFlop: { circuit: "reveal_flop", method: "revealFlop" },
       flop: { circuit: "reveal_turn", method: "revealTurn" },
@@ -440,6 +440,7 @@ async function main() {
     }[phase];
     if (!spec) return false;
     const off = newOffset();
+    const remaining = seatMetas(tPda, occupiedIndices(table.occupiedSeats, table.maxPlayers), false);
     await sendIx(
       spec.circuit,
       program.methods[spec.method](off).accountsPartial({
@@ -450,7 +451,7 @@ async function main() {
         handState: hPda,
         deckState: dPda,
         sessionToken: null,
-      }),
+      }).remainingAccounts(remaining),
       { skipPreflight: true, commitment: "confirmed" },
     );
     markFlight(spec.circuit, off);
@@ -716,7 +717,7 @@ async function main() {
           && (phase === "preFlop" || phase === "flop" || phase === "turn")
           && !skipNewMpc) {
         if (isAuth || elapsed >= ACTION_TIMEOUT_SECONDS) {
-          await go(() => revealStreet(phase, hPda, dPda));
+          await go(() => revealStreet(phase, table, hPda, dPda));
         }
       }
 

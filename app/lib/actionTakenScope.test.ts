@@ -7,6 +7,7 @@ import {
   actionTakenMatchesTable,
   parseActionTakenFromBuffer,
   selectLiveActions,
+  selectLiveHandCompleted,
   tableIdToHex,
 } from "./actionTakenScope";
 
@@ -143,5 +144,39 @@ describe("selectLiveActions table scope", () => {
     assert.deepEqual(selectLiveActions(timelines, 1, null), []);
     assert.deepEqual(selectLiveActions(timelines, 0, pdaA), []);
     assert.deepEqual(selectLiveActions(timelines, null, pdaA), []);
+  });
+});
+
+describe("selectLiveHandCompleted table scope", () => {
+  it("keeps the current table+hand and drops the same handNumber on another table", () => {
+    const tableA = generateTableId("table-a");
+    const tableB = generateTableId("table-b");
+    const [pdaA] = getTablePDA(tableA);
+    const hexA = tableIdToHex(tableA)!;
+    const hexB = tableIdToHex(tableB)!;
+
+    const history = [
+      { tableId: hexB, handNumber: 4, totalPot: 100 },
+      { tableId: hexA, handNumber: 4, totalPot: 200 },
+      { tableId: hexA, handNumber: 5, totalPot: 300 },
+    ];
+
+    const live = selectLiveHandCompleted(history, 4, pdaA);
+    assert.ok(live);
+    assert.equal(live!.totalPot, 200);
+    assert.equal(live!.tableId, hexA);
+  });
+
+  it("fails closed without tableId, tablePDA, or a live handNumber", () => {
+    const tableA = generateTableId("table-a");
+    const hexA = tableIdToHex(tableA)!;
+    const [pdaA] = getTablePDA(tableA);
+    const withId = [{ tableId: hexA, handNumber: 1, totalPot: 1 }];
+    const missingId = [{ handNumber: 1, totalPot: 1 }];
+
+    assert.equal(selectLiveHandCompleted(withId, 1, null), undefined);
+    assert.equal(selectLiveHandCompleted(withId, 0, pdaA), undefined);
+    assert.equal(selectLiveHandCompleted(withId, null, pdaA), undefined);
+    assert.equal(selectLiveHandCompleted(missingId, 1, pdaA), undefined);
   });
 });

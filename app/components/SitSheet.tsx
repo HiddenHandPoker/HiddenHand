@@ -70,9 +70,11 @@ export const SitSheet: FC<SitSheetProps> = ({
   return (
     <div
       className={`fixed inset-0 z-[60] flex ${compact ? "items-end" : "items-end sm:items-center"} justify-center p-0 sm:p-4`}
-      onClick={(e) => e.target === e.currentTarget && onClose()}
     >
-      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
+      <div
+        className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+        onClick={onClose}
+      />
 
       <div
         ref={dialogRef}

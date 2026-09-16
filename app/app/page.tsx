@@ -157,9 +157,9 @@ export default function Home() {
               className="text-xl md:text-2xl text-[var(--text-secondary)] mb-8 leading-relaxed animate-fade-in-up max-w-xl mx-auto"
               style={{ animationDelay: '0.4s', opacity: 0, animationFillMode: 'forwards' }}
             >
-              The only poker game where the house can&apos;t see your cards.
+              Hole cards sealed in Arcium MPC — the house sees ciphertext.
               <span className="block mt-1 text-[var(--text-muted)] text-base">
-                Encrypted. On-chain. Provably fair.
+                Encrypted. On-chain. Play-money on Solana devnet.
               </span>
             </p>
 
