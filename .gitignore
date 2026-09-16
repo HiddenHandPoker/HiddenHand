@@ -32,3 +32,6 @@ _local_assessment/
 
 # Marketing materials (private)
 marketing/
+
+# Local git worktrees
+.worktrees/
