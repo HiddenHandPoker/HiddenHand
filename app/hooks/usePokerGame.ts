@@ -321,7 +321,10 @@ function isProtocolRaceError(error: unknown): boolean {
   return (
     raw.includes("DeckAlreadyShuffled") ||
     raw.includes("HandAlreadyInProgress") ||
-    raw.includes("CommunityNotReady")
+    raw.includes("CommunityNotReady") ||
+    raw.includes("InvalidPhase") ||
+    raw.includes("HandNotInProgress") ||
+    raw.includes("TableNotWaiting")
   );
 }
 
@@ -1509,16 +1512,11 @@ export function usePokerGame(sessionKey?: SessionKeyParam | null): UsePokerGameR
     if (playersWithChips < 2) return;
 
     const delayMs = tableHandNumber > 0 ? 3000 : 500;
-    const tick = () => {
+    const timeout = setTimeout(() => {
       if (startHandInProgressRef.current) return;
       startHandRef.current?.().catch((e) => swallowProtocolRace(e, "Auto-start", refreshState));
-    };
-    const timeout = setTimeout(tick, delayMs);
-    const interval = setInterval(tick, 5000);
-    return () => {
-      clearTimeout(timeout);
-      clearInterval(interval);
-    };
+    }, delayMs);
+    return () => clearTimeout(timeout);
   }, [publicKey, isProtocolLeader, gameState.tableStatus, playersWithChips, tableHandNumber, refreshState]);
 
   // Leader auto-queue: shuffle once the hand is Dealing and the deck is open.
@@ -1763,16 +1761,11 @@ export function usePokerGame(sessionKey?: SessionKeyParam | null): UsePokerGameR
     if (!settlePhase) return;
     if (!allRemainingRevealed) return;
 
-    const tick = () => {
+    const timeout = setTimeout(() => {
       if (showdownSettleInProgressRef.current) return;
       showdownRef.current?.().catch((e) => swallowProtocolRace(e, "Auto-showdown", refreshState));
-    };
-    const timeout = setTimeout(tick, 500);
-    const interval = setInterval(tick, 5000);
-    return () => {
-      clearTimeout(timeout);
-      clearInterval(interval);
-    };
+    }, 500);
+    return () => clearTimeout(timeout);
   }, [publicKey, isProtocolLeader, gameState.phase, gameState.pot, allRemainingRevealed, refreshState]);
 
   // Timeout a player who hasn't acted in time (anyone can call)
