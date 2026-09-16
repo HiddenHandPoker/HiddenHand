@@ -2,12 +2,13 @@
 
 import { FC, useState, useEffect, useRef } from "react";
 import { PlayerSeat } from "./PlayerSeat";
-import { CardHand } from "./Card";
+import { Card } from "./Card";
 import { ProvablyFairBadge } from "./ProvablyFairBadge";
 import { ChipAnimationLayer } from "./ChipAnimation";
 import { type TokenInfo, getDefaultToken, baseUnitsToDisplay } from "@/lib/tokens";
 import { type PlayerStats } from "@/hooks/usePlayerStats";
 import { useIsMobileLandscape } from "@/hooks/useIsMobile";
+import { soundManager } from "@/lib/sounds";
 
 interface Player {
   seatIndex: number;
@@ -34,6 +35,11 @@ interface PokerTableProps {
   bigBlind: number;
   isShowdownPhase?: boolean;
   isDeckShuffled?: boolean; // MPC shuffle has completed
+  isShuffling?: boolean;
+  isDecrypting?: boolean;
+  isRevealingCommunity?: boolean;
+  isRevealing?: boolean;
+  awaitingCommunityReveal?: boolean;
   // Chip animation triggers
   chipBetTrigger?: { seatIndex: number; amount: number; key: string } | null;
   chipWinTrigger?: { seatIndex: number; key: string } | null;
@@ -57,6 +63,21 @@ const SEAT_POSITIONS_DESKTOP = [
   { top: "28%", left: "88%", transform: "translate(-50%, -50%)" }, // Top right
   { top: "72%", left: "88%", transform: "translate(-50%, -50%)" }, // Bottom right
 ];
+
+function slotsForHoldCount(
+  holdCount: number | null,
+  phase: string,
+  revealing: boolean,
+): number[] {
+  if (holdCount === 3) return [0, 1, 2];
+  if (holdCount === 4) return [3];
+  if (holdCount === 5) return [4];
+  if (!revealing) return [];
+  if (phase === "PreFlop") return [0, 1, 2];
+  if (phase === "Flop") return [3];
+  if (phase === "Turn") return [4];
+  return [];
+}
 
 // Tighter positions for mobile landscape — seats pulled closer to table edge
 const SEAT_POSITIONS_MOBILE = [
@@ -82,6 +103,11 @@ export const PokerTable: FC<PokerTableProps> = ({
   bigBlind,
   isShowdownPhase = false,
   isDeckShuffled = false,
+  isShuffling = false,
+  isDecrypting = false,
+  isRevealingCommunity = false,
+  isRevealing = false,
+  awaitingCommunityReveal = false,
   chipBetTrigger = null,
   chipWinTrigger = null,
   showWinCelebration = false,
@@ -114,9 +140,14 @@ export const PokerTable: FC<PokerTableProps> = ({
     }
   }, [phase]);
 
-  // Track previous community card count for flip animation
-  const [newCardIndices, setNewCardIndices] = useState<Set<number>>(new Set());
-  const prevCardCountRef = useRef(0);
+  // Shuffle theater: keep the riffle going until the flag clears AND the deck is sealed.
+  const shuffleTheater = isShuffling || (phase === "Dealing" && !isDeckShuffled);
+  useEffect(() => {
+    if (!isShuffling) return;
+    soundManager.play("shuffle");
+    const id = setInterval(() => soundManager.play("shuffle"), 3500);
+    return () => clearInterval(id);
+  }, [isShuffling]);
 
   // Calculate SB and BB positions
   const occupiedSeats = players
@@ -132,27 +163,26 @@ export const PokerTable: FC<PokerTableProps> = ({
   const sbPosition = getNextOccupied(dealerPosition);
   const bbPosition = getNextOccupied(sbPosition);
 
-  // Revealed community cards
+  // Revealed community cards (255 = not yet written)
   const revealedCards = communityCards.filter((c) => c !== 255);
 
-  // Detect new community cards and mark them for flip animation
-  useEffect(() => {
-    const count = revealedCards.length;
-    if (count > prevCardCountRef.current) {
-      const indices = new Set<number>();
-      for (let i = prevCardCountRef.current; i < count; i++) indices.add(i);
-      setNewCardIndices(indices);
-      // Clear animation class after it plays
-      const t = setTimeout(() => setNewCardIndices(new Set()), 500);
-      prevCardCountRef.current = count;
-      return () => clearTimeout(t);
-    }
-    if (count < prevCardCountRef.current) {
-      // Reset on new hand
-      prevCardCountRef.current = count;
-      setNewCardIndices(new Set());
-    }
-  }, [revealedCards.length]);
+  // Hold board faces until the reveal flag clears AND the street's cards are in state.
+  const revealHoldCountRef = useRef<number | null>(null);
+  const communityRevealing = isRevealingCommunity || awaitingCommunityReveal;
+  if (communityRevealing) {
+    if (phase === "PreFlop") revealHoldCountRef.current = 3;
+    else if (phase === "Flop") revealHoldCountRef.current = 4;
+    else if (phase === "Turn") revealHoldCountRef.current = 5;
+  }
+  const holdCount = revealHoldCountRef.current;
+  const pendingSlots = slotsForHoldCount(holdCount, phase, communityRevealing);
+  const streetStillPending =
+    pendingSlots.length > 0 &&
+    (communityRevealing || pendingSlots.some((i) => revealedCards[i] === undefined));
+  const activePendingSlots = streetStillPending ? pendingSlots : [];
+  if (!communityRevealing && holdCount !== null && revealedCards.length >= holdCount) {
+    revealHoldCountRef.current = null;
+  }
 
   return (
     <div className="relative w-full max-w-5xl aspect-[16/10] mx-auto poker-table-container">
@@ -199,7 +229,7 @@ export const PokerTable: FC<PokerTableProps> = ({
 
       {/* Felt surface */}
       <div
-        className="absolute inset-5 sm:inset-10 rounded-[42%] overflow-hidden"
+        className={`absolute inset-5 sm:inset-10 rounded-[42%] overflow-hidden${shuffleTheater ? " mpc-shuffle-felt" : ""}`}
         style={{
           backgroundImage: "url('/hiddenhand-table-bg.webp')",
           backgroundSize: "cover",
@@ -265,39 +295,52 @@ export const PokerTable: FC<PokerTableProps> = ({
               }}
             />
 
-            {/* Cards */}
+            {/* Cards — shuffle riffle, then encrypted backs that only flip once MPC + state agree */}
             <div className="relative flex gap-1.5 sm:gap-3">
-              {[0, 1, 2, 3, 4].map((idx) => {
-                const card = revealedCards[idx];
-                // Determine which phase section this card belongs to
-                const isFlop = idx < 3;
-                const isTurn = idx === 3;
-                const isRiver = idx === 4;
-
-                return (
+              {shuffleTheater ? (
+                [0, 1, 2].map((i) => (
                   <div
-                    key={idx}
-                    className={`relative ${newCardIndices.has(idx) ? "animate-deal" : ""}`}
+                    key={`riffle-${i}`}
+                    className="mpc-riffle-card"
+                    style={{ animationDelay: `${i * 80}ms` }}
                   >
-                    {card !== undefined ? (
-                      <CardHand cards={[card]} size={isMobile ? "xs" : "md"} dealt />
-                    ) : (
-                      /* Empty card slot */
-                      <div
-                        className="w-9 h-[3.15rem] sm:w-16 sm:h-[5.6rem] rounded-lg border border-dashed flex items-center justify-center transition-all duration-300"
-                        style={{
-                          borderColor: "rgba(255,255,255,0.1)",
-                          background: "rgba(0,0,0,0.1)",
-                        }}
-                      >
-                        <span className="text-[var(--text-muted)] text-[8px] sm:text-xs opacity-50">
-                          {isFlop ? (idx === 1 ? "FLOP" : "") : isTurn ? "TURN" : "RIVER"}
-                        </span>
-                      </div>
-                    )}
+                    <Card card={null} encrypted size={isMobile ? "xs" : "md"} />
                   </div>
-                );
-              })}
+                ))
+              ) : (
+                [0, 1, 2, 3, 4].map((idx) => {
+                  const card = revealedCards[idx];
+                  const isPending = activePendingSlots.includes(idx);
+                  const showFace = card !== undefined && !isPending;
+                  const isFlop = idx < 3;
+                  const isTurn = idx === 3;
+                  const isRiver = idx === 4;
+
+                  return (
+                    <div key={idx} className="relative">
+                      {showFace || isPending ? (
+                        <Card
+                          card={showFace ? card : null}
+                          encrypted={isPending}
+                          size={isMobile ? "xs" : "md"}
+                        />
+                      ) : (
+                        <div
+                          className="w-9 h-[3.15rem] sm:w-16 sm:h-[5.6rem] rounded-lg border border-dashed flex items-center justify-center transition-all duration-300"
+                          style={{
+                            borderColor: "rgba(255,255,255,0.1)",
+                            background: "rgba(0,0,0,0.1)",
+                          }}
+                        >
+                          <span className="text-[var(--text-muted)] text-[8px] sm:text-xs opacity-50">
+                            {isFlop ? (idx === 1 ? "FLOP" : "") : isTurn ? "TURN" : "RIVER"}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })
+              )}
             </div>
           </div>
 
@@ -315,7 +358,10 @@ export const PokerTable: FC<PokerTableProps> = ({
             >
               {displayPhase}
             </div>
-            <ProvablyFairBadge isActive={isDeckShuffled} />
+            <ProvablyFairBadge
+              isActive={shuffleTheater || isDeckShuffled || isRevealingCommunity || isRevealing}
+              isShuffling={shuffleTheater}
+            />
           </div>
 
           {/* Blinds info */}
@@ -355,6 +401,8 @@ export const PokerTable: FC<PokerTableProps> = ({
               status={player?.status ?? "empty"}
               isCurrentPlayer={isCurrentPlayer}
               isShowdownPhase={isShowdownPhase}
+              isRevealing={isRevealing}
+              isDecrypting={isDecrypting && isCurrentPlayer}
               token={token}
               playerStats={player?.player && playerStatsMap ? playerStatsMap.get(player.player) : undefined}
               compact={isMobile}

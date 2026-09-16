@@ -44,7 +44,8 @@ import { BreakReminder } from "@/components/BreakReminder";
 import { SelfExclusionBanner } from "@/components/SelfExclusionBanner";
 import { RotateDeviceOverlay } from "@/components/RotateDeviceOverlay";
 import { useIsMobileLandscape, useIsMobile } from "@/hooks/useIsMobile";
-import { GameStatusBar, mpcStatusLabel } from "@/components/GameStatusBar";
+import { GameStatusBar, mpcStatusLabel, DECK_EXPLORER, formatDeckCipherPrefix } from "@/components/GameStatusBar";
+import { getDeckPDA } from "@/lib/program";
 
 export default function TablePage({ params }: { params: Promise<{ tableId: string }> }) {
   const { tableId } = React.use(params);
@@ -694,12 +695,12 @@ export default function TablePage({ params }: { params: Promise<{ tableId: strin
   // Also include revealed cards for showdown display
   const playersForTable = useMemo(() => {
     return gameState.players.map((p) => {
-      const isCurrentPlayer = p.player === publicKey?.toString();
-      // If this is the current player and we have decrypted cards, use those
+      const isHero = publicKey !== null && p.player === publicKey.toString();
+      // Hero: decrypted holes only when decrypt has finished. Everyone else: never.
       const holeCards: [number | null, number | null] =
-        isCurrentPlayer && gameState.decryptedCards[0] !== null
+        isHero && !gameState.isDecrypting && gameState.decryptedCards[0] !== null
           ? gameState.decryptedCards
-          : p.holeCards;
+          : [null, null];
 
       return {
         seatIndex: p.seatIndex,
@@ -708,17 +709,52 @@ export default function TablePage({ params }: { params: Promise<{ tableId: strin
         currentBet: p.currentBet,
         holeCards,
         status: p.status,
-        isEncrypted: p.isEncrypted && gameState.decryptedCards[0] === null, // Still encrypted if not decrypted (use === null, not !value, since card 0 is valid)
-        // Include revealed cards for showdown display
+        isEncrypted: !isHero || gameState.isDecrypting || gameState.decryptedCards[0] === null,
         revealedCards: p.revealedCards,
         cardsRevealed: p.cardsRevealed,
       };
     });
-  }, [gameState.players, gameState.decryptedCards, publicKey]);
+  }, [gameState.players, gameState.decryptedCards, gameState.isDecrypting, publicKey]);
 
   // Determine if we're in showdown display mode (Showdown or Settled with revealed cards)
   const isShowdownPhase = gameState.phase === "Showdown" || gameState.phase === "Settled";
   const allPlayersRevealed = allRemainingRevealed;
+
+  const deckPda = useMemo(() => {
+    if (!gameState.tablePDA || !gameState.table) return null;
+    const n = gameState.table.handNumber.toNumber();
+    if (n <= 0) return null;
+    return getDeckPDA(gameState.tablePDA, BigInt(n))[0];
+  }, [gameState.tablePDA, gameState.table]);
+
+  const houseSees = useMemo(() => {
+    const youSee: [number | null, number | null] =
+      currentPlayer && !gameState.isDecrypting && gameState.decryptedCards[0] !== null
+        ? gameState.decryptedCards
+        : [null, null];
+    const tableSees: [number | null, number | null] | null =
+      currentPlayer &&
+      isShowdownPhase &&
+      currentPlayer.cardsRevealed &&
+      currentPlayer.revealedCards &&
+      currentPlayer.revealedCards[0] !== null &&
+      currentPlayer.revealedCards[1] !== null
+        ? currentPlayer.revealedCards
+        : null;
+    return {
+      cipherPrefix: formatDeckCipherPrefix(gameState.deckState?.deck),
+      explorerUrl: deckPda ? DECK_EXPLORER(deckPda) : null,
+      youSee,
+      tableSees,
+    };
+  }, [
+    currentPlayer,
+    gameState.isDecrypting,
+    gameState.decryptedCards,
+    gameState.deckState,
+    isShowdownPhase,
+    deckPda,
+  ]);
 
   // If wallet not connected, show spectator view (read-only, no wallet needed)
   if (!connected) {
@@ -1189,6 +1225,7 @@ export default function TablePage({ params }: { params: Promise<{ tableId: strin
               }
               actionLabel={actionLabel}
               mpcLabel={mpcLabel}
+              houseSees={houseSees}
             />
           )}
 
@@ -1208,6 +1245,11 @@ export default function TablePage({ params }: { params: Promise<{ tableId: strin
               bigBlind={gameState.bigBlind}
               isShowdownPhase={isShowdownPhase}
               isDeckShuffled={gameState.isDeckShuffled}
+              isShuffling={gameState.isShuffling}
+              isDecrypting={gameState.isDecrypting}
+              isRevealingCommunity={gameState.isRevealingCommunity}
+              isRevealing={gameState.isRevealing}
+              awaitingCommunityReveal={gameState.awaitingCommunityReveal}
               chipBetTrigger={betTrigger}
               chipWinTrigger={winTrigger}
               showWinCelebration={showCelebration}

@@ -28,6 +28,10 @@ interface PlayerSeatProps {
   compact?: boolean; // Mobile compact mode
   /** Empty seats: sit here (Waiting tables). */
   onSit?: () => void;
+  /** showdown_reveal in flight — keep opponent cards encrypted until it clears AND faces exist. */
+  isRevealing?: boolean;
+  /** deal_to_seat decrypt in flight — keep hero faces down until it clears AND holes exist. */
+  isDecrypting?: boolean;
 }
 
 export const PlayerSeat: FC<PlayerSeatProps> = ({
@@ -50,6 +54,8 @@ export const PlayerSeat: FC<PlayerSeatProps> = ({
   playerStats,
   compact = false,
   onSit,
+  isRevealing = false,
+  isDecrypting = false,
 }) => {
   const [showHUD, setShowHUD] = useState(false);
   const [showNotes, setShowNotes] = useState(false);
@@ -62,22 +68,38 @@ export const PlayerSeat: FC<PlayerSeatProps> = ({
   const isFolded = status === "folded";
   const isAllIn = status === "allin";
 
-  // Determine which cards to display and whether to show them
-  // During showdown/settled: show revealed cards for players who have revealed
-  // During regular play: only show to current player
-  const hasRevealedCards = cardsRevealed && revealedCards?.[0] !== null && revealedCards?.[1] !== null;
-  const showCards = isCurrentPlayer || (isShowdownPhase && hasRevealedCards);
-  const displayCards: [number | null, number | null] = hasRevealedCards && isShowdownPhase
+  // Determine which cards to display and whether to show them.
+  // Hero: decrypted holes only when this seat is the connected wallet and decrypt has finished.
+  // Non-hero, non-revealed: encrypted / face-down. Never render another seat's holeCards.
+  const hasRevealedCards =
+    Boolean(cardsRevealed) &&
+    revealedCards != null &&
+    revealedCards[0] !== null &&
+    revealedCards[1] !== null &&
+    revealedCards[0] >= 0 &&
+    revealedCards[0] <= 51 &&
+    revealedCards[1] >= 0 &&
+    revealedCards[1] <= 51;
+  const showdownFacesReady = isShowdownPhase && hasRevealedCards && !isRevealing;
+  const heroHolesReady =
+    isCurrentPlayer &&
+    !isDecrypting &&
+    holeCards[0] !== null &&
+    holeCards[1] !== null;
+  const showCards = heroHolesReady || showdownFacesReady;
+  const displayCards: [number | null, number | null] = showdownFacesReady
     ? revealedCards!
-    : holeCards;
+    : heroHolesReady
+      ? holeCards
+      : [null, null];
 
-  // Show encrypted effect for opponent's hidden cards during active gameplay
-  // This visually communicates "these cards are private" to the viewer
-  const isEncrypted = !showCards &&
-    !isCurrentPlayer &&
+  // Encrypted backs for anyone the table cannot see yet (opponents in-hand, or hero still decrypting).
+  const isEncrypted =
+    !showCards &&
     status !== "folded" &&
     status !== "empty" &&
-    (status === "playing" || status === "allin");
+    (status === "playing" || status === "allin") &&
+    (!isCurrentPlayer || isDecrypting);
 
   // Close notes popover on outside click
   useEffect(() => {

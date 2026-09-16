@@ -3,15 +3,19 @@
 import { FC, useState } from "react";
 
 interface ProvablyFairBadgeProps {
-  isActive: boolean; // MPC shuffle has completed (deck sealed on-chain)
+  isActive: boolean; // shuffle in flight, deck sealed, or later MPC reveal
+  isShuffling?: boolean;
   variant?: "compact" | "expanded"; // compact for in-table, expanded for info panel
 }
 
 export const ProvablyFairBadge: FC<ProvablyFairBadgeProps> = ({
   isActive,
+  isShuffling = false,
   variant = "compact",
 }) => {
   const [showTooltip, setShowTooltip] = useState(false);
+  const label = isShuffling ? "MPC shuffle in flight" : "Deck sealed to MXE";
+  const accent = isShuffling ? "cyan" : "emerald";
 
   if (!isActive) return null;
 
@@ -32,16 +36,24 @@ export const ProvablyFairBadge: FC<ProvablyFairBadgeProps> = ({
         tabIndex={0}
       >
         <div
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium cursor-help transition-all duration-300"
-          style={{
-            background: "linear-gradient(135deg, rgba(46, 204, 113, 0.15) 0%, rgba(39, 174, 96, 0.08) 100%)",
-            border: "1px solid rgba(46, 204, 113, 0.3)",
-            boxShadow: "0 0 12px rgba(46, 204, 113, 0.15)",
-          }}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[10px] sm:text-xs font-medium cursor-help transition-all duration-300"
+          style={
+            accent === "cyan"
+              ? {
+                  background: "linear-gradient(135deg, rgba(34, 211, 238, 0.18) 0%, rgba(8, 145, 178, 0.08) 100%)",
+                  border: "1px solid rgba(34, 211, 238, 0.35)",
+                  boxShadow: "0 0 12px rgba(34, 211, 238, 0.2)",
+                }
+              : {
+                  background: "linear-gradient(135deg, rgba(46, 204, 113, 0.15) 0%, rgba(39, 174, 96, 0.08) 100%)",
+                  border: "1px solid rgba(46, 204, 113, 0.3)",
+                  boxShadow: "0 0 12px rgba(46, 204, 113, 0.15)",
+                }
+          }
         >
           {/* Shield checkmark icon */}
           <svg
-            className="w-3.5 h-3.5 text-emerald-400"
+            className={`w-3.5 h-3.5 ${accent === "cyan" ? "text-cyan-400" : "text-emerald-400"}`}
             fill="currentColor"
             viewBox="0 0 20 20"
           >
@@ -51,8 +63,8 @@ export const ProvablyFairBadge: FC<ProvablyFairBadgeProps> = ({
               clipRule="evenodd"
             />
           </svg>
-          <span className="text-emerald-400 tracking-wide uppercase">
-            MPC Verified
+          <span className={`${accent === "cyan" ? "text-cyan-400" : "text-emerald-400"} tracking-wide`}>
+            {label}
           </span>
         </div>
 

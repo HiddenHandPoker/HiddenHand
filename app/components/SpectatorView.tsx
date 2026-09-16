@@ -3,6 +3,7 @@
 import { FC, useMemo, useEffect, useRef, useState } from "react";
 import { PokerTable } from "./PokerTable";
 import { useChipAnimations } from "./ChipAnimation";
+import { GameStatusBar, mpcStatusLabel } from "./GameStatusBar";
 import { useTableState, type SpectatorPlayer } from "@/hooks/useTableState";
 import { getTokenByMint, getDefaultToken, baseUnitsToDisplay, type TokenInfo } from "@/lib/tokens";
 
@@ -174,6 +175,33 @@ export const SpectatorView: FC<SpectatorViewProps> = ({
   const isShowdownPhase = state.phase === "Showdown" || state.phase === "Settled";
   const hasPlayers = state.currentPlayers > 0;
   const hasOpenSeats = state.players.some((p) => p.status === "empty");
+  const allRemainingRevealed = useMemo(() => {
+    const remaining = state.players.filter(
+      (p) => p.status === "playing" || p.status === "allin",
+    );
+    return remaining.length <= 1 || remaining.every((p) => p.cardsRevealed);
+  }, [state.players]);
+  const isShuffling = state.phase === "Dealing" && !state.isDeckShuffled;
+  const isRevealing = state.phase === "Showdown" && !allRemainingRevealed;
+  const mpcLabel = mpcStatusLabel({
+    phase: state.phase,
+    isShuffling,
+    isDecrypting: false,
+    isRevealingCommunity: state.awaitingCommunityReveal,
+    isRevealing,
+    awaitingCommunityReveal: state.awaitingCommunityReveal,
+    isDeckShuffled: state.isDeckShuffled,
+    dealtPlayers: 0,
+    activePlayers: 0,
+    allRemainingRevealed,
+    pot: state.pot,
+  });
+  const houseSees = {
+    cipherPrefix: state.deckCipherPrefix,
+    explorerUrl: state.deckExplorerUrl,
+    youSee: [null, null] as [null, null],
+    tableSees: null,
+  };
 
   return (
     <div className="space-y-6">
@@ -325,6 +353,21 @@ export const SpectatorView: FC<SpectatorViewProps> = ({
         </div>
       )}
 
+      {state.tablePDA && state.tableStatus === "Playing" && (
+        <GameStatusBar
+          phase={state.phase}
+          potLabel={`${fmt(state.pot)} ${token.symbol}`}
+          toCallLabel={null}
+          actionLabel={
+            state.awaitingCommunityReveal
+              ? "Waiting on the board"
+              : `Action: Seat ${state.actionOn + 1}`
+          }
+          mpcLabel={mpcLabel}
+          houseSees={houseSees}
+        />
+      )}
+
       {/* Poker Table — now with chip animations */}
       {state.tablePDA && (
         <PokerTable
@@ -345,6 +388,11 @@ export const SpectatorView: FC<SpectatorViewProps> = ({
           bigBlind={state.bigBlind}
           isShowdownPhase={isShowdownPhase}
           isDeckShuffled={state.isDeckShuffled}
+          isShuffling={isShuffling}
+          isDecrypting={false}
+          isRevealingCommunity={state.awaitingCommunityReveal}
+          isRevealing={isRevealing}
+          awaitingCommunityReveal={state.awaitingCommunityReveal}
           chipBetTrigger={betTrigger}
           chipWinTrigger={winTrigger}
           token={token}

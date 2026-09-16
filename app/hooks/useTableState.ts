@@ -25,6 +25,7 @@ import {
   getDeckPDA,
   generateTableId,
 } from "@/lib/program";
+import { DECK_EXPLORER, formatDeckCipherPrefix } from "@/components/GameStatusBar";
 import {
   mapPlayerStatus,
   mapGamePhase,
@@ -79,6 +80,10 @@ export interface TableState {
   lastReadyTime: number | null;
   // Deck state
   isDeckShuffled: boolean;
+  awaitingCommunityReveal: boolean;
+  /** First 8 bytes of sealed `deck[0]` as `0xABCD…`. Null until the deck account exists. */
+  deckCipherPrefix: string | null;
+  deckExplorerUrl: string | null;
   // Spectator metadata
   isSpectating: boolean;
   isConnected: boolean;
@@ -141,6 +146,9 @@ const initialState: TableState = {
   lastActionTime: null,
   lastReadyTime: null,
   isDeckShuffled: false,
+  awaitingCommunityReveal: false,
+  deckCipherPrefix: null,
+  deckExplorerUrl: null,
   isSpectating: true,
   isConnected: false,
   currentPlayerSeat: null,
@@ -278,12 +286,14 @@ export function useTableState(tableId: string): UseTableStateResult {
       // Fetch hand state if playing
       let handState = null;
       let deckState = null;
+      let deckPDA = null;
       if (tableStatus === "Playing" && handNumber > 0) {
         try {
           const [handPDA] = getHandPDA(tablePDA, BigInt(handNumber));
           handState = await accounts.handState.fetch(handPDA);
 
-          const [deckPDA] = getDeckPDA(tablePDA, BigInt(handNumber));
+          const [derivedDeckPDA] = getDeckPDA(tablePDA, BigInt(handNumber));
+          deckPDA = derivedDeckPDA;
           try {
             deckState = await accounts.deckState.fetch(deckPDA);
           } catch {
@@ -345,6 +355,9 @@ export function useTableState(tableId: string): UseTableStateResult {
         lastActionTime: handState?.lastActionTime?.toNumber() ?? null,
         lastReadyTime: table.lastReadyTime?.toNumber() ?? null,
         isDeckShuffled: deckState?.isShuffled ?? false,
+        awaitingCommunityReveal: handState?.awaitingCommunityReveal ?? false,
+        deckCipherPrefix: formatDeckCipherPrefix(deckState?.deck),
+        deckExplorerUrl: deckPDA ? DECK_EXPLORER(deckPDA) : null,
         isSpectating,
         isConnected: connected,
         currentPlayerSeat,
