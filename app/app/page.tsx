@@ -2,22 +2,40 @@
 
 import { useWallet } from "@solana/wallet-adapter-react";
 import { useRouter } from "next/navigation";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { WalletButton } from "@/components/WalletButton";
+import { FaucetButton } from "@/components/FaucetButton";
 import { SoundToggle } from "@/components/SoundToggle";
 import { NETWORK } from "@/contexts/WalletProvider";
+import { DEMO_TABLE_ID } from "@/lib/demo";
 
 export default function Home() {
   const { connected } = useWallet();
   const router = useRouter();
+  const [playIntent, setPlayIntent] = useState(false);
+  const [faucetOk, setFaucetOk] = useState<boolean | null>(null);
 
-  // Redirect to lobby when wallet is connected
+  // Connect goes to lobby only after Play — never steal the Watch path.
   useEffect(() => {
-    if (connected) {
-      router.push("/lobby");
-    }
-  }, [connected, router]);
+    if (!connected || !playIntent) return;
+    router.push("/lobby?quick=1");
+  }, [connected, playIntent, router]);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/faucet")
+      .then((res) => res.json())
+      .then((data: { ok?: boolean }) => {
+        if (!cancelled) setFaucetOk(data.ok === true);
+      })
+      .catch(() => {
+        if (!cancelled) setFaucetOk(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   return (
     <main className="min-h-screen relative">
@@ -149,16 +167,44 @@ export default function Home() {
               className="animate-fade-in-up flex flex-col items-center gap-3"
               style={{ animationDelay: '0.6s', opacity: 0, animationFillMode: 'forwards' }}
             >
-              <WalletButton className="btn-gold !text-base !px-10 !py-3 !rounded-xl !font-bold !w-full sm:!w-auto" />
-              <a
-                href="/lobby"
+              <Link
+                href={`/table/${encodeURIComponent(DEMO_TABLE_ID)}`}
+                className="btn-gold !text-base !px-10 !py-3 !rounded-xl !font-bold !w-full sm:!w-auto inline-flex items-center justify-center"
+              >
+                Watch a live hand
+              </Link>
+
+              <p className="text-[10px] px-3 py-1 rounded-full uppercase tracking-wider font-semibold text-[var(--gold-light)] border border-[var(--gold-main)]/30 bg-[var(--gold-main)]/10">
+                Play-money · Solana devnet · Arcium MPC
+              </p>
+
+              <p className="text-[var(--text-muted)] text-sm max-w-md leading-relaxed">
+                Each MPC step takes about 15–20 seconds on devnet. That wait is the dealer — randomness never hits the chain.
+              </p>
+
+              <div className="flex flex-col sm:flex-row items-center gap-3 mt-1">
+                <WalletButton className="btn-gold !text-sm !px-5 !py-2.5 !rounded-xl" />
+                <FaucetButton />
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setPlayIntent(true)}
                 className="text-[var(--text-muted)] hover:text-[var(--gold-light)] text-sm transition-colors flex items-center gap-1.5"
               >
-                Browse tables without a wallet
+                Get free chips and sit
                 <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                 </svg>
-              </a>
+              </button>
+              {!connected && playIntent && (
+                <p className="text-[var(--text-muted)] text-xs">
+                  Connect a wallet to sit.
+                </p>
+              )}
+              {faucetOk === false && (
+                <p className="text-red-400 text-xs font-medium">Faucet offline</p>
+              )}
             </div>
           </div>
 
@@ -193,7 +239,7 @@ export default function Home() {
                   </svg>
                 ),
                 title: "On Solana",
-                desc: "Bets settle on-chain. Shuffle, deal, and board reveals take a few seconds in MPC — that's the dealer, not a hang.",
+                desc: "Each MPC step takes about 15–20 seconds on devnet. That wait is the dealer — randomness never hits the chain.",
               },
             ].map((feature, idx) => (
               <div

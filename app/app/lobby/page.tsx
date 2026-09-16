@@ -71,6 +71,15 @@ export default function LobbyPage() {
     fetchStats();
   }, [fetchStats]);
 
+  // Landing Play CTA lands here with ?quick=1 once the wallet is connected.
+  useEffect(() => {
+    if (!connected) return;
+    const wantsQuick =
+      typeof window !== "undefined" &&
+      new URLSearchParams(window.location.search).get("quick") === "1";
+    if (wantsQuick) setShowQuickPlay(true);
+  }, [connected]);
+
   const myStats = publicKey ? getPlayerStats(publicKey.toString()) : null;
 
   // Total players across all visible tables
@@ -575,6 +584,7 @@ export default function LobbyPage() {
           loading={loading}
           currentWallet={publicKey?.toString()}
           viewMode={viewMode}
+          onQuickPlay={() => setShowQuickPlay(true)}
         />
       </div>
 

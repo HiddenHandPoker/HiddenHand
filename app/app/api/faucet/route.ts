@@ -35,6 +35,11 @@ function rpcUrl(): string {
   );
 }
 
+export async function GET() {
+  const configured = Boolean(process.env.FAUCET_SECRET);
+  return Response.json({ ok: configured, token: "HHC" });
+}
+
 export async function POST(req: NextRequest) {
   try {
     const { wallet } = await req.json();

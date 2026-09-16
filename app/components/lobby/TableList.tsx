@@ -1,7 +1,9 @@
 "use client";
 
 import { FC } from "react";
+import Link from "next/link";
 import { type LobbyTable } from "@/hooks/useLobby";
+import { DEMO_TABLE_ID } from "@/lib/demo";
 import { TableCard } from "./TableCard";
 import { TableRow } from "./TableRow";
 
@@ -12,6 +14,7 @@ interface TableListProps {
   loading: boolean;
   currentWallet?: string;
   viewMode?: ViewMode;
+  onQuickPlay?: () => void;
 }
 
 /** Shimmer block used by skeleton loaders. */
@@ -74,6 +77,7 @@ export const TableList: FC<TableListProps> = ({
   loading,
   currentWallet,
   viewMode = "grid",
+  onQuickPlay,
 }) => {
   // ------- Loading state -------
   if (loading) {
@@ -121,9 +125,26 @@ export const TableList: FC<TableListProps> = ({
         <h3 className="font-display text-xl font-bold text-[var(--text-primary)] mb-2">
           No tables found
         </h3>
-        <p className="text-[var(--text-secondary)] text-sm max-w-xs">
-          There are no active tables matching your filters. Create the first table or try Quick Play!
+        <p className="text-[var(--text-secondary)] text-sm max-w-xs mb-6">
+          There are no active tables matching your filters. Watch the live demo or sit via Quick Play.
         </p>
+        <div className="flex flex-col sm:flex-row items-center gap-3">
+          <Link
+            href={`/table/${encodeURIComponent(DEMO_TABLE_ID)}`}
+            className="btn-gold px-5 py-2.5 rounded-xl font-semibold text-sm inline-flex items-center justify-center"
+          >
+            Open the live demo table
+          </Link>
+          {onQuickPlay && (
+            <button
+              type="button"
+              onClick={onQuickPlay}
+              className="px-5 py-2.5 rounded-xl font-semibold text-sm bg-purple-600 hover:bg-purple-500 text-white transition-colors"
+            >
+              Quick Play
+            </button>
+          )}
+        </div>
       </div>
     );
   }
