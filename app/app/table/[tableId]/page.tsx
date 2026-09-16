@@ -14,7 +14,6 @@ import { OpponentTimer } from "@/components/OpponentTimer";
 import { ShowdownTimeoutPanel } from "@/components/ShowdownTimeoutPanel";
 import { AuthorityTimeoutPanel } from "@/components/AuthorityTimeoutPanel";
 import { TransactionToast, useTransactionToasts } from "@/components/TransactionToast";
-import { GameHistory, useGameHistory } from "@/components/GameHistory";
 import { NETWORK } from "@/contexts/WalletProvider";
 import { solToLamports, lamportsToSol } from "@/lib/utils";
 import { getTokenByMint, getDefaultToken, baseUnitsToDisplay, displayToBaseUnits, type TokenInfo } from "@/lib/tokens";
@@ -24,6 +23,7 @@ import { ShowdownOverlay } from "@/components/WinCelebration";
 import { SoundToggle } from "@/components/SoundToggle";
 import { useHandHistory, type HandHistoryEntry } from "@/hooks/useHandHistory";
 import { OnChainHandHistory } from "@/components/OnChainHandHistory";
+import { GameHistory } from "@/components/GameHistory";
 import { Tooltip, InfoIcon } from "@/components/Tooltip";
 import { useChipAnimations } from "@/components/ChipAnimation";
 import {
@@ -130,7 +130,14 @@ export default function TablePage({ params }: { params: Promise<{ tableId: strin
   const isMobile = useIsMobile();
 
   // On-chain hand history from events
-  const { history: onChainHistory, handTimelines, isListening: isHistoryListening, loadingHistory } = useHandHistory(program, gameState.tablePDA);
+  const currentHandNumber = gameState.table?.handNumber.toNumber() ?? null;
+  const {
+    history: onChainHistory,
+    handTimelines,
+    liveActions,
+    isListening: isHistoryListening,
+    loadingHistory,
+  } = useHandHistory(program, gameState.tablePDA, currentHandNumber);
 
   // Player stats for HUD tooltips
   const { fetchStats: fetchPlayerStats, allStats: playerStatsMap } = usePlayerStats();
@@ -168,9 +175,6 @@ export default function TablePage({ params }: { params: Promise<{ tableId: strin
     updateTransaction,
     dismissTransaction,
   } = useTransactionToasts();
-
-  // Game history/action log
-  const { events: gameEvents, addEvent: addGameEvent, clearHistory } = useGameHistory();
 
   // Sound effects
   const { playSound, initSounds } = useSounds();
@@ -266,22 +270,18 @@ export default function TablePage({ params }: { params: Promise<{ tableId: strin
     }
   }, [gameState.table, buyInSol]);
 
-  // Track phase changes and community cards for game history
+  // Phase-change sounds (live action language comes from ActionTaken, not this poll)
   const prevPhaseRef = useRef(gameState.phase);
-  const prevCommunityRef = useRef<number[]>([]);
   const isFirstRenderRef = useRef(true);
 
   useEffect(() => {
-    // Skip logging on first render (initial state)
     if (isFirstRenderRef.current) {
       isFirstRenderRef.current = false;
       prevPhaseRef.current = gameState.phase;
       return;
     }
 
-    // Track phase changes
     if (prevPhaseRef.current !== gameState.phase) {
-      // Play sounds for phase transitions
       switch (gameState.phase) {
         case "PreFlop":
           playSound("cardDeal");
@@ -292,49 +292,9 @@ export default function TablePage({ params }: { params: Promise<{ tableId: strin
           playSound("cardFlip");
           break;
       }
-
-      // Phase messages - Flop/Turn/River handled by card events, no duplicate messages
-      const phaseMessages: Record<string, string | null> = {
-        "Dealing": "New hand starting...",
-        "PreFlop": "Pre-flop betting",
-        "Flop": null,  // Card event will show "Flop: X Y Z"
-        "Turn": null,  // Card event will show "Turn: X"
-        "River": null, // Card event will show "River: X"
-        "Showdown": "Showdown!",
-        "Settled": "Hand complete",
-      };
-      const message = phaseMessages[gameState.phase];
-
-      // Only add phase event if there's a message (Flop/Turn/River handled by card events)
-      if (message) {
-        addGameEvent("phase", message);
-      }
-
-      // Add separator when new hand starts (don't clear history)
-      if (gameState.phase === "Dealing") {
-        addGameEvent("system", "━━━━━━ New Hand ━━━━━━");
-      }
-
       prevPhaseRef.current = gameState.phase;
     }
-
-    // Track community card reveals
-    // Ensure cards are plain numbers (not BN, buffer values, etc.)
-    const currentCommunity = gameState.communityCards
-      .map(c => Number(c))
-      .filter(c => !isNaN(c) && c !== 255);
-    if (currentCommunity.length > prevCommunityRef.current.length) {
-      const newCards = currentCommunity.slice(prevCommunityRef.current.length);
-      if (newCards.length === 3) {
-        addGameEvent("cards", "Flop:", { cards: newCards });
-      } else if (newCards.length === 1 && currentCommunity.length === 4) {
-        addGameEvent("cards", "Turn:", { cards: newCards });
-      } else if (newCards.length === 1 && currentCommunity.length === 5) {
-        addGameEvent("cards", "River:", { cards: newCards });
-      }
-      prevCommunityRef.current = [...currentCommunity];
-    }
-  }, [gameState.phase, gameState.communityCards, addGameEvent, playSound]);
+  }, [gameState.phase, playSound]);
 
   // Track bets to trigger chip animations
   useEffect(() => {
@@ -479,13 +439,6 @@ export default function TablePage({ params }: { params: Promise<{ tableId: strin
 
     const winners = completedOverlay.players.filter((p) => p.chipsWon > 0);
     winners.forEach((winner, index) => {
-      const handInfo = winner.handRank ? ` with ${winner.handRank}` : "";
-      const wonDisplay = baseUnitsToDisplay(winner.chipsWon, tableToken).toFixed(2);
-      addGameEvent(
-        "winner",
-        `Seat ${winner.seatIndex + 1} won ${wonDisplay} ${tableToken.symbol}${handInfo}`,
-        { seatIndex: winner.seatIndex, amount: winner.chipsWon },
-      );
       setTimeout(() => {
         triggerWinAnimation(winner.seatIndex);
       }, index * 200);
@@ -497,7 +450,7 @@ export default function TablePage({ params }: { params: Promise<{ tableId: strin
       setCelebrationWinAmount(heroWin.chipsWon);
       setShowCelebration(true);
     }
-  }, [completedOverlay, addGameEvent, tableToken, publicKey, triggerWinAnimation, playSound]);
+  }, [completedOverlay, publicKey, triggerWinAnimation, playSound]);
 
   const overlayShares = useMemo(() => {
     if (completedOverlay) {
@@ -636,12 +589,6 @@ export default function TablePage({ params }: { params: Promise<{ tableId: strin
         `Submitting ${actionLabel}...`,
         `${actionLabel} confirmed`
       );
-      // Log the action to game history (use 1-indexed seats for display)
-      const seatLabel = currentPlayer ? `Seat ${currentPlayer.seatIndex + 1}` : "Player";
-      addGameEvent("action", `${seatLabel}: ${actionLabel}`, {
-        seatIndex: currentPlayer?.seatIndex,
-        amount: amount,
-      });
     } catch (e) {
       console.error("Action failed:", e);
     }
@@ -1163,7 +1110,6 @@ export default function TablePage({ params }: { params: Promise<{ tableId: strin
                         if (confirm("Are you sure you want to close this table? All funds will be returned to players.")) {
                           try {
                             await closeInactiveTable();
-                            addGameEvent("system", "Inactive table closed, funds returned to all players");
                           } catch (e) {
                             console.error("Failed to close table:", e);
                           }
@@ -1311,6 +1257,7 @@ export default function TablePage({ params }: { params: Promise<{ tableId: strin
               chipWinTrigger={winTrigger}
               token={tableToken}
               playerStatsMap={playerStatsMap}
+              liveActions={liveActions}
               onEmptySeatClick={
                 connected && !currentPlayer && gameState.tableStatus === "Waiting"
                   ? (seat) => {
@@ -1377,7 +1324,6 @@ export default function TablePage({ params }: { params: Promise<{ tableId: strin
                     onClick={async () => {
                       try {
                         await dealMeIn();
-                        addGameEvent("privacy", "Dealt in via Arcium MPC");
                       } catch (e) {
                         console.error("Deal-in failed:", e);
                       }
@@ -1433,7 +1379,6 @@ export default function TablePage({ params }: { params: Promise<{ tableId: strin
                   onClick={async () => {
                     try {
                       await retryDecrypt();
-                      addGameEvent("privacy", "Decrypted hole cards");
                     } catch (e) {
                       console.error("Retry decrypt failed:", e);
                     }
@@ -1548,7 +1493,6 @@ export default function TablePage({ params }: { params: Promise<{ tableId: strin
                     onClick={async () => {
                       try {
                         await revealHands();
-                        addGameEvent("cards", "Hands revealed from the sealed deck");
                       } catch (e) {
                         console.error("Reveal failed:", e);
                       }
@@ -1679,10 +1623,9 @@ export default function TablePage({ params }: { params: Promise<{ tableId: strin
             </div>
           )}
 
-          {/* Game History - always visible when there are events */}
-          {gameEvents.length > 0 && gameState.table && (
+          {liveActions.length > 0 && gameState.table && (
             <div className="max-w-lg mx-auto mt-4">
-              <GameHistory events={gameEvents} maxHeight="250px" />
+              <GameHistory liveActions={liveActions} formatAmount={fmt} maxHeight="250px" />
             </div>
           )}
 

@@ -7,6 +7,38 @@ import { usePlayerNotes } from "@/hooks/usePlayerNotes";
 import { type PlayerStats } from "@/hooks/usePlayerStats";
 import { type TokenInfo, getDefaultToken, baseUnitsToDisplay } from "@/lib/tokens";
 
+const ACTION_BUBBLE_MS = 2500;
+
+function actionBubbleTone(type: string): { background: string; color: string; border: string } {
+  const t = type.toLowerCase();
+  if (t.includes("fold")) {
+    return {
+      background: "var(--status-danger)",
+      color: "#fff",
+      border: "1px solid rgba(255,255,255,0.25)",
+    };
+  }
+  if (t.includes("all")) {
+    return {
+      background: "linear-gradient(135deg, #7c3aed 0%, #5b21b6 100%)",
+      color: "#fff",
+      border: "1px solid rgba(255,255,255,0.25)",
+    };
+  }
+  if (t.includes("raise")) {
+    return {
+      background: "linear-gradient(135deg, var(--gold-light) 0%, var(--gold-dark) 100%)",
+      color: "#111",
+      border: "1px solid rgba(255,255,255,0.3)",
+    };
+  }
+  return {
+    background: "var(--bg-elevated)",
+    color: "var(--text-primary)",
+    border: "1px solid rgba(255,255,255,0.15)",
+  };
+}
+
 interface PlayerSeatProps {
   seatIndex: number;
   player?: string; // Wallet address
@@ -36,6 +68,8 @@ interface PlayerSeatProps {
   handName?: string;
   /** Winner ring — split pots mark every chipsWon > 0 seat. */
   isWinner?: boolean;
+  /** Latest ActionTaken for this seat. Shown as a bubble for 2.5s. */
+  lastAction?: { type: string; amount?: number; at?: number; id?: string };
 }
 
 export const PlayerSeat: FC<PlayerSeatProps> = ({
@@ -62,8 +96,10 @@ export const PlayerSeat: FC<PlayerSeatProps> = ({
   isDecrypting = false,
   handName,
   isWinner = false,
+  lastAction,
 }) => {
   const [showHUD, setShowHUD] = useState(false);
+  const [showActionBubble, setShowActionBubble] = useState(false);
   const [showNotes, setShowNotes] = useState(false);
   const [noteText, setNoteText] = useState("");
   const notesRef = useRef<HTMLDivElement>(null);
@@ -106,6 +142,24 @@ export const PlayerSeat: FC<PlayerSeatProps> = ({
     status !== "empty" &&
     (status === "playing" || status === "allin") &&
     (!isCurrentPlayer || isDecrypting);
+
+  const lastActionType = lastAction?.type;
+  const lastActionId = lastAction?.id;
+  useEffect(() => {
+    if (!lastActionType) {
+      setShowActionBubble(false);
+      return;
+    }
+    const at = lastAction?.at ?? 0;
+    // Cluster unix-seconds vs local clock can lag a few seconds; still skip truly old actions.
+    if (at > 0 && Date.now() - at >= ACTION_BUBBLE_MS + 5000) {
+      setShowActionBubble(false);
+      return;
+    }
+    setShowActionBubble(true);
+    const t = setTimeout(() => setShowActionBubble(false), ACTION_BUBBLE_MS);
+    return () => clearTimeout(t);
+  }, [lastActionType, lastActionId, lastAction?.at]);
 
   // Close notes popover on outside click
   useEffect(() => {
@@ -282,6 +336,18 @@ export const PlayerSeat: FC<PlayerSeatProps> = ({
             background: "radial-gradient(ellipse at center, rgba(212, 160, 18, 0.2) 0%, transparent 70%)",
           }}
         />
+      )}
+
+      {/* ActionTaken bubble — Fold/Check/Call/Raise/AllIn/Timeout* for 2.5s */}
+      {showActionBubble && lastAction && !isEmpty && (
+        <div
+          key={lastAction.id ?? `${lastAction.type}-${lastAction.at ?? 0}`}
+          className={`action-bubble absolute z-20 ${compact ? "-top-5 px-1.5 py-0 text-[7px]" : "-top-7 px-2.5 py-0.5 text-[10px]"} rounded-full font-bold uppercase tracking-wider whitespace-nowrap pointer-events-none`}
+          style={actionBubbleTone(lastAction.type)}
+        >
+          {lastAction.type}
+          {lastAction.amount != null && lastAction.amount > 0 ? ` ${fmt(lastAction.amount)}` : ""}
+        </div>
       )}
 
       {/* Position badges */}

@@ -1,6 +1,6 @@
 "use client";
 
-import { FC, useState, useEffect, useRef } from "react";
+import { FC, useState, useEffect, useRef, useMemo } from "react";
 import { PlayerSeat } from "./PlayerSeat";
 import { Card } from "./Card";
 import { ProvablyFairBadge } from "./ProvablyFairBadge";
@@ -9,6 +9,11 @@ import { type TokenInfo, getDefaultToken, baseUnitsToDisplay } from "@/lib/token
 import { type PlayerStats } from "@/hooks/usePlayerStats";
 import { useIsMobileLandscape } from "@/hooks/useIsMobile";
 import { soundManager } from "@/lib/sounds";
+import {
+  ACTION_NAMES,
+  formatLiveActionLine,
+  type ActionTakenTimelineEvent,
+} from "@/hooks/useHandHistory";
 
 interface Player {
   seatIndex: number;
@@ -50,6 +55,8 @@ interface PokerTableProps {
   // Player stats for HUD tooltips
   playerStatsMap?: Map<string, PlayerStats>;
   onEmptySeatClick?: (seatIndex: number) => void;
+  /** Current-hand ActionTaken feed (websocket, not the 3s poll). */
+  liveActions?: ActionTakenTimelineEvent[];
 }
 
 // Seat positions around the table (for 6-max)
@@ -76,6 +83,68 @@ function slotsForHoldCount(
   if (phase === "Flop") return [3];
   if (phase === "Turn") return [4];
   return [];
+}
+
+const EMPTY_LIVE_ACTIONS: ActionTakenTimelineEvent[] = [];
+
+function seatLastAction(event: ActionTakenTimelineEvent | undefined):
+  | { type: string; amount?: number; at?: number; id?: string }
+  | undefined {
+  if (!event) return undefined;
+  return {
+    type: ACTION_NAMES[event.actionType] ?? "Act",
+    amount: event.amount > 0 ? event.amount : undefined,
+    at: event.timestamp.getTime(),
+    id: event.signature ?? `${event.timestamp.getTime()}-${event.seatIndex}-${event.actionType}-${event.potAfter}`,
+  };
+}
+
+function LiveActionLine({
+  actions,
+  formatAmount,
+  compact,
+}: {
+  actions: ActionTakenTimelineEvent[];
+  formatAmount: (baseUnits: number) => string;
+  compact: boolean;
+}) {
+  const scrollerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const el = scrollerRef.current;
+    if (!el) return;
+    el.scrollLeft = el.scrollWidth;
+  }, [actions.length]);
+
+  if (actions.length === 0) {
+    return <div className={compact ? "mt-0.5 h-4" : "mt-1.5 h-6"} />;
+  }
+
+  return (
+    <div
+      ref={scrollerRef}
+      className={`mt-1 mx-auto ${compact ? "h-4 max-w-[70%] text-[9px]" : "sm:mt-2 h-6 max-w-[80%] text-sm"} overflow-x-auto scrollbar-hide whitespace-nowrap text-center`}
+      aria-live="polite"
+    >
+      {actions.map((action, i) => {
+        const key = `${action.signature ?? action.timestamp.getTime()}-${action.seatIndex}-${action.actionType}-${i}`;
+        const isLatest = i === actions.length - 1;
+        return (
+          <span
+            key={key}
+            className={
+              isLatest
+                ? "live-action-line text-[var(--gold-light)] font-medium"
+                : "text-[var(--text-muted)]"
+            }
+          >
+            {i > 0 && <span className="text-[var(--text-muted)]"> · </span>}
+            {formatLiveActionLine(action, formatAmount)}
+          </span>
+        );
+      })}
+    </div>
+  );
 }
 
 // Tighter positions for mobile landscape — seats pulled closer to table edge
@@ -112,11 +181,20 @@ export const PokerTable: FC<PokerTableProps> = ({
   token = getDefaultToken(),
   playerStatsMap,
   onEmptySeatClick,
+  liveActions = EMPTY_LIVE_ACTIONS,
 }) => {
   const isMobile = useIsMobileLandscape();
   const SEAT_POSITIONS = isMobile ? SEAT_POSITIONS_MOBILE : SEAT_POSITIONS_DESKTOP;
 
   const fmt = (baseUnits: number) => baseUnitsToDisplay(baseUnits, token).toFixed(2);
+
+  const lastActionBySeat = useMemo(() => {
+    const map = new Map<number, ActionTakenTimelineEvent>();
+    for (const action of liveActions) {
+      map.set(action.seatIndex, action);
+    }
+    return map;
+  }, [liveActions]);
 
   // Phase transition animation
   const [displayPhase, setDisplayPhase] = useState(phase);
@@ -182,7 +260,8 @@ export const PokerTable: FC<PokerTableProps> = ({
   }
 
   return (
-    <div className="relative w-full max-w-5xl aspect-[16/10] mx-auto poker-table-container">
+    <div className="relative w-full max-w-5xl mx-auto">
+    <div className="relative w-full aspect-[16/10] poker-table-container">
       {/* Ambient glow behind table */}
       <div
         className="absolute inset-0 rounded-[50%]"
@@ -405,6 +484,11 @@ export const PokerTable: FC<PokerTableProps> = ({
               token={token}
               playerStats={player?.player && playerStatsMap ? playerStatsMap.get(player.player) : undefined}
               compact={isMobile}
+              lastAction={
+                player && player.status !== "empty"
+                  ? seatLastAction(lastActionBySeat.get(idx))
+                  : undefined
+              }
               onSit={
                 (!player || player.status === "empty") && onEmptySeatClick
                   ? () => onEmptySeatClick(idx)
@@ -421,6 +505,8 @@ export const PokerTable: FC<PokerTableProps> = ({
         winTrigger={chipWinTrigger}
         bigBlind={bigBlind}
       />
+    </div>
+    <LiveActionLine actions={liveActions} formatAmount={fmt} compact={isMobile} />
     </div>
   );
 };

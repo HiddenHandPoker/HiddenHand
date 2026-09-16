@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useConnection } from "@solana/wallet-adapter-react";
 import { PublicKey } from "@solana/web3.js";
 import { Program, BN, Idl } from "@anchor-lang/core";
@@ -24,6 +24,9 @@ const PHASE_NAMES = ["Dealing", "PreFlop", "Flop", "Turn", "River", "Showdown", 
 
 // Action type names matching Rust encoding
 const ACTION_NAMES = ["Fold", "Check", "Call", "Raise", "All-In", "Timeout Fold", "Timeout Check"];
+
+// Spoken verbs for the live ticker: "Seat 4 raises 2.00"
+const ACTION_VERBS = ["folds", "checks", "calls", "raises", "all-in", "folds (timeout)", "checks (timeout)"];
 
 // Event discriminators (first 8 bytes of SHA-256("event:<EventName>"))
 const EVENT_DISCRIMINATORS = {
@@ -357,7 +360,11 @@ function parseEventsFromDataLog(
 
 // --- Hook ---
 
-export function useHandHistory(program: Program<Idl> | null, tablePDA?: PublicKey | null) {
+export function useHandHistory(
+  program: Program<Idl> | null,
+  tablePDA?: PublicKey | null,
+  handNumber?: number | null,
+) {
   const { connection } = useConnection();
   const [history, setHistory] = useState<HandHistoryEntry[]>([]);
   const [handTimelines, setHandTimelines] = useState<Map<number, TimelineEvent[]>>(new Map());
@@ -688,9 +695,19 @@ export function useHandHistory(program: Program<Idl> | null, tablePDA?: PublicKe
     }
   }, [tablePDA, fetchHistoricalEvents]);
 
+  const liveActions = useMemo((): ActionTakenTimelineEvent[] => {
+    if (handNumber == null || handNumber <= 0) return [];
+    const events = handTimelines.get(handNumber) ?? [];
+    return events
+      .filter((e): e is ActionTakenTimelineEvent => e.type === "action_taken")
+      .slice()
+      .sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
+  }, [handTimelines, handNumber]);
+
   return {
     history,
     handTimelines,
+    liveActions,
     isListening,
     loadingHistory,
     startListening,
@@ -714,6 +731,19 @@ export function getSuitColor(cardNum: number): string {
   if (cardNum === 255 || cardNum < 0 || cardNum > 51) return "text-gray-500";
   const suit = Math.floor(cardNum / 13);
   return suit <= 1 ? "text-red-500" : "text-white";
+}
+
+/** `Seat 4 raises 2.00` — amount already formatted (display units, two decimals). */
+export function formatLiveActionLine(
+  event: ActionTakenTimelineEvent,
+  formatAmount: (baseUnits: number) => string,
+): string {
+  const verb = ACTION_VERBS[event.actionType] ?? "acts";
+  const showAmount =
+    event.amount > 0 &&
+    (event.actionType === 2 || event.actionType === 3 || event.actionType === 4);
+  const amount = showAmount ? ` ${formatAmount(event.amount)}` : "";
+  return `Seat ${event.seatIndex + 1} ${verb}${amount}`;
 }
 
 export { PHASE_NAMES, ACTION_NAMES };

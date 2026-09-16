@@ -38,7 +38,11 @@ export const SpectatorView: FC<SpectatorViewProps> = ({
   onSitDown,
 }) => {
   const { state, loading, error, program } = useTableState(tableId);
-  const { history: onChainHistory } = useHandHistory(program, state.tablePDA);
+  const { history: onChainHistory, liveActions } = useHandHistory(
+    program,
+    state.tablePDA,
+    state.handNumber,
+  );
 
   // Resolve token for display
   const token: TokenInfo = useMemo(() => {
@@ -421,6 +425,7 @@ export const SpectatorView: FC<SpectatorViewProps> = ({
           chipBetTrigger={betTrigger}
           chipWinTrigger={winTrigger}
           token={token}
+          liveActions={liveActions}
         />
       )}
 

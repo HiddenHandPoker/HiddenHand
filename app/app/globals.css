@@ -298,6 +298,45 @@
   }
 }
 
+@keyframes action-bubble {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, 6px) scale(0.85);
+  }
+  10% {
+    opacity: 1;
+    transform: translate(-50%, 0) scale(1);
+  }
+  80% {
+    opacity: 1;
+    transform: translate(-50%, 0) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -4px) scale(0.95);
+  }
+}
+.action-bubble {
+  left: 50%;
+  transform: translateX(-50%);
+  animation: action-bubble 2.5s ease-out forwards;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+}
+
+@keyframes live-action-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.live-action-line {
+  animation: live-action-in 0.25s ease-out;
+}
+
 /* MPC shuffle theater — felt sweep + riffle on the oval */
 @keyframes mpc-felt-sweep {
   0%, 100% {
@@ -699,7 +738,9 @@
   .mpc-shuffle-felt,
   .mpc-riffle-card,
   .winner-seat,
-  .replay-winner-seat {
+  .replay-winner-seat,
+  .action-bubble,
+  .live-action-line {
     animation: none !important;
   }
 }
