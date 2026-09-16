@@ -4,6 +4,11 @@ import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useConnection } from "@solana/wallet-adapter-react";
 import { PublicKey } from "@solana/web3.js";
 import { Program, BN, Idl } from "@anchor-lang/core";
+import {
+  parseActionTakenFromBuffer as parseActionTakenPayload,
+  selectLiveActions,
+  tableIdToHex,
+} from "@/lib/actionTakenScope";
 
 // Hand rank names matching the Rust enum order
 const HAND_RANKS = [
@@ -78,6 +83,8 @@ export interface HandStartedTimelineEvent extends BaseTimelineEvent {
 
 export interface ActionTakenTimelineEvent extends BaseTimelineEvent {
   type: "action_taken";
+  /** Hex of on-chain `table_id: [u8; 32]` — live feed is program-wide. */
+  tableId: string;
   seatIndex: number;
   actionType: number;
   amount: number;
@@ -236,18 +243,22 @@ function parseHandStartedFromBuffer(data: Uint8Array, signature: string): { hand
 //   + amount[8] + pot_after[8] + phase[1] + timestamp[8] + next_action_on[1]
 function parseActionTakenFromBuffer(data: Uint8Array, signature: string): { handNumber: number; event: ActionTakenTimelineEvent } | null {
   try {
-    let offset = 32;
-    const handNumber = readU64LE(data, offset); offset += 8;
-    const seatIndex = data[offset++];
-    const actionType = data[offset++];
-    const amount = readU64LE(data, offset); offset += 8;
-    const potAfter = readU64LE(data, offset); offset += 8;
-    const phase = data[offset++];
-    const timestamp = readI64LE(data, offset); offset += 8;
-    const nextActionOn = data[offset++];
+    const parsed = parseActionTakenPayload(data);
+    if (!parsed) return null;
     return {
-      handNumber,
-      event: { type: "action_taken", timestamp: new Date(timestamp * 1000), signature, seatIndex, actionType, amount, potAfter, phase, nextActionOn },
+      handNumber: parsed.handNumber,
+      event: {
+        type: "action_taken",
+        tableId: parsed.tableId,
+        timestamp: new Date(parsed.timestamp * 1000),
+        signature,
+        seatIndex: parsed.seatIndex,
+        actionType: parsed.actionType,
+        amount: parsed.amount,
+        potAfter: parsed.potAfter,
+        phase: parsed.phase,
+        nextActionOn: parsed.nextActionOn,
+      },
     };
   } catch (e) {
     console.error("[HandHistory] ActionTaken parse error:", e);
@@ -570,9 +581,13 @@ export function useHandHistory(
       listenerIdsRef.current.push(handStartedId);
 
       const actionTakenId = program.addEventListener("ActionTaken" as any, (event: any, slot: number, signature: string) => {
+        const tableId = tableIdToHex(event.tableId ?? event.table_id);
+        // Fail closed: missing table_id must not enter the timeline (onLogs will).
+        if (!tableId) return;
         const handNumber = Number(event.handNumber ?? event.hand_number ?? 0);
         addTimelineEvent(handNumber, {
           type: "action_taken",
+          tableId,
           timestamp: new Date(Number(event.timestamp ?? 0) * 1000),
           signature,
           seatIndex: event.seatIndex ?? event.seat_index ?? 0,
@@ -696,13 +711,10 @@ export function useHandHistory(
   }, [tablePDA, fetchHistoricalEvents]);
 
   const liveActions = useMemo((): ActionTakenTimelineEvent[] => {
-    if (handNumber == null || handNumber <= 0) return [];
-    const events = handTimelines.get(handNumber) ?? [];
-    return events
-      .filter((e): e is ActionTakenTimelineEvent => e.type === "action_taken")
-      .slice()
-      .sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
-  }, [handTimelines, handNumber]);
+    return selectLiveActions(handTimelines, handNumber, tablePDA).filter(
+      (e): e is ActionTakenTimelineEvent => e.type === "action_taken",
+    );
+  }, [handTimelines, handNumber, tablePDA]);
 
   return {
     history,
