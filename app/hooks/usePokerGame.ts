@@ -34,7 +34,13 @@ import {
   findHoleDealtForKey,
   clearEncryptionKeys,
   type EncryptionKeys,
+  type HoleDealtFields,
 } from "@/lib/arcium";
+import {
+  holeCardsStorageKey,
+  parseStoredHoleDealt,
+  serializeStoredHoleDealt,
+} from "@/lib/holeCardsStorage";
 import { Transaction, Keypair } from "@solana/web3.js";
 import { getDefaultToken, getTokenByMint, TOKEN_PROGRAM_ID, type TokenInfo } from "@/lib/tokens";
 import { getAssociatedTokenAddressSync, createAssociatedTokenAccountInstruction } from "@solana/spl-token";
@@ -267,52 +273,46 @@ export interface SessionKeyParam {
 }
 
 // ── Hole-card refresh recovery ──────────────────────────────────────────────
-// A player's decrypted hole cards live ONLY client-side (from the one-time
-// HoleDealt event). A page refresh would lose them, and the on-chain "dealt"
-// bit blocks re-dealing — so cache them in sessionStorage (same browser, the
-// player's own cards) keyed by wallet+table+hand+seat, and restore on load.
-function holeCardsKey(
-  wallet: PublicKey,
-  tablePda: PublicKey,
-  handNumber: number,
-  seat: number
-): string {
-  return `hh_holecards:${wallet.toBase58()}:${tablePda.toBase58()}:${handNumber}:${seat}`;
-}
+// HoleDealt ciphertexts are public logs. Cache that blob in sessionStorage
+// (wallet+table+hand+seat) and decrypt on restore with the in-memory x25519
+// SK. Never JSON-store plaintext ranks.
 function saveHoleCards(
   wallet: PublicKey,
   tablePda: PublicKey,
   handNumber: number,
   seat: number,
-  cards: [number, number]
+  blob: HoleDealtFields
 ): void {
   if (typeof window === "undefined") return;
   try {
     window.sessionStorage.setItem(
-      holeCardsKey(wallet, tablePda, handNumber, seat),
-      JSON.stringify(cards)
+      holeCardsStorageKey(wallet, tablePda, handNumber, seat),
+      serializeStoredHoleDealt(blob)
     );
   } catch {
     // sessionStorage full or unavailable
   }
 }
-function loadHoleCards(
+async function loadHoleCards(
   wallet: PublicKey,
   tablePda: PublicKey,
   handNumber: number,
-  seat: number
-): [number, number] | null {
+  seat: number,
+  decrypt: (blob: HoleDealtFields) => Promise<[number, number]>
+): Promise<[number, number] | null> {
   if (typeof window === "undefined") return null;
   try {
     const raw = window.sessionStorage.getItem(
-      holeCardsKey(wallet, tablePda, handNumber, seat)
+      holeCardsStorageKey(wallet, tablePda, handNumber, seat)
     );
     if (!raw) return null;
-    const c = JSON.parse(raw);
-    if (Array.isArray(c) && c.length === 2 && typeof c[0] === "number" && typeof c[1] === "number") {
-      return [c[0], c[1]];
-    }
-  } catch {}
+    const blob = parseStoredHoleDealt(raw);
+    if (!blob) return null;
+    const cards = await decrypt(blob);
+    if (isRealCard(cards[0]) && isRealCard(cards[1])) return cards;
+  } catch {
+    // missing SK, decrypt failure, or storage unavailable
+  }
   return null;
 }
 
@@ -383,6 +383,7 @@ export function usePokerGame(sessionKey?: SessionKeyParam | null): UsePokerGameR
   const shuffleDeckRef = useRef<(() => Promise<string>) | null>(null);
   const showdownRef = useRef<(() => Promise<string>) | null>(null);
   const lastWalletRef = useRef<string | null>(null);
+  const holeRestoreAttemptRef = useRef<string | null>(null);
 
   // Drop in-memory encryption keys on wallet change / disconnect.
   useEffect(() => {
@@ -592,25 +593,6 @@ export function usePokerGame(sessionKey?: SessionKeyParam | null): UsePokerGameR
                         currentHandNumber !== encryptionHandNumberRef.current;
       const resetEncryptionState = tableStatus === "Waiting" || isNewHand;
 
-      // Refresh recovery: if we've already dealt in this hand (on-chain "dealt"
-      // bit set) but have no cards in memory (e.g. after a page reload), restore
-      // them from the sessionStorage cache written at deal time.
-      let restoredCards: [number | null, number | null] | null = null;
-      if (
-        publicKey &&
-        !resetEncryptionState &&
-        currentPlayerSeat !== null &&
-        handState &&
-        (handState.dealtPlayers & (1 << currentPlayerSeat)) !== 0
-      ) {
-        restoredCards = loadHoleCards(
-          publicKey,
-          gameState.tablePDA,
-          currentHandNumber,
-          currentPlayerSeat
-        );
-      }
-
       setGameState((prev) => ({
         ...prev,
         table,
@@ -636,7 +618,7 @@ export function usePokerGame(sessionKey?: SessionKeyParam | null): UsePokerGameR
         isDecrypting: resetEncryptionState ? false : prev.isDecrypting,
         decryptedCards: resetEncryptionState
           ? [null, null]
-          : (prev.decryptedCards[0] !== null ? prev.decryptedCards : (restoredCards ?? prev.decryptedCards)),
+          : prev.decryptedCards,
         encryptionHandNumber: resetEncryptionState
           ? null
           : ((deckState?.isShuffled ?? false) ? currentHandNumber : prev.encryptionHandNumber),
@@ -658,15 +640,6 @@ export function usePokerGame(sessionKey?: SessionKeyParam | null): UsePokerGameR
           .filter((p) => p.status === "playing" || p.status === "allin")
           .every((p) => p.cardsRevealed);
       if (allRevealed) showdownRevealInProgressRef.current = false;
-      if (
-        currentPlayerSeat !== null &&
-        handState &&
-        (handState.dealtPlayers & (1 << currentPlayerSeat)) !== 0 &&
-        restoredCards
-      ) {
-        dealInProgressRef.current = false;
-      }
-
       setError(null);
     } catch (e) {
       console.error("Error refreshing state:", e);
@@ -715,6 +688,77 @@ export function usePokerGame(sessionKey?: SessionKeyParam | null): UsePokerGameR
     }
     return { keys: encKeysRef.current, mxePublicKey: mxePublicKeyRef.current };
   }, [provider, program, publicKey, signMessage]);
+
+  const ensureCryptoRef = useRef(ensureCrypto);
+  ensureCryptoRef.current = ensureCrypto;
+
+  // Restore hole cards after reload: decrypt the public HoleDealt blob with the
+  // in-memory SK (one signMessage if the cache is cold). Polling must not prompt.
+  const tablePdaForRestore = gameState.tablePDA;
+  const restoreHandNumber = gameState.table?.handNumber.toNumber() ?? null;
+  const restoreSeat = gameState.currentPlayerSeat;
+  const restoreDealtMask = gameState.handState?.dealtPlayers ?? 0;
+  const hasDecryptedHoles = gameState.decryptedCards[0] !== null;
+
+  useEffect(() => {
+    if (!publicKey || !tablePdaForRestore || restoreHandNumber === null || restoreSeat === null) {
+      return;
+    }
+    if (hasDecryptedHoles) return;
+    if ((restoreDealtMask & (1 << restoreSeat)) === 0) return;
+    if (typeof window === "undefined") return;
+
+    const stored = window.sessionStorage.getItem(
+      holeCardsStorageKey(publicKey, tablePdaForRestore, restoreHandNumber, restoreSeat)
+    );
+    if (!stored || !parseStoredHoleDealt(stored)) return;
+
+    const attemptKey = `${tablePdaForRestore.toBase58()}:${restoreHandNumber}:${restoreSeat}`;
+    if (holeRestoreAttemptRef.current === attemptKey) return;
+    holeRestoreAttemptRef.current = attemptKey;
+
+    let cancelled = false;
+    void (async () => {
+      const cards = await loadHoleCards(
+        publicKey,
+        tablePdaForRestore,
+        restoreHandNumber,
+        restoreSeat,
+        async (blob) => {
+          const { keys, mxePublicKey } = await ensureCryptoRef.current();
+          return decryptHoleCards(
+            keys.privateKey,
+            mxePublicKey,
+            blob.card0,
+            blob.card1,
+            blob.nonce
+          );
+        }
+      );
+      if (cancelled || !cards) return;
+      dealInProgressRef.current = false;
+      setGameState((prev) => ({
+        ...prev,
+        isDecrypting: false,
+        decryptedCards: prev.decryptedCards[0] !== null ? prev.decryptedCards : cards,
+        encryptionHandNumber: restoreHandNumber,
+      }));
+    })();
+
+    return () => {
+      cancelled = true;
+      if (holeRestoreAttemptRef.current === attemptKey) {
+        holeRestoreAttemptRef.current = null;
+      }
+    };
+  }, [
+    publicKey,
+    tablePdaForRestore,
+    restoreHandNumber,
+    restoreSeat,
+    restoreDealtMask,
+    hasDecryptedHoles,
+  ]);
 
   // Build the full account map for a queue_computation instruction: the shared
   // Arcium accounts plus this call's fresh computation offset.
@@ -800,14 +844,14 @@ export function usePokerGame(sessionKey?: SessionKeyParam | null): UsePokerGameR
   // in, the program advances the hand to PreFlop.
   // ============================================================
   const applyDecryptedHoleCards = useCallback(
-    (seatIndex: number, decrypted: [number, number]) => {
+    (seatIndex: number, decrypted: [number, number], blob: HoleDealtFields) => {
       if (!publicKey || !gameState.tablePDA || !gameState.table) return;
       saveHoleCards(
         publicKey,
         gameState.tablePDA,
         gameState.table.handNumber.toNumber(),
         seatIndex,
-        decrypted
+        blob
       );
       dealInProgressRef.current = false;
       setGameState((prev) => ({
@@ -820,20 +864,38 @@ export function usePokerGame(sessionKey?: SessionKeyParam | null): UsePokerGameR
     [publicKey, gameState.tablePDA, gameState.table]
   );
 
-  const scanAndDecryptHoleCards = useCallback(async (): Promise<[number, number] | null> => {
-    if (!program || !provider || !publicKey) return null;
+  const scanAndDecryptHoleCards = useCallback(async (): Promise<{
+    cards: [number, number];
+    blob: HoleDealtFields;
+  } | null> => {
+    if (!program || !provider || !publicKey || !gameState.tablePDA || !gameState.table) {
+      return null;
+    }
     const { keys, mxePublicKey } = await ensureCrypto();
-    const events = await scanRecentEvents(provider.connection, program, program.programId);
-    const tableId = gameState.table
-      ? Uint8Array.from(gameState.table.tableId)
-      : undefined;
+    const events = await scanRecentEvents(provider.connection, program, gameState.tablePDA);
     const dealt = findHoleDealtForKey(events, keys.publicKey, {
-      tableId,
+      tableId: Uint8Array.from(gameState.table.tableId),
+      handNumber: gameState.table.handNumber.toNumber(),
       seatIndex: gameState.currentPlayerSeat ?? undefined,
     });
     if (!dealt) return null;
-    return decryptHoleCards(keys.privateKey, mxePublicKey, dealt.card0, dealt.card1, dealt.nonce);
-  }, [program, provider, publicKey, ensureCrypto, gameState.table, gameState.currentPlayerSeat]);
+    const cards = await decryptHoleCards(
+      keys.privateKey,
+      mxePublicKey,
+      dealt.card0,
+      dealt.card1,
+      dealt.nonce
+    );
+    return { cards, blob: dealt };
+  }, [
+    program,
+    provider,
+    publicKey,
+    ensureCrypto,
+    gameState.tablePDA,
+    gameState.table,
+    gameState.currentPlayerSeat,
+  ]);
 
   const dealToOwnSeat = useCallback(async (): Promise<void> => {
     if (!program || !provider || !publicKey || !gameState.tablePDA || !gameState.table || gameState.currentPlayerSeat === null) {
@@ -878,7 +940,7 @@ export function usePokerGame(sessionKey?: SessionKeyParam | null): UsePokerGameR
       // The deal_to_seat callback emits a HoleDealt event addressed to our key.
       // Arcium runs the callback in its own tx (plus a duplicate that fails), so
       // awaitFinalization's returned sig is NOT reliably the one carrying the
-      // event — scan the recent program txs for it instead (verified on devnet).
+      // event — scan recent table-PDA txs for it instead (verified on devnet).
       await awaitFinalization(provider, computationOffset, program.programId);
       await new Promise((r) => setTimeout(r, 2500));
       const decrypted = await scanAndDecryptHoleCards();
@@ -892,7 +954,7 @@ export function usePokerGame(sessionKey?: SessionKeyParam | null): UsePokerGameR
         throw new Error(message);
       }
 
-      applyDecryptedHoleCards(seatIndex, decrypted);
+      applyDecryptedHoleCards(seatIndex, decrypted.cards, decrypted.blob);
       await refreshState();
     } catch (e) {
       dealInProgressRef.current = false;
@@ -919,7 +981,7 @@ export function usePokerGame(sessionKey?: SessionKeyParam | null): UsePokerGameR
         setError(message);
         throw new Error(message);
       }
-      applyDecryptedHoleCards(gameState.currentPlayerSeat, decrypted);
+      applyDecryptedHoleCards(gameState.currentPlayerSeat, decrypted.cards, decrypted.blob);
       await refreshState();
     } catch (e) {
       setGameState((prev) => ({ ...prev, isDecrypting: false }));

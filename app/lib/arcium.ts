@@ -21,6 +21,12 @@
 import { PublicKey, type Connection } from "@solana/web3.js";
 import { BN, type AnchorProvider, type Program, type Idl } from "@anchor-lang/core";
 
+export {
+  findHoleDealtForKey,
+  type HoleDealtFields,
+  type HoleDealtMatch,
+} from "./holeDealtMatch";
+
 /**
  * Arcium cluster offset. Devnet = 456 (from Arcium.toml `[clusters.devnet]`).
  * Mainnet would be a different offset; keep in sync with deployment.
@@ -350,70 +356,24 @@ export async function fetchCallbackEvents(
 }
 
 /**
- * Scan the most recent program transactions for decoded events.
+ * Scan recent transactions involving `address` and decode this program's events.
  *
  * Arcium submits the callback that carries `HoleDealt` as its own transaction —
  * and frequently a duplicate that fails with `AlreadyCallbackedComputation`. So
  * the signature returned by `awaitComputationFinalization` is NOT reliably the
- * tx that emitted the event. Scanning the last few program txs finds it robustly.
- * (Verified on devnet — parsing only the finalize sig silently missed the event.)
+ * tx that emitted the event. The callback lists the table account, so callers
+ * that want a seat's hole cards must pass the **table PDA**, not the program id.
  */
 export async function scanRecentEvents(
   connection: Connection,
   program: Program<Idl>,
-  programId: PublicKey,
+  address: PublicKey,
   limit = 40
 ): Promise<DecodedEvent[]> {
-  const sigs = await connection.getSignaturesForAddress(programId, { limit });
+  const sigs = await connection.getSignaturesForAddress(address, { limit });
   const out: DecodedEvent[] = [];
   for (const s of sigs) {
     out.push(...(await fetchCallbackEvents(connection, program, s.signature)));
   }
   return out;
-}
-
-export interface HoleDealtFields {
-  encPubkey: number[];
-  nonce: number[];
-  card0: number[];
-  card1: number[];
-}
-
-/** Pull a HoleDealt payload addressed to `encPubkey` out of decoded events. */
-export function findHoleDealtForKey(
-  events: DecodedEvent[],
-  encPubkey: Uint8Array,
-  match?: { tableId?: Uint8Array; handNumber?: number; seatIndex?: number }
-): HoleDealtFields | null {
-  const myPubHex = Buffer.from(encPubkey).toString("hex");
-  for (const ev of events) {
-    if (ev.name !== "holeDealt" && ev.name !== "HoleDealt") continue;
-    const d = ev.data as {
-      encPubkey?: number[];
-      enc_pubkey?: number[];
-      nonce: number[];
-      card0: number[];
-      card1: number[];
-      tableId?: number[];
-      table_id?: number[];
-      handNumber?: { toNumber?: () => number } | number;
-      hand_number?: { toNumber?: () => number } | number;
-      seatIndex?: number;
-      seat_index?: number;
-    };
-    const pub = d.encPubkey ?? d.enc_pubkey ?? [];
-    if (Buffer.from(pub).toString("hex") !== myPubHex) continue;
-    if (match?.tableId) {
-      const tid = d.tableId ?? d.table_id;
-      if (tid && Buffer.from(tid).toString("hex") !== Buffer.from(match.tableId).toString("hex")) {
-        continue;
-      }
-    }
-    if (match?.seatIndex !== undefined) {
-      const seat = d.seatIndex ?? d.seat_index;
-      if (seat !== undefined && seat !== match.seatIndex) continue;
-    }
-    return { encPubkey: pub, nonce: d.nonce, card0: d.card0, card1: d.card1 };
-  }
-  return null;
 }
