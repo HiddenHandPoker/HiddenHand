@@ -194,7 +194,7 @@ cd app && RPC_URL=<helius> node scripts/devnet-timeout-showdown.cjs # stuck-show
 
 Conscious tradeoffs for a devnet showcase (not oversights):
 - **Latency:** ~15–20s per MPC round-trip on devnet, and a hand has several (shuffle, per-seat deal, three street reveals, showdown). This is the honest cost of provable privacy; the UI surfaces each step. Pre-computing the next hand during betting would hide most of it.
-- **Wallet popups:** each MPC action uses the real wallet. MagicBlock session-key infrastructure is present but not yet wired into the MPC path.
+- **Wallet popups:** shuffle, deal, community reveal, and showdown reveal each use the real wallet as fee payer. MagicBlock session keys may sign `player_action` only. Gameplay is not popup-free.
 - **Play-money only:** this is a technology showcase, not a real-money product (real-money poker carries liquidity + legal burdens a solo build shouldn't take on).
 
 ---

@@ -16,6 +16,9 @@ cluster = "devnet"
 wallet = "~/.config/solana/id.json"
 
 [scripts]
-test = "npx ts-mocha -p ./tsconfig.json -t 1000000 \"tests/**/*.ts\""
+# Retired native-SOL / VRF/Inco Mocha suite (tests/*.ts). Do not run it against
+# GAc5rZPEFfaevbTL6F5jqWAuYQUNVHPfaQ2dRc5tFgSz. Unit tests: cargo test -p hiddenhand
+# Devnet E2E: app/scripts/devnet-full-hand.cjs
+test = "echo 'Retired VRF/Inco TS suite skipped. Run: cargo test -p hiddenhand'"
 
 [hooks]

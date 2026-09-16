@@ -1,3 +1,7 @@
+> **HISTORICAL (pre-Arcium).** Superseded by
+> `thinking/privacy-backend-decision-2026.md` and the current
+> `encrypted-ixs/` circuits. Do not implement anything in this file.
+
 # Inco FHE vs MagicBlock ER for Poker Privacy
 
 > Analysis Date: January 2026

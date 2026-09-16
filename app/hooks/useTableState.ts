@@ -7,10 +7,9 @@
  * a read-only Anchor provider. Returns sanitized game state where encrypted
  * hole card handles are NEVER exposed — spectators always see [null, null].
  *
- * PRIVACY INVARIANT: This hook must NEVER leak encrypted u128 card handles.
- * All player hole cards are returned as [null, null] unless the player is
- * the connected wallet AND cards are plaintext (0-51). Encrypted handles
- * (Inco TEE) are stripped at the data layer, not just the UI layer.
+ * PRIVACY INVARIANT: live hole cards are not on-chain. This hook
+ * always returns holeCards: [null, null]. Spectators may only see
+ * revealedCards after showdown_reveal writes plaintext 0–51.
  */
 
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";

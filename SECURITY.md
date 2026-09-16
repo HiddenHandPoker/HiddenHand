@@ -38,9 +38,14 @@ and every finding with its fix.
 
 ### Session keys
 
-Gameplay uses MagicBlock session keys scoped to this program only. A compromised
-session key cannot withdraw funds (`leave_table` requires the real wallet); worst
-case is bad in-hand decisions bounded by the table buy-in.
+`player_action` may be signed by a MagicBlock session key scoped to
+this program. A compromised session key cannot withdraw funds
+(`leave_table` requires the real wallet); worst case is bad in-hand
+decisions bounded by the table buy-in.
+
+Shuffle, deal, community reveal, and showdown reveal are **not**
+session-signed in the client. Each of those queues uses the real
+wallet as fee payer. Do not describe gameplay as popup-free.
 
 ## Internal audit (August 2026)
 
