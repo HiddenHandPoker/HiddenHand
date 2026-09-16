@@ -698,6 +698,9 @@ export function usePokerGame(sessionKey?: SessionKeyParam | null): UsePokerGameR
   const restoreHandNumber = gameState.table?.handNumber.toNumber() ?? null;
   const restoreSeat = gameState.currentPlayerSeat;
   const restoreDealtMask = gameState.handState?.dealtPlayers ?? 0;
+  // Depend on this seat's bit only — other seats dealing must not retrigger restore / signMessage.
+  const thisSeatDealt =
+    restoreSeat !== null && (restoreDealtMask & (1 << restoreSeat)) !== 0;
   const hasDecryptedHoles = gameState.decryptedCards[0] !== null;
 
   useEffect(() => {
@@ -705,7 +708,7 @@ export function usePokerGame(sessionKey?: SessionKeyParam | null): UsePokerGameR
       return;
     }
     if (hasDecryptedHoles) return;
-    if ((restoreDealtMask & (1 << restoreSeat)) === 0) return;
+    if (!thisSeatDealt) return;
     if (typeof window === "undefined") return;
 
     const stored = window.sessionStorage.getItem(
@@ -756,7 +759,7 @@ export function usePokerGame(sessionKey?: SessionKeyParam | null): UsePokerGameR
     tablePdaForRestore,
     restoreHandNumber,
     restoreSeat,
-    restoreDealtMask,
+    thisSeatDealt,
     hasDecryptedHoles,
   ]);
 
