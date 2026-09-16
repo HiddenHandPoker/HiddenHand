@@ -195,7 +195,7 @@ function evaluateFiveCards(cards: number[]): EvaluatedHand {
 }
 
 /** Compare two hands. Returns positive if a wins, negative if b wins, 0 if tie */
-function compareHands(a: EvaluatedHand, b: EvaluatedHand): number {
+export function compareHands(a: EvaluatedHand, b: EvaluatedHand): number {
   const rankDiff = HAND_RANK_VALUES[a.rank] - HAND_RANK_VALUES[b.rank];
   if (rankDiff !== 0) return rankDiff;
 
@@ -277,4 +277,61 @@ export function getHandDescription(hand: EvaluatedHand): string {
     default:
       return hand.rank;
   }
+}
+
+/** True if a card index is a real French-deck value (0–51), not the 255 sentinel. */
+export function isEvalCard(value: number | null | undefined): value is number {
+  return typeof value === "number" && value >= 0 && value <= 51;
+}
+
+export interface NamedHandPlayer {
+  seatIndex: number;
+  cardsRevealed?: boolean;
+  revealedCards?: [number | null, number | null] | null;
+}
+
+export interface NamedHand {
+  seatIndex: number;
+  description: string;
+  evaluated: EvaluatedHand;
+}
+
+/**
+ * Name every remaining showdown hand from public revealed cards + the board.
+ * Does not pick winners — after HandCompleted, prefer event chipsWon for that.
+ */
+export function namedHands(players: NamedHandPlayer[], board: number[]): NamedHand[] {
+  const realBoard = board.filter(isEvalCard);
+  return players
+    .filter(
+      (p) =>
+        Boolean(p.cardsRevealed) &&
+        isEvalCard(p.revealedCards?.[0]) &&
+        isEvalCard(p.revealedCards?.[1]) &&
+        realBoard.length + 2 >= 5,
+    )
+    .map((p) => {
+      const evaluated = evaluateHand([
+        p.revealedCards![0]!,
+        p.revealedCards![1]!,
+        ...realBoard,
+      ]);
+      return {
+        seatIndex: p.seatIndex,
+        description: getHandDescription(evaluated),
+        evaluated,
+      };
+    });
+}
+
+/** Seats that share the best evaluated hand (split pot → every winner). */
+export function bestHandSeats(hands: NamedHand[]): number[] {
+  if (hands.length === 0) return [];
+  let best = hands[0].evaluated;
+  for (const hand of hands) {
+    if (compareHands(hand.evaluated, best) > 0) best = hand.evaluated;
+  }
+  return hands
+    .filter((hand) => compareHands(hand.evaluated, best) === 0)
+    .map((hand) => hand.seatIndex);
 }

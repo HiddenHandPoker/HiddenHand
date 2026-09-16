@@ -592,7 +592,8 @@
     animation: replay-seat-pulse 1.5s ease-in-out infinite;
   }
 
-  .replay-winner-seat {
+  .replay-winner-seat,
+  .winner-seat {
     animation: replay-winner-ring 1.5s ease-in-out infinite;
   }
 
@@ -696,7 +697,9 @@
   .animate-pulse-gold,
   .chip-fly,
   .mpc-shuffle-felt,
-  .mpc-riffle-card {
+  .mpc-riffle-card,
+  .winner-seat,
+  .replay-winner-seat {
     animation: none !important;
   }
 }

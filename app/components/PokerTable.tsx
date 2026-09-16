@@ -19,6 +19,8 @@ interface Player {
   revealedCards?: [number | null, number | null];
   cardsRevealed?: boolean;
   status: "empty" | "sitting" | "playing" | "folded" | "allin";
+  handName?: string;
+  isWinner?: boolean;
 }
 
 interface PokerTableProps {
@@ -43,9 +45,6 @@ interface PokerTableProps {
   // Chip animation triggers
   chipBetTrigger?: { seatIndex: number; amount: number; key: string } | null;
   chipWinTrigger?: { seatIndex: number; key: string } | null;
-  // Win celebration
-  showWinCelebration?: boolean;
-  winAmount?: number;
   // Token info for display
   token?: TokenInfo;
   // Player stats for HUD tooltips
@@ -110,8 +109,6 @@ export const PokerTable: FC<PokerTableProps> = ({
   awaitingCommunityReveal = false,
   chipBetTrigger = null,
   chipWinTrigger = null,
-  showWinCelebration = false,
-  winAmount,
   token = getDefaultToken(),
   playerStatsMap,
   onEmptySeatClick,
@@ -403,6 +400,8 @@ export const PokerTable: FC<PokerTableProps> = ({
               isShowdownPhase={isShowdownPhase}
               isRevealing={isRevealing}
               isDecrypting={isDecrypting && isCurrentPlayer}
+              handName={player?.handName}
+              isWinner={player?.isWinner}
               token={token}
               playerStats={player?.player && playerStatsMap ? playerStatsMap.get(player.player) : undefined}
               compact={isMobile}
@@ -422,74 +421,6 @@ export const PokerTable: FC<PokerTableProps> = ({
         winTrigger={chipWinTrigger}
         bigBlind={bigBlind}
       />
-
-      {/* Win celebration - centered on felt area using explicit transform centering */}
-      {showWinCelebration && (
-        <div className="absolute inset-5 sm:inset-10 z-40 pointer-events-none">
-          <div
-            className="absolute left-1/2 top-1/2"
-            style={{
-              animation: "win-banner-enter 0.5s ease-out forwards",
-            }}
-          >
-            {/* Glow backdrop */}
-            <div
-              className="absolute -inset-8 rounded-3xl"
-              style={{
-                background: "radial-gradient(ellipse at center, rgba(212, 160, 18, 0.5) 0%, transparent 70%)",
-                filter: "blur(20px)",
-                animation: "win-glow-pulse 1s ease-in-out infinite",
-              }}
-            />
-
-            {/* Banner content */}
-            <div
-              className="relative glass rounded-2xl px-5 py-3 sm:px-10 sm:py-5 text-center"
-              style={{
-                border: "2px solid rgba(212, 160, 18, 0.5)",
-                boxShadow: "0 0 40px rgba(212, 160, 18, 0.3), inset 0 0 30px rgba(212, 160, 18, 0.1)",
-              }}
-            >
-              {/* Trophy icon */}
-              <div className="flex justify-center mb-2">
-                <svg
-                  className="w-10 h-10 text-[var(--gold-light)]"
-                  fill="currentColor"
-                  viewBox="0 0 24 24"
-                  style={{
-                    filter: "drop-shadow(0 0 10px rgba(244, 196, 48, 0.6))",
-                  }}
-                >
-                  <path d="M12 2C13.1 2 14 2.9 14 4V5H16C16.55 5 17 5.45 17 6V8C17 9.66 15.66 11 14 11H13.82C13.4 12.84 11.85 14.22 10 14.83V17H14V19H6V17H10V14.83C8.15 14.22 6.6 12.84 6.18 11H6C4.34 11 3 9.66 3 8V6C3 5.45 3.45 5 4 5H6V4C6 2.9 6.9 2 8 2H12ZM14 7H16V8C16 8.55 15.55 9 15 9H14V7ZM6 7V9H5C4.45 9 4 8.55 4 8V7H6ZM8 4V9C8 10.66 9.34 12 11 12C12.66 12 14 10.66 14 9V4H8ZM10 20V22H14V20H10Z" />
-                </svg>
-              </div>
-
-              <h2
-                className="font-display text-2xl font-bold mb-1 tracking-wide"
-                style={{
-                  background: "linear-gradient(135deg, #f4c430 0%, #d4a012 50%, #f4c430 100%)",
-                  backgroundSize: "200% 200%",
-                  WebkitBackgroundClip: "text",
-                  WebkitTextFillColor: "transparent",
-                  backgroundClip: "text",
-                  animation: "win-text-shimmer 2s ease-in-out infinite",
-                }}
-              >
-                YOU WIN!
-              </h2>
-
-              {winAmount && winAmount > 0 && (
-                <div className="flex items-center justify-center gap-2 text-[var(--text-primary)]">
-                  <span className="text-xl font-bold text-[var(--gold-light)]">
-                    +{fmt(winAmount)}
-                  </span>
-                  <span className="text-sm text-[var(--text-secondary)]">{token.symbol}</span>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 };

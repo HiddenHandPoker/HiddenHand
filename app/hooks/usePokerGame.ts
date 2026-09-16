@@ -37,7 +37,7 @@ import {
 } from "@/lib/arcium";
 import { Transaction, Keypair } from "@solana/web3.js";
 import { getDefaultToken, getTokenByMint, TOKEN_PROGRAM_ID, type TokenInfo } from "@/lib/tokens";
-import { getAssociatedTokenAddressSync } from "@solana/spl-token";
+import { getAssociatedTokenAddressSync, createAssociatedTokenAccountInstruction } from "@solana/spl-token";
 import {
   getSessionTokenPDA,
   buildCreateSessionInstruction,
@@ -179,6 +179,7 @@ export interface UsePokerGameResult {
   createTable: (config: CreateTableConfig) => Promise<string>;
   joinTable: (seatIndex: number, buyInSol: number) => Promise<string>;
   leaveTable: () => Promise<string>;
+  collectRake: () => Promise<string>;
   startHand: () => Promise<string>;
   shuffleDeck: () => Promise<string>;
   dealMeIn: () => Promise<void>;
@@ -1142,6 +1143,85 @@ export function usePokerGame(sessionKey?: SessionKeyParam | null): UsePokerGameR
     }
   }, [program, provider, publicKey, gameState.tablePDA, gameState.currentPlayerSeat, refreshState]);
 
+  // Collect accumulated rake — table authority only, and only while not Playing.
+  // Same vault / ATA pattern as leave_table, with the authority's ATA as destination.
+  const collectRake = useCallback(async (): Promise<string> => {
+    if (!program || !provider || !publicKey || !gameState.tablePDA || !gameState.table) {
+      throw new Error("Table not ready");
+    }
+    if (!gameState.isAuthority) {
+      throw new Error("Only the table authority can collect rake");
+    }
+    if (gameState.tableStatus === "Playing") {
+      throw new Error("Cannot collect rake during a hand");
+    }
+
+    setLoading(true);
+    setError(null);
+
+    try {
+      const [vaultPDA] = getVaultPDA(gameState.tablePDA);
+      const tableMint = gameState.table.tokenMint;
+      const authorityTokenAccount = getAssociatedTokenAddressSync(tableMint, publicKey);
+
+      const ataInfo = await provider.connection.getAccountInfo(authorityTokenAccount);
+      const collectIx = await program.methods
+        .collectRake()
+        .accounts({
+          authority: publicKey,
+          table: gameState.tablePDA,
+          authorityTokenAccount,
+          vault: vaultPDA,
+          mint: tableMint,
+          tokenProgram: TOKEN_PROGRAM_ID,
+        })
+        .instruction();
+
+      const tx = new Transaction();
+      if (!ataInfo) {
+        tx.add(
+          createAssociatedTokenAccountInstruction(
+            publicKey,
+            authorityTokenAccount,
+            publicKey,
+            tableMint,
+          ),
+        );
+      }
+      tx.add(collectIx);
+
+      const { blockhash, lastValidBlockHeight } =
+        await provider.connection.getLatestBlockhash();
+      tx.recentBlockhash = blockhash;
+      tx.feePayer = publicKey;
+
+      const signedTx = await provider.wallet.signTransaction(tx);
+      const signature = await provider.connection.sendRawTransaction(signedTx.serialize());
+      await provider.connection.confirmTransaction(
+        { signature, blockhash, lastValidBlockHeight },
+        "confirmed",
+      );
+
+      await refreshState();
+      return signature;
+    } catch (e) {
+      const message = parseAnchorError(e);
+      setError(message);
+      throw e;
+    } finally {
+      setLoading(false);
+    }
+  }, [
+    program,
+    provider,
+    publicKey,
+    gameState.tablePDA,
+    gameState.table,
+    gameState.isAuthority,
+    gameState.tableStatus,
+    refreshState,
+  ]);
+
   // Start hand — authority or any seated player (Task 3). Occupied seats stay
   // remaining accounts so signer_is_seated can authorize immediately.
   const startHand = useCallback(async (): Promise<string> => {
@@ -1911,6 +1991,7 @@ export function usePokerGame(sessionKey?: SessionKeyParam | null): UsePokerGameR
     createTable,
     joinTable,
     leaveTable,
+    collectRake,
     startHand,
     shuffleDeck,
     retryDecrypt,

@@ -1,6 +1,6 @@
 "use client";
 
-import { FC, useEffect, useState, useCallback } from "react";
+import { FC, useEffect, useState, useCallback, useRef } from "react";
 import { type TokenInfo, getDefaultToken, baseUnitsToDisplay } from "@/lib/tokens";
 
 interface WinCelebrationProps {
@@ -39,9 +39,12 @@ export const WinCelebration: FC<WinCelebrationProps> = ({
   isActive,
   winAmount,
   onComplete,
+  token = getDefaultToken(),
 }) => {
   const [particles, setParticles] = useState<Particle[]>([]);
   const [showBanner, setShowBanner] = useState(false);
+  const onCompleteRef = useRef(onComplete);
+  onCompleteRef.current = onComplete;
 
   const createParticles = useCallback(() => {
     const newParticles: Particle[] = [];
@@ -103,7 +106,7 @@ export const WinCelebration: FC<WinCelebrationProps> = ({
       setShowBanner(false);
       setTimeout(() => {
         setParticles([]);
-        onComplete?.();
+        onCompleteRef.current?.();
       }, 500);
     }, 2000);
 
@@ -111,11 +114,11 @@ export const WinCelebration: FC<WinCelebrationProps> = ({
       clearInterval(animationInterval);
       clearTimeout(timeout);
     };
-  }, [isActive, createParticles, onComplete]);
+  }, [isActive, createParticles]);
 
   if (!isActive && particles.length === 0) return null;
 
-  const winDisplay = winAmount ? baseUnitsToDisplay(winAmount, getDefaultToken()).toFixed(2) : null;
+  const winDisplay = winAmount ? baseUnitsToDisplay(winAmount, token).toFixed(2) : null;
 
   return (
     <div className="fixed inset-0 pointer-events-none z-50 overflow-hidden">
@@ -166,8 +169,9 @@ export const WinCelebration: FC<WinCelebrationProps> = ({
 
       {/* Winner banner */}
       {showBanner && (
-        <div className="absolute inset-0 flex items-center justify-center pt-0">
+        <div className="absolute inset-0">
           <div
+            className="absolute left-1/2 top-1/2"
             style={{
               animation: "win-banner-enter 0.5s ease-out forwards",
             }}
@@ -223,7 +227,7 @@ export const WinCelebration: FC<WinCelebrationProps> = ({
                 <span className="text-2xl font-bold text-[var(--gold-light)]">
                   +{winDisplay}
                 </span>
-                <span className="text-lg text-[var(--text-secondary)]">SOL</span>
+                <span className="text-lg text-[var(--text-secondary)]">{token.symbol}</span>
               </div>
             )}
           </div>
@@ -231,5 +235,100 @@ export const WinCelebration: FC<WinCelebrationProps> = ({
         </div>
       )}
     </div>
+  );
+};
+
+export interface ShowdownShare {
+  seatIndex: number;
+  description?: string;
+  chipsWon?: number;
+}
+
+export interface ShowdownOverlayProps {
+  shares: ShowdownShare[];
+  rakeLine: string;
+  token: TokenInfo;
+  /** Hero chipsWon from HandCompleted — celebration only after the event. */
+  heroWinAmount?: number;
+  celebrate?: boolean;
+  onCelebrationComplete?: () => void;
+}
+
+/** Named-hand results + rake line. Uses WinCelebration when the hero won. */
+export const ShowdownOverlay: FC<ShowdownOverlayProps> = ({
+  shares,
+  rakeLine,
+  token,
+  heroWinAmount,
+  celebrate = false,
+  onCelebrationComplete,
+}) => {
+  const fmt = (baseUnits: number) => baseUnitsToDisplay(baseUnits, token).toFixed(2);
+  const heroWon = celebrate && (heroWinAmount ?? 0) > 0;
+
+  return (
+    <>
+      <div
+        className="max-w-lg mx-auto glass border border-[var(--gold-main)]/40 rounded-2xl p-5 text-center mb-4"
+        style={{ boxShadow: "0 0 30px rgba(212, 160, 18, 0.15)" }}
+      >
+        <div className="flex items-center justify-center gap-3 mb-3">
+          <svg
+            className="w-6 h-6 text-[var(--gold-light)]"
+            fill="currentColor"
+            viewBox="0 0 24 24"
+            style={{ filter: "drop-shadow(0 0 8px rgba(244, 196, 48, 0.5))" }}
+          >
+            <path d="M12 2C13.1 2 14 2.9 14 4V5H16C16.55 5 17 5.45 17 6V8C17 9.66 15.66 11 14 11H13.82C13.4 12.84 11.85 14.22 10 14.83V17H14V19H6V17H10V14.83C8.15 14.22 6.6 12.84 6.18 11H6C4.34 11 3 9.66 3 8V6C3 5.45 3.45 5 4 5H6V4C6 2.9 6.9 2 8 2H12ZM14 7H16V8C16 8.55 15.55 9 15 9H14V7ZM6 7V9H5C4.45 9 4 8.55 4 8V7H6ZM8 4V9C8 10.66 9.34 12 11 12C12.66 12 14 10.66 14 9V4H8ZM10 20V22H14V20H10Z" />
+          </svg>
+          <span className="text-[var(--gold-light)] font-bold text-lg">
+            {shares.length > 1 ? "Split pot" : "Showdown"}
+          </span>
+        </div>
+
+        <div className="space-y-1.5">
+          {shares.map((share) => (
+            <div
+              key={share.seatIndex}
+              className="flex items-center justify-center gap-2 flex-wrap"
+            >
+              <span
+                className="font-display text-lg font-bold"
+                style={{
+                  background: "linear-gradient(135deg, #f4c430 0%, #d4a012 50%, #f4c430 100%)",
+                  WebkitBackgroundClip: "text",
+                  WebkitTextFillColor: "transparent",
+                  backgroundClip: "text",
+                }}
+              >
+                Seat {share.seatIndex + 1}
+              </span>
+              {share.description && (
+                <span className="text-[var(--text-secondary)] text-sm">
+                  {share.description}
+                </span>
+              )}
+              {share.chipsWon != null && share.chipsWon > 0 && (
+                <>
+                  <span className="text-[var(--gold-light)] font-bold text-lg">
+                    +{fmt(share.chipsWon)}
+                  </span>
+                  <span className="text-[var(--text-muted)] text-sm">{token.symbol}</span>
+                </>
+              )}
+            </div>
+          ))}
+        </div>
+
+        <p className="text-[var(--text-muted)] text-xs mt-3">{rakeLine}</p>
+      </div>
+
+      <WinCelebration
+        isActive={heroWon}
+        winAmount={heroWinAmount}
+        token={token}
+        onComplete={onCelebrationComplete}
+      />
+    </>
   );
 };

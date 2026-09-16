@@ -65,6 +65,7 @@ export interface TableState {
   handNumber: number;
   rakeBps: number;
   rakeCap: number;
+  accumulatedRake: number;
   tokenMint: PublicKey | null;
   tokenDecimals: number;
   // Game state
@@ -96,6 +97,7 @@ export interface UseTableStateResult {
   loading: boolean;
   error: string | null;
   refresh: () => Promise<void>;
+  program: Program<Idl>;
 }
 
 // ---------------------------------------------------------------------------
@@ -133,6 +135,7 @@ const initialState: TableState = {
   handNumber: 0,
   rakeBps: 0,
   rakeCap: 0,
+  accumulatedRake: 0,
   tokenMint: null,
   tokenDecimals: 6,
   phase: "Settled",
@@ -342,6 +345,7 @@ export function useTableState(tableId: string): UseTableStateResult {
         handNumber,
         rakeBps: table.rakeBps,
         rakeCap: table.rakeCap.toNumber(),
+        accumulatedRake: table.accumulatedRake?.toNumber() ?? 0,
         tokenMint: table.tokenMint ?? null,
         tokenDecimals: table.tokenDecimals ?? 6,
         phase,
@@ -396,7 +400,7 @@ export function useTableState(tableId: string): UseTableStateResult {
     };
   }, [tablePDA, refreshState]);
 
-  return { state, loading, error, refresh: refreshState };
+  return { state, loading, error, refresh: refreshState, program };
 }
 
 // ---------------------------------------------------------------------------

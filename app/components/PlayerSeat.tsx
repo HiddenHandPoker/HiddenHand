@@ -32,6 +32,10 @@ interface PlayerSeatProps {
   isRevealing?: boolean;
   /** deal_to_seat decrypt in flight — keep hero faces down until it clears AND holes exist. */
   isDecrypting?: boolean;
+  /** Public hand name at showdown (e.g. "Pair of Aces"). */
+  handName?: string;
+  /** Winner ring — split pots mark every chipsWon > 0 seat. */
+  isWinner?: boolean;
 }
 
 export const PlayerSeat: FC<PlayerSeatProps> = ({
@@ -56,6 +60,8 @@ export const PlayerSeat: FC<PlayerSeatProps> = ({
   onSit,
   isRevealing = false,
   isDecrypting = false,
+  handName,
+  isWinner = false,
 }) => {
   const [showHUD, setShowHUD] = useState(false);
   const [showNotes, setShowNotes] = useState(false);
@@ -180,8 +186,8 @@ export const PlayerSeat: FC<PlayerSeatProps> = ({
           : "glass-dark"
         }
         ${isTurn ? "animate-turn" : ""}
-        ${isFolded ? "opacity-40" : ""}
-        ${isCurrentPlayer && !isEmpty ? "ring-2 ring-[var(--felt-highlight)] ring-opacity-60" : ""}
+        ${isFolded && !isWinner ? "opacity-40" : ""}
+        ${isWinner ? "winner-seat" : isCurrentPlayer && !isEmpty ? "ring-2 ring-[var(--felt-highlight)] ring-opacity-60" : ""}
         ${isEmpty && onSit ? "cursor-pointer touch-target" : ""}
       `}
       role={isEmpty && onSit ? "button" : undefined}
@@ -255,6 +261,17 @@ export const PlayerSeat: FC<PlayerSeatProps> = ({
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
           </svg>
         </div>
+      )}
+
+      {/* Winner ring glow */}
+      {isWinner && (
+        <div
+          className="absolute -inset-1 rounded-2xl pointer-events-none"
+          style={{
+            background: "radial-gradient(ellipse at center, rgba(212, 160, 18, 0.35) 0%, transparent 70%)",
+            animation: "win-glow-pulse 1.5s ease-in-out infinite",
+          }}
+        />
       )}
 
       {/* Turn indicator glow */}
@@ -373,6 +390,14 @@ export const PlayerSeat: FC<PlayerSeatProps> = ({
               {fmt(chips)}
               {!compact && <span className="text-[var(--text-muted)] text-xs ml-1">{token.symbol}</span>}
             </p>
+            {handName && (
+              <p
+                className={`${compact ? "text-[7px] leading-tight" : "text-[10px]"} text-center text-[var(--gold-light)] font-semibold truncate`}
+                title={handName}
+              >
+                {handName}
+              </p>
+            )}
           </div>
 
           {/* Total bet this hand */}

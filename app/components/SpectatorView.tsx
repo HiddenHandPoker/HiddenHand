@@ -4,8 +4,11 @@ import { FC, useMemo, useEffect, useRef, useState } from "react";
 import { PokerTable } from "./PokerTable";
 import { useChipAnimations } from "./ChipAnimation";
 import { GameStatusBar, mpcStatusLabel } from "./GameStatusBar";
+import { ShowdownOverlay } from "./WinCelebration";
 import { useTableState, type SpectatorPlayer } from "@/hooks/useTableState";
+import { useHandHistory, type HandHistoryEntry } from "@/hooks/useHandHistory";
 import { getTokenByMint, getDefaultToken, baseUnitsToDisplay, type TokenInfo } from "@/lib/tokens";
+import { evaluateHand, getHandDescription, namedHands, bestHandSeats } from "@/lib/handEval";
 
 /**
  * SpectatorView — Read-only view of an active poker table.
@@ -28,18 +31,14 @@ interface SpectatorViewProps {
   onSitDown?: () => void;
 }
 
-interface WinnerInfo {
-  seatIndex: number;
-  winnings: number;
-}
-
 export const SpectatorView: FC<SpectatorViewProps> = ({
   tableId,
   walletButton,
   isConnected = false,
   onSitDown,
 }) => {
-  const { state, loading, error } = useTableState(tableId);
+  const { state, loading, error, program } = useTableState(tableId);
+  const { history: onChainHistory } = useHandHistory(program, state.tablePDA);
 
   // Resolve token for display
   const token: TokenInfo = useMemo(() => {
@@ -89,73 +88,97 @@ export const SpectatorView: FC<SpectatorViewProps> = ({
     prevBetsRef.current = newBets;
   }, [state.players, state.phase, triggerBetAnimation]);
 
-  // -----------------------------------------------------------------------
-  // Winner detection — snapshot chips at Showdown, compare at Settled
-  // -----------------------------------------------------------------------
-  const chipsBeforeShowdownRef = useRef<Map<number, number>>(new Map());
-  const [winners, setWinners] = useState<WinnerInfo[]>([]);
-  const prevPhaseRef = useRef(state.phase);
+  const boardCards = useMemo(
+    () => state.communityCards.map(Number).filter((c) => c >= 0 && c <= 51),
+    [state.communityCards],
+  );
+  const liveNamed = useMemo(
+    () => namedHands(state.players, boardCards),
+    [state.players, boardCards],
+  );
+  const [namedBySeat, setNamedBySeat] = useState<Map<number, string>>(() => new Map());
+  const [previewWinnerSeats, setPreviewWinnerSeats] = useState<number[]>([]);
+  const [completedOverlay, setCompletedOverlay] = useState<HandHistoryEntry | null>(null);
+  const sawThisHandRef = useRef(false);
+  const celebratedHandRef = useRef<number | null>(null);
 
   useEffect(() => {
-    // Snapshot chips when entering Showdown
-    if (state.phase === "Showdown" && prevPhaseRef.current !== "Showdown") {
-      const chipMap = new Map<number, number>();
-      state.players.forEach((p) => {
-        if (p.status !== "empty") {
-          chipMap.set(p.seatIndex, p.chips);
-        }
-      });
-      chipsBeforeShowdownRef.current = chipMap;
-      setWinners([]);
-    }
+    if (state.tableStatus === "Playing") sawThisHandRef.current = true;
+  }, [state.tableStatus]);
 
-    // Detect winners when settling
-    if (
-      state.phase === "Settled" &&
-      prevPhaseRef.current !== "Settled" &&
-      chipsBeforeShowdownRef.current.size > 0
-    ) {
-      const detected: WinnerInfo[] = [];
-
-      state.players.forEach((p) => {
-        if (p.status !== "empty") {
-          const chipsBefore =
-            chipsBeforeShowdownRef.current.get(p.seatIndex) ?? 0;
-          if (p.chips > chipsBefore) {
-            detected.push({
-              seatIndex: p.seatIndex,
-              winnings: p.chips - chipsBefore,
-            });
-          }
-        }
-      });
-
-      // Trigger win animations (staggered)
-      detected.forEach((w, idx) => {
-        setTimeout(() => {
-          triggerWinAnimation(w.seatIndex);
-        }, idx * 200);
-      });
-
-      setWinners(detected);
-      chipsBeforeShowdownRef.current = new Map();
-    }
-
-    // Clear winners when a new hand starts
-    if (state.phase === "Dealing" && prevPhaseRef.current !== "Dealing") {
-      setWinners([]);
-    }
-
-    prevPhaseRef.current = state.phase;
-  }, [state.phase, state.players, triggerWinAnimation]);
-
-  // Auto-dismiss winner banner after 5 seconds
   useEffect(() => {
-    if (winners.length > 0) {
-      const timeout = setTimeout(() => setWinners([]), 5000);
-      return () => clearTimeout(timeout);
+    if (state.phase === "Dealing") {
+      setNamedBySeat(new Map());
+      setPreviewWinnerSeats([]);
+      setCompletedOverlay(null);
+      return;
     }
-  }, [winners]);
+    if (liveNamed.length > 0) {
+      setNamedBySeat(new Map(liveNamed.map((h) => [h.seatIndex, h.description])));
+      setPreviewWinnerSeats(bestHandSeats(liveNamed));
+    }
+  }, [state.phase, liveNamed]);
+
+  useEffect(() => {
+    if (!sawThisHandRef.current) return;
+    const n = state.handNumber;
+    if (!n) return;
+    const match = onChainHistory.find((h) => h.handNumber === n);
+    if (!match) return;
+    setCompletedOverlay(match);
+
+    const eventNames = new Map<number, string>();
+    for (const p of match.players) {
+      if (p.holeCards && match.communityCards.length >= 5) {
+        eventNames.set(
+          p.seatIndex,
+          getHandDescription(evaluateHand([...p.holeCards, ...match.communityCards])),
+        );
+      } else if (p.handRank) {
+        eventNames.set(p.seatIndex, p.handRank);
+      }
+    }
+    if (eventNames.size > 0) setNamedBySeat(eventNames);
+  }, [onChainHistory, state.handNumber]);
+
+  useEffect(() => {
+    if (!completedOverlay) return;
+    if (celebratedHandRef.current === completedOverlay.handNumber) return;
+    celebratedHandRef.current = completedOverlay.handNumber;
+    completedOverlay.players
+      .filter((p) => p.chipsWon > 0)
+      .forEach((w, idx) => {
+        setTimeout(() => triggerWinAnimation(w.seatIndex), idx * 200);
+      });
+  }, [completedOverlay, triggerWinAnimation]);
+
+  const overlayShares = useMemo(() => {
+    if (completedOverlay) {
+      const fromEvent = completedOverlay.players
+        .filter((p) => p.chipsWon > 0)
+        .map((p) => ({
+          seatIndex: p.seatIndex,
+          description: namedBySeat.get(p.seatIndex) ?? p.handRank ?? undefined,
+          chipsWon: p.chipsWon,
+        }));
+      if (fromEvent.length > 0) return fromEvent;
+    }
+    return previewWinnerSeats.map((seatIndex) => ({
+      seatIndex,
+      description: namedBySeat.get(seatIndex),
+    }));
+  }, [completedOverlay, namedBySeat, previewWinnerSeats]);
+
+  const winnerSeatSet = useMemo(() => {
+    if (completedOverlay) {
+      return new Set(
+        completedOverlay.players.filter((p) => p.chipsWon > 0).map((p) => p.seatIndex),
+      );
+    }
+    return new Set(previewWinnerSeats);
+  }, [completedOverlay, previewWinnerSeats]);
+
+  const rakeLine = `Rake ${state.rakeBps / 100}% · cap ${fmt(state.rakeCap)} ${token.symbol} · collected this table ${fmt(state.accumulatedRake)} ${token.symbol}`;
 
   // Map players to PokerTable format — PRIVACY: all hole cards are [null, null]
   const playersForTable = useMemo(() => {
@@ -169,8 +192,10 @@ export const SpectatorView: FC<SpectatorViewProps> = ({
       isEncrypted: p.isEncrypted,
       revealedCards: p.revealedCards, // Showdown reveals are public
       cardsRevealed: p.cardsRevealed,
+      handName: namedBySeat.get(p.seatIndex),
+      isWinner: winnerSeatSet.has(p.seatIndex),
     }));
-  }, [state.players]);
+  }, [state.players, namedBySeat, winnerSeatSet]);
 
   const isShowdownPhase = state.phase === "Showdown" || state.phase === "Settled";
   const hasPlayers = state.currentPlayers > 0;
@@ -399,74 +424,12 @@ export const SpectatorView: FC<SpectatorViewProps> = ({
         />
       )}
 
-      {/* Winner banner — spectator version ("Seat X won Y") */}
-      {winners.length > 0 && (
-        <div className="max-w-lg mx-auto">
-          <div
-            className="glass border border-[var(--gold-main)]/40 rounded-2xl p-5 text-center"
-            style={{
-              boxShadow: "0 0 30px rgba(212, 160, 18, 0.15)",
-            }}
-          >
-            {/* Trophy icon */}
-            <div className="flex justify-center mb-3">
-              <svg
-                className="w-8 h-8 text-[var(--gold-light)]"
-                fill="currentColor"
-                viewBox="0 0 24 24"
-                style={{
-                  filter: "drop-shadow(0 0 8px rgba(244, 196, 48, 0.5))",
-                }}
-              >
-                <path d="M12 2C13.1 2 14 2.9 14 4V5H16C16.55 5 17 5.45 17 6V8C17 9.66 15.66 11 14 11H13.82C13.4 12.84 11.85 14.22 10 14.83V17H14V19H6V17H10V14.83C8.15 14.22 6.6 12.84 6.18 11H6C4.34 11 3 9.66 3 8V6C3 5.45 3.45 5 4 5H6V4C6 2.9 6.9 2 8 2H12ZM14 7H16V8C16 8.55 15.55 9 15 9H14V7ZM6 7V9H5C4.45 9 4 8.55 4 8V7H6ZM8 4V9C8 10.66 9.34 12 11 12C12.66 12 14 10.66 14 9V4H8ZM10 20V22H14V20H10Z" />
-              </svg>
-            </div>
-
-            {/* Winner details */}
-            <div className="space-y-1.5">
-              {winners.map((w) => (
-                <div
-                  key={w.seatIndex}
-                  className="flex items-center justify-center gap-2"
-                >
-                  <span
-                    className="font-display text-lg font-bold"
-                    style={{
-                      background: "linear-gradient(135deg, #f4c430 0%, #d4a012 50%, #f4c430 100%)",
-                      backgroundSize: "200% 200%",
-                      WebkitBackgroundClip: "text",
-                      WebkitTextFillColor: "transparent",
-                      backgroundClip: "text",
-                    }}
-                  >
-                    Seat {w.seatIndex + 1} won
-                  </span>
-                  <span className="text-[var(--gold-light)] font-bold text-lg">
-                    +{fmt(w.winnings)}
-                  </span>
-                  <span className="text-[var(--text-muted)] text-sm">
-                    {token.symbol}
-                  </span>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Showdown Results for spectators */}
-      {isShowdownPhase && winners.length === 0 && state.players.some((p) => p.cardsRevealed) && (
-        <div className="max-w-lg mx-auto glass border border-amber-500/30 rounded-2xl p-5 text-center">
-          <div className="flex items-center justify-center gap-3 mb-2">
-            <svg className="w-6 h-6 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />
-            </svg>
-            <span className="text-amber-300 font-bold text-lg">Showdown</span>
-          </div>
-          <p className="text-[var(--text-secondary)] text-sm">
-            Players are revealing their cards for hand evaluation
-          </p>
-        </div>
+      {overlayShares.length > 0 && (
+        <ShowdownOverlay
+          shares={overlayShares}
+          rakeLine={rakeLine}
+          token={token}
+        />
       )}
 
       {/* Privacy explainer for spectators */}

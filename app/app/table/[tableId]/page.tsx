@@ -18,10 +18,11 @@ import { GameHistory, useGameHistory } from "@/components/GameHistory";
 import { NETWORK } from "@/contexts/WalletProvider";
 import { solToLamports, lamportsToSol } from "@/lib/utils";
 import { getTokenByMint, getDefaultToken, baseUnitsToDisplay, displayToBaseUnits, type TokenInfo } from "@/lib/tokens";
-import { evaluateHand, getHandDescription } from "@/lib/handEval";
-import { useSounds, soundManager } from "@/lib/sounds";
+import { evaluateHand, getHandDescription, namedHands, bestHandSeats } from "@/lib/handEval";
+import { useSounds } from "@/lib/sounds";
+import { ShowdownOverlay } from "@/components/WinCelebration";
 import { SoundToggle } from "@/components/SoundToggle";
-import { useHandHistory } from "@/hooks/useHandHistory";
+import { useHandHistory, type HandHistoryEntry } from "@/hooks/useHandHistory";
 import { OnChainHandHistory } from "@/components/OnChainHandHistory";
 import { Tooltip, InfoIcon } from "@/components/Tooltip";
 import { useChipAnimations } from "@/components/ChipAnimation";
@@ -89,6 +90,7 @@ export default function TablePage({ params }: { params: Promise<{ tableId: strin
     error,
     joinTable,
     leaveTable,
+    collectRake,
     startHand,
     shuffleDeck,
     dealMeIn,
@@ -222,20 +224,9 @@ export default function TablePage({ params }: { params: Promise<{ tableId: strin
   // USDC balance check for join flow
   const { balance: usdcBalance, refresh: refreshBalance } = useTokenBalance(tableToken.mint);
 
-  // Win celebration state
+  // Win celebration (WinCelebration owns the 2s dismiss)
   const [showCelebration, setShowCelebration] = useState(false);
   const [celebrationWinAmount, setCelebrationWinAmount] = useState<number | undefined>(undefined);
-
-  // Auto-dismiss win celebration after 2 seconds
-  useEffect(() => {
-    if (showCelebration) {
-      const timeout = setTimeout(() => {
-        setShowCelebration(false);
-        setCelebrationWinAmount(undefined);
-      }, 2000);
-      return () => clearTimeout(timeout);
-    }
-  }, [showCelebration]);
 
   // Chip animation state
   const { betTrigger, winTrigger, triggerBetAnimation, triggerWinAnimation } = useChipAnimations();
@@ -275,12 +266,10 @@ export default function TablePage({ params }: { params: Promise<{ tableId: strin
     }
   }, [gameState.table, buyInSol]);
 
-  // Track phase changes, community cards, and winners for game history
+  // Track phase changes and community cards for game history
   const prevPhaseRef = useRef(gameState.phase);
   const prevCommunityRef = useRef<number[]>([]);
   const isFirstRenderRef = useRef(true);
-  // Track chips before showdown to detect winners
-  const chipsBeforeShowdownRef = useRef<Map<number, number>>(new Map());
 
   useEffect(() => {
     // Skip logging on first render (initial state)
@@ -316,77 +305,6 @@ export default function TablePage({ params }: { params: Promise<{ tableId: strin
       };
       const message = phaseMessages[gameState.phase];
 
-      // When entering Showdown, capture current chip counts
-      if (gameState.phase === "Showdown") {
-        const chipMap = new Map<number, number>();
-        gameState.players.forEach((p) => {
-          if (p.status !== "empty") {
-            chipMap.set(p.seatIndex, p.chips);
-          }
-        });
-        chipsBeforeShowdownRef.current = chipMap;
-      }
-
-      // When settling, detect winners by comparing chips
-      if (gameState.phase === "Settled" && chipsBeforeShowdownRef.current.size > 0) {
-        const winners: { seatIndex: number; winnings: number; handDesc?: string }[] = [];
-
-        // Get community cards for hand evaluation
-        const community = gameState.communityCards
-          .map(c => Number(c))
-          .filter(c => !isNaN(c) && c !== 255);
-
-        gameState.players.forEach((p) => {
-          if (p.status !== "empty") {
-            const chipsBefore = chipsBeforeShowdownRef.current.get(p.seatIndex) ?? 0;
-            const chipsNow = p.chips;
-            if (chipsNow > chipsBefore) {
-              // Try to evaluate hand if we have hole cards (only for current player)
-              let handDesc: string | undefined;
-              if (p.holeCards[0] !== null && p.holeCards[1] !== null && community.length === 5) {
-                const allCards = [p.holeCards[0], p.holeCards[1], ...community];
-                const evaluated = evaluateHand(allCards);
-                handDesc = getHandDescription(evaluated);
-              }
-
-              winners.push({
-                seatIndex: p.seatIndex,
-                winnings: chipsNow - chipsBefore,
-                handDesc,
-              });
-            }
-          }
-        });
-
-        // Add winner events and trigger chip animations
-        winners.forEach((winner, index) => {
-          const winningsDisplay = fmt(winner.winnings);
-          const handInfo = winner.handDesc ? ` with ${winner.handDesc}` : "";
-          addGameEvent("winner", `Seat ${winner.seatIndex + 1} won ${winningsDisplay} ${tableToken.symbol}${handInfo}`, {
-            seatIndex: winner.seatIndex,
-            amount: winner.winnings,
-          });
-          // Trigger chip animation from pot to winner (stagger if multiple winners)
-          setTimeout(() => {
-            triggerWinAnimation(winner.seatIndex);
-          }, index * 200);
-        });
-
-        // Play win sound and show celebration if current player won
-        const currentPlayerSeat = gameState.players.find(p => p.player === publicKey?.toString());
-        if (currentPlayerSeat) {
-          const playerWin = winners.find(w => w.seatIndex === currentPlayerSeat.seatIndex);
-          if (playerWin) {
-            playSound("chipWin");
-            setCelebrationWinAmount(playerWin.winnings);
-            setShowCelebration(true);
-          }
-        }
-
-        // Clear the chip tracking for next hand
-        chipsBeforeShowdownRef.current = new Map();
-      }
-
       // Only add phase event if there's a message (Flop/Turn/River handled by card events)
       if (message) {
         addGameEvent("phase", message);
@@ -416,7 +334,7 @@ export default function TablePage({ params }: { params: Promise<{ tableId: strin
       }
       prevCommunityRef.current = [...currentCommunity];
     }
-  }, [gameState.phase, gameState.communityCards, gameState.players, addGameEvent, playSound, publicKey, triggerWinAnimation]);
+  }, [gameState.phase, gameState.communityCards, addGameEvent, playSound]);
 
   // Track bets to trigger chip animations
   useEffect(() => {
@@ -493,6 +411,124 @@ export default function TablePage({ params }: { params: Promise<{ tableId: strin
     );
     return remaining.length <= 1 || remaining.every((p) => p.cardsRevealed);
   }, [gameState.players]);
+
+  // Showdown theater: name remaining hands from public cards; after
+  // HandCompleted prefer event chipsWon (not chip-delta). Snapshot names
+  // because showdown wipes revealed_card_* on-chain as it settles.
+  const boardCards = useMemo(
+    () => gameState.communityCards.map(Number).filter((c) => c >= 0 && c <= 51),
+    [gameState.communityCards],
+  );
+  const liveNamed = useMemo(
+    () => namedHands(gameState.players, boardCards),
+    [gameState.players, boardCards],
+  );
+  const [namedBySeat, setNamedBySeat] = useState<Map<number, string>>(() => new Map());
+  const [previewWinnerSeats, setPreviewWinnerSeats] = useState<number[]>([]);
+  const [completedOverlay, setCompletedOverlay] = useState<HandHistoryEntry | null>(null);
+  const sawThisHandRef = useRef(false);
+  const celebratedHandRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (gameState.tableStatus === "Playing") {
+      sawThisHandRef.current = true;
+    }
+  }, [gameState.tableStatus]);
+
+  useEffect(() => {
+    if (gameState.phase === "Dealing") {
+      setNamedBySeat(new Map());
+      setPreviewWinnerSeats([]);
+      setCompletedOverlay(null);
+      setShowCelebration(false);
+      setCelebrationWinAmount(undefined);
+      return;
+    }
+    if (liveNamed.length > 0) {
+      setNamedBySeat(new Map(liveNamed.map((h) => [h.seatIndex, h.description])));
+      setPreviewWinnerSeats(bestHandSeats(liveNamed));
+    }
+  }, [gameState.phase, liveNamed]);
+
+  useEffect(() => {
+    if (!sawThisHandRef.current) return;
+    const n = gameState.table?.handNumber.toNumber();
+    if (!n) return;
+    const match = onChainHistory.find((h) => h.handNumber === n);
+    if (!match) return;
+    setCompletedOverlay(match);
+
+    const eventNames = new Map<number, string>();
+    for (const p of match.players) {
+      if (p.holeCards && match.communityCards.length >= 5) {
+        eventNames.set(
+          p.seatIndex,
+          getHandDescription(evaluateHand([...p.holeCards, ...match.communityCards])),
+        );
+      } else if (p.handRank) {
+        eventNames.set(p.seatIndex, p.handRank);
+      }
+    }
+    if (eventNames.size > 0) setNamedBySeat(eventNames);
+  }, [onChainHistory, gameState.table]);
+
+  useEffect(() => {
+    if (!completedOverlay) return;
+    if (celebratedHandRef.current === completedOverlay.handNumber) return;
+    celebratedHandRef.current = completedOverlay.handNumber;
+
+    const winners = completedOverlay.players.filter((p) => p.chipsWon > 0);
+    winners.forEach((winner, index) => {
+      const handInfo = winner.handRank ? ` with ${winner.handRank}` : "";
+      const wonDisplay = baseUnitsToDisplay(winner.chipsWon, tableToken).toFixed(2);
+      addGameEvent(
+        "winner",
+        `Seat ${winner.seatIndex + 1} won ${wonDisplay} ${tableToken.symbol}${handInfo}`,
+        { seatIndex: winner.seatIndex, amount: winner.chipsWon },
+      );
+      setTimeout(() => {
+        triggerWinAnimation(winner.seatIndex);
+      }, index * 200);
+    });
+
+    const heroWin = winners.find((w) => w.player === publicKey?.toString());
+    if (heroWin && heroWin.chipsWon > 0) {
+      playSound("chipWin");
+      setCelebrationWinAmount(heroWin.chipsWon);
+      setShowCelebration(true);
+    }
+  }, [completedOverlay, addGameEvent, tableToken, publicKey, triggerWinAnimation, playSound]);
+
+  const overlayShares = useMemo(() => {
+    if (completedOverlay) {
+      const fromEvent = completedOverlay.players
+        .filter((p) => p.chipsWon > 0)
+        .map((p) => ({
+          seatIndex: p.seatIndex,
+          description: namedBySeat.get(p.seatIndex) ?? p.handRank ?? undefined,
+          chipsWon: p.chipsWon,
+        }));
+      if (fromEvent.length > 0) return fromEvent;
+    }
+    return previewWinnerSeats.map((seatIndex) => ({
+      seatIndex,
+      description: namedBySeat.get(seatIndex),
+    }));
+  }, [completedOverlay, namedBySeat, previewWinnerSeats]);
+
+  const winnerSeatSet = useMemo(() => {
+    if (completedOverlay) {
+      return new Set(
+        completedOverlay.players.filter((p) => p.chipsWon > 0).map((p) => p.seatIndex),
+      );
+    }
+    return new Set(previewWinnerSeats);
+  }, [completedOverlay, previewWinnerSeats]);
+
+  const showShowdownOverlay = overlayShares.length > 0;
+  const rakeLine = gameState.table
+    ? `Rake ${gameState.table.rakeBps / 100}% · cap ${fmt(gameState.table.rakeCap.toNumber())} ${tableToken.symbol} · collected this table ${fmt(gameState.table.accumulatedRake.toNumber())} ${tableToken.symbol}`
+    : "";
 
   const mpcLabel = mpcStatusLabel({
     phase: gameState.phase,
@@ -712,9 +748,11 @@ export default function TablePage({ params }: { params: Promise<{ tableId: strin
         isEncrypted: !isHero || gameState.isDecrypting || gameState.decryptedCards[0] === null,
         revealedCards: p.revealedCards,
         cardsRevealed: p.cardsRevealed,
+        handName: namedBySeat.get(p.seatIndex),
+        isWinner: winnerSeatSet.has(p.seatIndex),
       };
     });
-  }, [gameState.players, gameState.decryptedCards, gameState.isDecrypting, publicKey]);
+  }, [gameState.players, gameState.decryptedCards, gameState.isDecrypting, publicKey, namedBySeat, winnerSeatSet]);
 
   // Determine if we're in showdown display mode (Showdown or Settled with revealed cards)
   const isShowdownPhase = gameState.phase === "Showdown" || gameState.phase === "Settled";
@@ -1085,6 +1123,25 @@ export default function TablePage({ params }: { params: Promise<{ tableId: strin
                       Leave Table
                     </button>
                   )}
+
+                  {gameState.isAuthority &&
+                   gameState.table &&
+                   gameState.table.accumulatedRake.toNumber() > 0 &&
+                   gameState.tableStatus !== "Playing" && (
+                    <button
+                      onClick={() =>
+                        withToast(
+                          () => collectRake(),
+                          "Collecting rake...",
+                          "Rake collected",
+                        )
+                      }
+                      disabled={loading}
+                      className="btn-gold px-5 py-2.5 rounded-xl text-sm font-semibold disabled:opacity-50"
+                    >
+                      Collect rake ({fmt(gameState.table.accumulatedRake.toNumber())} {tableToken.symbol})
+                    </button>
+                  )}
                   {currentPlayer && gameState.tableStatus === "Playing" && (
                     <Tooltip
                       title="Leaving locked during hand"
@@ -1252,8 +1309,6 @@ export default function TablePage({ params }: { params: Promise<{ tableId: strin
               awaitingCommunityReveal={gameState.awaitingCommunityReveal}
               chipBetTrigger={betTrigger}
               chipWinTrigger={winTrigger}
-              showWinCelebration={showCelebration}
-              winAmount={celebrationWinAmount}
               token={tableToken}
               playerStatsMap={playerStatsMap}
               onEmptySeatClick={
@@ -1270,25 +1325,18 @@ export default function TablePage({ params }: { params: Promise<{ tableId: strin
             />
           )}
 
-          {/* Showdown Results Banner - shows after showdown when pot has been distributed */}
-          {gameState.phase === "Settled" && gameState.pot === 0 && gameState.players.some(p => p.cardsRevealed) && (
-            <div className="max-w-lg mx-auto glass border border-amber-500/30 rounded-2xl p-5 text-center mb-4">
-              <div className="flex items-center justify-center gap-3 mb-2">
-                <svg className="w-6 h-6 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />
-                </svg>
-                <span className="text-amber-300 font-bold text-lg">Showdown Complete</span>
-                <svg className="w-6 h-6 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />
-                </svg>
-              </div>
-              <p className="text-[var(--text-secondary)] text-sm">
-                All players&apos; cards are now visible. Review the results above!
-              </p>
-              <p className="text-[var(--text-muted)] text-xs mt-2">
-                Cards will reset when a new hand is started
-              </p>
-            </div>
+          {showShowdownOverlay && (
+            <ShowdownOverlay
+              shares={overlayShares}
+              rakeLine={rakeLine}
+              token={tableToken}
+              heroWinAmount={celebrationWinAmount}
+              celebrate={showCelebration}
+              onCelebrationComplete={() => {
+                setShowCelebration(false);
+                setCelebrationWinAmount(undefined);
+              }}
+            />
           )}
 
           {/* Deal-me-in is a fallback only — auto-deal fires as soon as the
