@@ -2,6 +2,60 @@
 
 import { FC } from "react";
 
+export interface MpcStatusInput {
+  phase: string;
+  isShuffling: boolean;
+  isDecrypting: boolean;
+  isRevealingCommunity: boolean;
+  isRevealing: boolean;
+  awaitingCommunityReveal: boolean;
+  isDeckShuffled: boolean;
+  dealtPlayers: number;
+  activePlayers: number;
+  allRemainingRevealed: boolean;
+  pot: number;
+}
+
+function firstUndealtSeat(activePlayers: number, dealtPlayers: number): number | null {
+  for (let s = 0; s < 8; s++) {
+    if ((activePlayers & (1 << s)) !== 0 && (dealtPlayers & (1 << s)) === 0) {
+      return s;
+    }
+  }
+  return null;
+}
+
+/** Circuit-named MPC copy. Never "host" / "waiting for authority". */
+export function mpcStatusLabel(s: MpcStatusInput): string | null {
+  if (s.isShuffling || (s.phase === "Dealing" && !s.isDeckShuffled)) {
+    return "Shuffling 52 cards in Arcium MPC…";
+  }
+  if (s.isDecrypting) {
+    return "Sealing your hole cards…";
+  }
+  if (s.phase === "Dealing" && s.isDeckShuffled) {
+    const pending = firstUndealtSeat(s.activePlayers, s.dealtPlayers);
+    if (pending !== null) {
+      return `Waiting for Seat ${pending + 1} to deal in`;
+    }
+  }
+  if (s.isRevealingCommunity || s.awaitingCommunityReveal) {
+    if (s.phase === "Flop") return "Revealing the turn from the sealed deck…";
+    if (s.phase === "Turn") return "Revealing the river from the sealed deck…";
+    return "Revealing the flop from the sealed deck…";
+  }
+  if (s.isRevealing || (s.phase === "Showdown" && !s.allRemainingRevealed)) {
+    return "Publishing remaining hands from the sealed deck…";
+  }
+  if (
+    (s.phase === "Showdown" && s.allRemainingRevealed) ||
+    (s.phase === "Settled" && s.pot > 0)
+  ) {
+    return "Settling the pot…";
+  }
+  return null;
+}
+
 interface GameStatusBarProps {
   phase: string;
   potLabel: string;

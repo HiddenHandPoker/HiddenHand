@@ -12,6 +12,8 @@ interface AuthorityTimeoutPanelProps {
   buttonLabel: string;
   onAction: () => Promise<unknown>;
   isLoading: boolean;
+  /** Seated players / authority auto-queue immediately — hide this 60s fallback. */
+  canActImmediately?: boolean;
 }
 
 export function AuthorityTimeoutPanel({
@@ -23,6 +25,7 @@ export function AuthorityTimeoutPanel({
   buttonLabel,
   onAction,
   isLoading,
+  canActImmediately = false,
 }: AuthorityTimeoutPanelProps) {
   const [secondsRemaining, setSecondsRemaining] = useState<number>(timeoutSeconds);
   const [canTrigger, setCanTrigger] = useState(false);
@@ -55,8 +58,8 @@ export function AuthorityTimeoutPanel({
     return () => clearInterval(interval);
   }, [lastTimestamp, delayBeforeShowing, timeoutSeconds]);
 
-  // Don't render if we shouldn't show yet
-  if (!shouldShow) {
+  // Protocol leaders auto-queue; this panel is only the unseated-spectator fallback.
+  if (canActImmediately || !shouldShow) {
     return null;
   }
 

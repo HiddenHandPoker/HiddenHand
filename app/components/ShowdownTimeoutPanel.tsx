@@ -8,6 +8,8 @@ interface ShowdownTimeoutPanelProps {
   phase: string;
   onShowdown: () => Promise<unknown>;
   isLoading: boolean;
+  /** Seated players / authority auto-settle — hide this 60s fallback. */
+  canActImmediately?: boolean;
 }
 
 export function ShowdownTimeoutPanel({
@@ -15,6 +17,7 @@ export function ShowdownTimeoutPanel({
   phase,
   onShowdown,
   isLoading,
+  canActImmediately = false,
 }: ShowdownTimeoutPanelProps) {
   const [secondsRemaining, setSecondsRemaining] = useState<number>(ACTION_TIMEOUT_SECONDS);
   const [canTrigger, setCanTrigger] = useState(false);
@@ -43,6 +46,10 @@ export function ShowdownTimeoutPanel({
     return () => clearInterval(interval);
   }, [lastActionTime]);
 
+  if (canActImmediately) {
+    return null;
+  }
+
   const buttonLabel = phase === "Showdown" ? "Run Showdown" : "Award Pot";
 
   return (
@@ -60,8 +67,8 @@ export function ShowdownTimeoutPanel({
             canTrigger ? "text-[var(--gold-light)]" : "text-[var(--status-warning)]"
           }`}>
             {canTrigger
-              ? "Timeout reached - you can run showdown"
-              : "Waiting for authority to run showdown..."
+              ? "Timeout reached - you can settle the pot"
+              : "Waiting for the pot to settle…"
             }
           </span>
         </div>

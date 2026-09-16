@@ -152,6 +152,8 @@ export interface GameState {
   smallBlind: number;
   bigBlind: number;
   isAuthority: boolean;
+  /** Authority or any seated player — may call Task 3 protocol ixs immediately. */
+  isProtocolLeader: boolean;
   currentPlayerSeat: number | null;
   lastActionTime: number | null; // Unix timestamp for timeout tracking
   lastReadyTime: number | null; // Unix timestamp for start_hand timeout
@@ -168,6 +170,8 @@ export interface GameState {
 export interface UsePokerGameResult {
   // State
   gameState: GameState;
+  /** True if `isAuthority || currentPlayerSeat !== null` for Task 3 protocol ixs. */
+  isProtocolLeader: boolean;
   loading: boolean;
   error: string | null;
 
@@ -234,6 +238,7 @@ const initialGameState: GameState = {
   smallBlind: 0,
   bigBlind: 0,
   isAuthority: false,
+  isProtocolLeader: false,
   currentPlayerSeat: null,
   lastActionTime: null,
   lastReadyTime: null,
@@ -310,6 +315,47 @@ function loadHoleCards(
   return null;
 }
 
+/** Other client or crank already advanced this protocol step. */
+function isProtocolRaceError(error: unknown): boolean {
+  const raw = error instanceof Error ? error.message : String(error);
+  return (
+    raw.includes("DeckAlreadyShuffled") ||
+    raw.includes("HandAlreadyInProgress") ||
+    raw.includes("CommunityNotReady")
+  );
+}
+
+function swallowProtocolRace(
+  e: unknown,
+  label: string,
+  refresh: () => Promise<void>
+): void {
+  const errorMsg = e instanceof Error ? e.message : String(e);
+  if (
+    isProtocolRaceError(e) ||
+    errorMsg.includes("Not awaiting") ||
+    errorMsg.includes("TimeoutNotReached")
+  ) {
+    console.log(`[${label}] skipped (other client or crank won the race)`);
+    void refresh();
+    return;
+  }
+  console.error(`[${label}] failed:`, e);
+}
+
+function occupiedSeatRemaining(
+  tablePDA: PublicKey,
+  occupiedSeats: number,
+  maxPlayers: number,
+  writable: boolean
+): { pubkey: PublicKey; isSigner: boolean; isWritable: boolean }[] {
+  return getOccupiedSeats(occupiedSeats, maxPlayers).map((idx) => ({
+    pubkey: getSeatPDA(tablePDA, idx)[0],
+    isSigner: false,
+    isWritable: writable,
+  }));
+}
+
 export function usePokerGame(sessionKey?: SessionKeyParam | null): UsePokerGameResult {
   const { program, provider, publicKey, signMessage } = usePokerProgram();
   const [gameState, setGameState] = useState<GameState>(initialGameState);
@@ -327,6 +373,11 @@ export function usePokerGame(sessionKey?: SessionKeyParam | null): UsePokerGameR
   const showdownRevealInProgressRef = useRef<boolean>(false);
   const dealInProgressRef = useRef<boolean>(false);
   const shuffleInProgressRef = useRef<boolean>(false);
+  const startHandInProgressRef = useRef<boolean>(false);
+  const showdownSettleInProgressRef = useRef<boolean>(false);
+  const startHandRef = useRef<(() => Promise<string>) | null>(null);
+  const shuffleDeckRef = useRef<(() => Promise<string>) | null>(null);
+  const showdownRef = useRef<(() => Promise<string>) | null>(null);
   const lastWalletRef = useRef<string | null>(null);
 
   // Drop in-memory encryption keys on wallet change / disconnect.
@@ -573,6 +624,7 @@ export function usePokerGame(sessionKey?: SessionKeyParam | null): UsePokerGameR
         smallBlind: table.smallBlind.toNumber(),
         bigBlind: table.bigBlind.toNumber(),
         isAuthority,
+        isProtocolLeader: isAuthority || currentPlayerSeat !== null,
         currentPlayerSeat,
         lastActionTime: handState?.lastActionTime?.toNumber() ?? null,
         lastReadyTime: table.lastReadyTime?.toNumber() ?? null,
@@ -591,6 +643,10 @@ export function usePokerGame(sessionKey?: SessionKeyParam | null): UsePokerGameR
       }));
 
       if (deckState?.isShuffled) shuffleInProgressRef.current = false;
+      if (tableStatus === "Playing") startHandInProgressRef.current = false;
+      if (tableStatus === "Waiting" && (phase === "Settled" || !handState)) {
+        showdownSettleInProgressRef.current = false;
+      }
       if (!handState?.awaitingCommunityReveal) communityRevealInProgressRef.current = false;
       const allRevealed =
         phase !== "Showdown" ||
@@ -667,7 +723,7 @@ export function usePokerGame(sessionKey?: SessionKeyParam | null): UsePokerGameR
   );
 
   // ============================================================
-  // Arcium MPC: shuffle the deck (authority action). Queues the `shuffle`
+  // Arcium MPC: shuffle the deck (permissionless). Queues the `shuffle`
   // circuit; its callback seals the shuffled 52-card deck into DeckState as
   // opaque ciphertext. After this, each seated player deals themselves in via
   // deal_to_seat.
@@ -720,6 +776,11 @@ export function usePokerGame(sessionKey?: SessionKeyParam | null): UsePokerGameR
     } catch (e) {
       shuffleInProgressRef.current = false;
       setGameState((prev) => ({ ...prev, isShuffling: false }));
+      if (isProtocolRaceError(e)) {
+        setError(null);
+        await refreshState();
+        return "";
+      }
       const message = parseAnchorError(e);
       setError(message);
       throw e;
@@ -1078,11 +1139,14 @@ export function usePokerGame(sessionKey?: SessionKeyParam | null): UsePokerGameR
     }
   }, [program, provider, publicKey, gameState.tablePDA, gameState.currentPlayerSeat, refreshState]);
 
-  // Start hand (authority only)
+  // Start hand — authority or any seated player (Task 3). Occupied seats stay
+  // remaining accounts so signer_is_seated can authorize immediately.
   const startHand = useCallback(async (): Promise<string> => {
     if (!program || !provider || !publicKey || !gameState.tablePDA || !gameState.table) {
       throw new Error("Table not ready");
     }
+    if (startHandInProgressRef.current) return "";
+    startHandInProgressRef.current = true;
 
     setLoading(true);
     setError(null);
@@ -1101,15 +1165,12 @@ export function usePokerGame(sessionKey?: SessionKeyParam | null): UsePokerGameR
       const [handPDA] = getHandPDA(gameState.tablePDA, handNumber);
       const [deckPDA] = getDeckPDA(gameState.tablePDA, handNumber);
 
-      const occupied = getOccupiedSeats(
+      const seatMetas = occupiedSeatRemaining(
+        gameState.tablePDA,
         gameState.table.occupiedSeats,
-        gameState.table.maxPlayers
+        gameState.table.maxPlayers,
+        false
       );
-      const seatMetas = occupied.map((idx) => ({
-        pubkey: getSeatPDA(gameState.tablePDA!, idx)[0],
-        isSigner: false,
-        isWritable: false,
-      }));
 
       const tx = await program.methods
         .startHand()
@@ -1127,15 +1188,23 @@ export function usePokerGame(sessionKey?: SessionKeyParam | null): UsePokerGameR
       await refreshState();
       return tx;
     } catch (e) {
+      if (isProtocolRaceError(e)) {
+        setError(null);
+        await refreshState();
+        return "";
+      }
       const message = parseAnchorError(e);
       setError(message);
       throw e;
     } finally {
+      startHandInProgressRef.current = false;
       setLoading(false);
     }
   }, [program, provider, publicKey, gameState.tablePDA, gameState.table, refreshState]);
 
   const shuffleDeck = useCallback((): Promise<string> => doShuffle(), [doShuffle]);
+  startHandRef.current = startHand;
+  shuffleDeckRef.current = shuffleDeck;
 
   const dealMeIn = useCallback(async (): Promise<void> => {
     await dealToOwnSeat();
@@ -1207,10 +1276,12 @@ export function usePokerGame(sessionKey?: SessionKeyParam | null): UsePokerGameR
   // Arcium MPC: reveal the community board. Each street is its own circuit
   // (reveal_flop <- PreFlop, reveal_turn <- Flop, reveal_river <- Turn); the
   // callback re-feeds the sealed deck, writes the plaintext board on-chain, and
-  // advances the phase. The board is public — no client-side decryption. The
-  // authority can reveal immediately; anyone else after the on-chain AFK
-  // timeout. All-in runout is handled on-chain (awaitingCommunityReveal stays
-  // set so the next street fires automatically via the auto-reveal effect).
+  // advances the phase. The board is public — no client-side decryption.
+  // Authority and seated players (Task 3) reveal immediately when occupied
+  // seat PDAs are passed as readonly remaining accounts — never as Arcium
+  // callback accounts. Unseated wallets wait the on-chain AFK timeout.
+  // All-in runout is handled on-chain (awaitingCommunityReveal stays set so
+  // the next street fires automatically via the auto-reveal effect).
   // ============================================================
   const revealCommunityCards = useCallback(async (): Promise<string> => {
     if (communityRevealInProgressRef.current) {
@@ -1223,6 +1294,8 @@ export function usePokerGame(sessionKey?: SessionKeyParam | null): UsePokerGameR
       throw new Error("Not awaiting community reveal");
     }
 
+    const isProtocolLeader = gameState.isAuthority || gameState.currentPlayerSeat !== null;
+
     // Pick the circuit for the current street.
     const phase = gameState.phase;
     let circuit: string;
@@ -1231,9 +1304,9 @@ export function usePokerGame(sessionKey?: SessionKeyParam | null): UsePokerGameR
     else if (phase === "Turn") circuit = "reveal_river";
     else throw new Error(`Invalid phase for community reveal: ${phase}`);
 
-    // Non-authority must wait for the on-chain AFK timeout (the program also
+    // Unseated wallets wait for the on-chain AFK timeout (the program also
     // validates it); pre-check with cluster time to avoid a doomed tx.
-    if (!gameState.isAuthority) {
+    if (!isProtocolLeader) {
       const lastActionTimeBN = gameState.handState?.lastActionTime;
       const lastActionTime = typeof lastActionTimeBN === 'number' ? lastActionTimeBN : lastActionTimeBN?.toNumber?.() ?? 0;
       const slot = await provider.connection.getSlot();
@@ -1264,6 +1337,14 @@ export function usePokerGame(sessionKey?: SessionKeyParam | null): UsePokerGameR
           ? program.methods.revealTurn(computationOffset)
           : program.methods.revealRiver(computationOffset);
 
+      // Readonly occupied seats for signer_is_seated. Not callback accounts.
+      const seatMetas = occupiedSeatRemaining(
+        gameState.tablePDA,
+        gameState.table.occupiedSeats,
+        gameState.table.maxPlayers,
+        false
+      );
+
       // Optional session_token must be explicit null when absent (@anchor-lang/core);
       // build as `any` since accountsPartial's typed shape rejects null.
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -1276,7 +1357,7 @@ export function usePokerGame(sessionKey?: SessionKeyParam | null): UsePokerGameR
         deckState: deckPDA,
         sessionToken: null,
       };
-      const tx = await builder.accountsPartial(revealAccts).rpc();
+      const tx = await builder.accountsPartial(revealAccts).remainingAccounts(seatMetas).rpc();
 
       await provider.connection.confirmTransaction(tx, "confirmed");
       // Callback writes the board on-chain and advances the phase.
@@ -1288,18 +1369,36 @@ export function usePokerGame(sessionKey?: SessionKeyParam | null): UsePokerGameR
     } catch (e) {
       communityRevealInProgressRef.current = false;
       setGameState((prev) => ({ ...prev, isRevealingCommunity: false }));
+      if (isProtocolRaceError(e)) {
+        setError(null);
+        await refreshState();
+        return "";
+      }
       const message = parseAnchorError(e);
       setError(message);
       throw e;
     }
-  }, [program, provider, publicKey, gameState.tablePDA, gameState.table, gameState.handState, gameState.phase, gameState.isAuthority, gameState.awaitingCommunityReveal, buildQueueAccounts, refreshState]);
+  }, [program, provider, publicKey, gameState.tablePDA, gameState.table, gameState.handState, gameState.phase, gameState.isAuthority, gameState.currentPlayerSeat, gameState.awaitingCommunityReveal, buildQueueAccounts, refreshState]);
+
+  const isProtocolLeader = gameState.isAuthority || gameState.currentPlayerSeat !== null;
+  const playersWithChips = gameState.players.reduce(
+    (n, p) => n + (p.status !== "empty" && p.chips > 0 ? 1 : 0),
+    0
+  );
+  const remainingPlayers = gameState.players.filter(
+    (p) => p.status === "playing" || p.status === "allin"
+  );
+  const allRemainingRevealed =
+    remainingPlayers.length <= 1 || remainingPlayers.every((p) => p.cardsRevealed);
+  const tableHandNumber = gameState.table?.handNumber?.toNumber?.() ?? 0;
 
   // ============================================================
   // Auto-reveal community cards:
-  // - Authority can reveal immediately
-  // - Non-authority can reveal after 60 second timeout (for AFK authority)
+  // - Protocol leader (authority or seated) reveals immediately
+  // - Unseated wallets can reveal after 60s (do not pay fees by default)
   // ============================================================
   useEffect(() => {
+    if (!publicKey) return;
     // Check if we're waiting for community reveal and not already revealing
     // Also check ref to prevent duplicate attempts from useEffect re-runs
     if (!gameState.awaitingCommunityReveal || gameState.isRevealingCommunity || communityRevealInProgressRef.current) {
@@ -1313,9 +1412,9 @@ export function usePokerGame(sessionKey?: SessionKeyParam | null): UsePokerGameR
       return;
     }
 
-    // Authority can reveal immediately
-    if (gameState.isAuthority) {
-      console.log("[Auto-reveal] Authority detected awaitingCommunityReveal, triggering reveal...");
+    // Seated player / authority can reveal immediately (Task 3 remaining seats).
+    if (isProtocolLeader) {
+      console.log("[Auto-reveal] Protocol leader detected awaitingCommunityReveal, triggering reveal...");
 
       const timeout = setTimeout(() => {
         revealCommunityCards()
@@ -1324,21 +1423,13 @@ export function usePokerGame(sessionKey?: SessionKeyParam | null): UsePokerGameR
               console.log("[Auto-reveal] Community cards revealed:", sig);
             }
           })
-          .catch((e) => {
-            const errorMsg = e instanceof Error ? e.message : String(e);
-            if (!errorMsg.includes("Not awaiting") && !errorMsg.includes("CommunityNotReady")) {
-              console.error("[Auto-reveal] Failed to reveal community cards:", e);
-              setError(errorMsg);
-            } else {
-              console.log("[Auto-reveal] Reveal skipped (already completed)");
-            }
-          });
+          .catch((e) => swallowProtocolRace(e, "Auto-reveal", refreshState));
       }, 500);
 
       return () => clearTimeout(timeout);
     }
 
-    // Non-authority: check if timeout has passed (60 seconds)
+    // Unseated spectator with a wallet: check if timeout has passed (60 seconds)
     const lastActionTimeBN = gameState.handState?.lastActionTime;
     if (!lastActionTimeBN) return;
 
@@ -1350,24 +1441,16 @@ export function usePokerGame(sessionKey?: SessionKeyParam | null): UsePokerGameR
     const CLOCK_SKEW_BUFFER = 5;
 
     if (elapsed >= COMMUNITY_REVEAL_TIMEOUT + CLOCK_SKEW_BUFFER) {
-      console.log(`[Auto-reveal] Non-authority can reveal after ${elapsed.toFixed(0)}s timeout (with ${CLOCK_SKEW_BUFFER}s buffer), triggering...`);
+      console.log(`[Auto-reveal] Unseated wallet can reveal after ${elapsed.toFixed(0)}s timeout (with ${CLOCK_SKEW_BUFFER}s buffer), triggering...`);
 
       const timeout = setTimeout(() => {
         revealCommunityCards()
           .then((sig) => {
             if (sig) {
-              console.log("[Auto-reveal] Community cards revealed by non-authority:", sig);
+              console.log("[Auto-reveal] Community cards revealed by unseated wallet:", sig);
             }
           })
-          .catch((e) => {
-            const errorMsg = e instanceof Error ? e.message : String(e);
-            if (!errorMsg.includes("Not awaiting") && !errorMsg.includes("CommunityNotReady") && !errorMsg.includes("TimeoutNotReached")) {
-              console.error("[Auto-reveal] Non-authority failed to reveal:", e);
-              // Don't show error to user - authority might still reveal
-            } else {
-              console.log("[Auto-reveal] Non-authority reveal skipped (already completed or timeout not reached)");
-            }
-          });
+          .catch((e) => swallowProtocolRace(e, "Auto-reveal", refreshState));
       }, 500);
 
       return () => clearTimeout(timeout);
@@ -1376,7 +1459,7 @@ export function usePokerGame(sessionKey?: SessionKeyParam | null): UsePokerGameR
     // If timeout hasn't passed yet, set up a timer to check again
     const remainingTime = (COMMUNITY_REVEAL_TIMEOUT + CLOCK_SKEW_BUFFER - elapsed) * 1000;
     if (remainingTime > 0) {
-      console.log(`[Auto-reveal] Non-authority waiting ${(remainingTime / 1000).toFixed(1)}s for timeout...`);
+      console.log(`[Auto-reveal] Unseated wallet waiting ${(remainingTime / 1000).toFixed(1)}s for timeout...`);
       const checkTimer = setTimeout(() => {
         // This will trigger a re-render via state change from refreshState
         // The useEffect will run again and check the timeout
@@ -1384,7 +1467,7 @@ export function usePokerGame(sessionKey?: SessionKeyParam | null): UsePokerGameR
 
       return () => clearTimeout(checkTimer);
     }
-  }, [gameState.isAuthority, gameState.awaitingCommunityReveal, gameState.isRevealingCommunity, gameState.handState?.lastActionTime, revealCommunityCards]);
+  }, [publicKey, isProtocolLeader, gameState.awaitingCommunityReveal, gameState.isRevealingCommunity, gameState.handState?.lastActionTime, gameState.phase, revealCommunityCards, refreshState]);
 
   // Auto-queue showdown_reveal once the hand reaches Showdown with 2+ players
   // still in. Same debounce/ref guard as community auto-reveal. Anyone at the
@@ -1416,6 +1499,40 @@ export function usePokerGame(sessionKey?: SessionKeyParam | null): UsePokerGameR
 
     return () => clearTimeout(timeout);
   }, [gameState.phase, gameState.isRevealing, gameState.handState?.activeCount, gameState.players, revealHands]);
+
+  // Leader auto-queue: start_hand when two stacked players are waiting.
+  // After a settled hand (handNumber > 0) wait 3s so results stay on screen.
+  // Function identity is read from a ref so the 3s timer is not reset by polling.
+  useEffect(() => {
+    if (!publicKey || !isProtocolLeader) return;
+    if (gameState.tableStatus !== "Waiting") return;
+    if (playersWithChips < 2) return;
+
+    const delayMs = tableHandNumber > 0 ? 3000 : 500;
+    const tick = () => {
+      if (startHandInProgressRef.current) return;
+      startHandRef.current?.().catch((e) => swallowProtocolRace(e, "Auto-start", refreshState));
+    };
+    const timeout = setTimeout(tick, delayMs);
+    const interval = setInterval(tick, 5000);
+    return () => {
+      clearTimeout(timeout);
+      clearInterval(interval);
+    };
+  }, [publicKey, isProtocolLeader, gameState.tableStatus, playersWithChips, tableHandNumber, refreshState]);
+
+  // Leader auto-queue: shuffle once the hand is Dealing and the deck is open.
+  useEffect(() => {
+    if (!publicKey || !isProtocolLeader) return;
+    if (gameState.phase !== "Dealing") return;
+    if (gameState.isDeckShuffled || gameState.isShuffling) return;
+    if (shuffleInProgressRef.current) return;
+
+    const timeout = setTimeout(() => {
+      shuffleDeckRef.current?.().catch((e) => swallowProtocolRace(e, "Auto-shuffle", refreshState));
+    }, 500);
+    return () => clearTimeout(timeout);
+  }, [publicKey, isProtocolLeader, gameState.phase, gameState.isDeckShuffled, gameState.isShuffling, refreshState]);
 
   // ============================================================
   // Game Liveness: Close inactive table and return funds
@@ -1565,11 +1682,14 @@ export function usePokerGame(sessionKey?: SessionKeyParam | null): UsePokerGameR
     [program, provider, publicKey, gameState.tablePDA, gameState.table, gameState.currentPlayerSeat, refreshState, sessionKey]
   );
 
-  // Showdown (authority can call immediately, anyone else after timeout)
+  // Showdown — authority or any seated player (Task 3). Occupied seats stay
+  // remaining so signer_is_seated and H-1 completeness both see the same set.
   const showdown = useCallback(async (): Promise<string> => {
     if (!program || !provider || !publicKey || !gameState.tablePDA || !gameState.table) {
       throw new Error("Table not ready");
     }
+    if (showdownSettleInProgressRef.current) return "";
+    showdownSettleInProgressRef.current = true;
 
     setLoading(true);
     setError(null);
@@ -1577,7 +1697,6 @@ export function usePokerGame(sessionKey?: SessionKeyParam | null): UsePokerGameR
     try {
       const handNumber = BigInt(gameState.table.handNumber.toNumber());
       const [handPDA] = getHandPDA(gameState.tablePDA, handNumber);
-      const [vaultPDA] = getVaultPDA(gameState.tablePDA);
 
       // Get all player seat PDAs as remaining accounts
       const occupied = getOccupiedSeats(gameState.table.occupiedSeats, gameState.table.maxPlayers);
@@ -1620,13 +1739,41 @@ export function usePokerGame(sessionKey?: SessionKeyParam | null): UsePokerGameR
       await refreshState();
       return tx;
     } catch (e) {
+      if (isProtocolRaceError(e)) {
+        setError(null);
+        await refreshState();
+        return "";
+      }
       const message = parseAnchorError(e);
       setError(message);
       throw e;
     } finally {
+      showdownSettleInProgressRef.current = false;
       setLoading(false);
     }
   }, [program, provider, publicKey, gameState.tablePDA, gameState.table, refreshState]);
+  showdownRef.current = showdown;
+
+  // Leader auto-queue: settle the pot once remaining hands are public.
+  useEffect(() => {
+    if (!publicKey || !isProtocolLeader) return;
+    const settlePhase =
+      gameState.phase === "Showdown" ||
+      (gameState.phase === "Settled" && gameState.pot > 0);
+    if (!settlePhase) return;
+    if (!allRemainingRevealed) return;
+
+    const tick = () => {
+      if (showdownSettleInProgressRef.current) return;
+      showdownRef.current?.().catch((e) => swallowProtocolRace(e, "Auto-showdown", refreshState));
+    };
+    const timeout = setTimeout(tick, 500);
+    const interval = setInterval(tick, 5000);
+    return () => {
+      clearTimeout(timeout);
+      clearInterval(interval);
+    };
+  }, [publicKey, isProtocolLeader, gameState.phase, gameState.pot, allRemainingRevealed, refreshState]);
 
   // Timeout a player who hasn't acted in time (anyone can call)
   const timeoutPlayer = useCallback(async (): Promise<string> => {
@@ -1765,6 +1912,7 @@ export function usePokerGame(sessionKey?: SessionKeyParam | null): UsePokerGameR
 
   return {
     gameState,
+    isProtocolLeader,
     loading,
     error,
     createTable,
