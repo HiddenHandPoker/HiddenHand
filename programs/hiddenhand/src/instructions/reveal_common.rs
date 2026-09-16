@@ -11,14 +11,68 @@ use anchor_lang::prelude::*;
 use crate::constants::*;
 use crate::error::HiddenHandError;
 use crate::events::CommunityCardsRevealed;
-use crate::state::{GamePhase, HandState, Table, TableStatus};
+use crate::state::{GamePhase, HandState, PlayerSeat, Table, TableStatus};
 
-/// Authority may reveal immediately; anyone else must wait for the AFK timeout.
-/// Mirrors the old `reveal_community` auth check.
+fn parsed_seat_matches(
+    signer: &Pubkey,
+    table_key: &Pubkey,
+    program_id: &Pubkey,
+    account_key: &Pubkey,
+    seat: &PlayerSeat,
+) -> bool {
+    if seat.table != *table_key || seat.player != *signer {
+        return false;
+    }
+    let (expected, _) = Pubkey::find_program_address(
+        &[SEAT_SEED, table_key.as_ref(), &[seat.seat_index]],
+        program_id,
+    );
+    expected == *account_key
+}
+
+/// PDA + player + table checks extracted from `signer_is_seated` so unit tests
+/// do not need live `AccountInfo`.
+pub fn signer_is_seated_from_parsed(
+    signer: &Pubkey,
+    table_key: &Pubkey,
+    remaining: &[(Pubkey, PlayerSeat)],
+    program_id: &Pubkey,
+) -> bool {
+    remaining
+        .iter()
+        .any(|(key, seat)| parsed_seat_matches(signer, table_key, program_id, key, seat))
+}
+
+/// True if `signer` occupies a valid `PlayerSeat` PDA in `remaining`.
+pub fn signer_is_seated(
+    signer: &Pubkey,
+    table_key: &Pubkey,
+    remaining: &[AccountInfo],
+    program_id: &Pubkey,
+) -> bool {
+    remaining.iter().any(|ai| {
+        if ai.owner != program_id {
+            return false;
+        }
+        let Ok(data) = ai.try_borrow_data() else {
+            return false;
+        };
+        let Ok(seat) = PlayerSeat::try_deserialize(&mut &data[..]) else {
+            return false;
+        };
+        parsed_seat_matches(signer, table_key, program_id, ai.key, &seat)
+    })
+}
+
+/// Authority and seated players may reveal immediately; anyone else must wait
+/// for the AFK timeout. Occupied seats are passed as remaining accounts
+/// (readonly) — not as circuit callback accounts.
 pub fn authorize_reveal(
     table: &Account<Table>,
     hand_state: &HandState,
     caller: &Signer,
+    remaining: &[AccountInfo],
+    program_id: &Pubkey,
 ) -> Result<()> {
     require!(
         table.status == TableStatus::Playing,
@@ -26,7 +80,8 @@ pub fn authorize_reveal(
     );
 
     let is_authority = table.authority == caller.key();
-    if !is_authority {
+    let seated = signer_is_seated(&caller.key(), &table.key(), remaining, program_id);
+    if !(is_authority || seated) {
         let clock = Clock::get()?;
         let elapsed = clock.unix_timestamp - hand_state.last_action_time;
         require!(
@@ -147,5 +202,88 @@ mod tests {
     fn duplicate_river_is_noop_once_five_cards_committed() {
         assert!(!community_already_committed(4, RIVER_REVEALED));
         assert!(community_already_committed(5, RIVER_REVEALED));
+    }
+
+    fn sample_seat(table: Pubkey, player: Pubkey, seat_index: u8) -> PlayerSeat {
+        PlayerSeat {
+            table,
+            player,
+            seat_index,
+            chips: 100,
+            current_bet: 0,
+            total_bet_this_hand: 0,
+            revealed_card_1: 255,
+            revealed_card_2: 255,
+            cards_revealed: false,
+            status: crate::state::PlayerStatus::Sitting,
+            has_acted: false,
+            bump: 0,
+        }
+    }
+
+    fn seat_pda(table: &Pubkey, seat_index: u8) -> Pubkey {
+        Pubkey::find_program_address(&[SEAT_SEED, table.as_ref(), &[seat_index]], &crate::ID).0
+    }
+
+    #[test]
+    fn signer_is_seated_matching_player_and_pda() {
+        let table = Pubkey::new_unique();
+        let player = Pubkey::new_unique();
+        let seat = sample_seat(table, player, 2);
+        let key = seat_pda(&table, 2);
+        assert!(signer_is_seated_from_parsed(
+            &player,
+            &table,
+            &[(key, seat)],
+            &crate::ID
+        ));
+    }
+
+    #[test]
+    fn signer_is_seated_wrong_player() {
+        let table = Pubkey::new_unique();
+        let player = Pubkey::new_unique();
+        let other = Pubkey::new_unique();
+        let seat = sample_seat(table, player, 1);
+        let key = seat_pda(&table, 1);
+        assert!(!signer_is_seated_from_parsed(
+            &other,
+            &table,
+            &[(key, seat)],
+            &crate::ID
+        ));
+    }
+
+    #[test]
+    fn signer_is_seated_wrong_table() {
+        let table = Pubkey::new_unique();
+        let other_table = Pubkey::new_unique();
+        let player = Pubkey::new_unique();
+        let seat = sample_seat(other_table, player, 0);
+        let key = seat_pda(&table, 0);
+        assert!(!signer_is_seated_from_parsed(
+            &player,
+            &table,
+            &[(key, seat)],
+            &crate::ID
+        ));
+    }
+
+    #[test]
+    fn signer_is_seated_duplicate_ignored() {
+        let table = Pubkey::new_unique();
+        let player = Pubkey::new_unique();
+        let other = Pubkey::new_unique();
+        let matching = sample_seat(table, player, 0);
+        let matching_dup = sample_seat(table, player, 0);
+        let extra = sample_seat(table, other, 1);
+        let key0 = seat_pda(&table, 0);
+        let key1 = seat_pda(&table, 1);
+        assert!(signer_is_seated_from_parsed(
+            &player,
+            &table,
+            &[(key0, matching), (key0, matching_dup), (key1, extra)],
+            &crate::ID
+        ));
     }
 }

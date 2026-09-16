@@ -4,6 +4,7 @@ use std::collections::BTreeSet;
 use crate::constants::*;
 use crate::error::HiddenHandError;
 use crate::events::{HandCompleted, PlayerHandResult};
+use crate::instructions::reveal_common::signer_is_seated;
 use crate::state::{
     evaluate_hand, find_winners, GamePhase, HandState, PlayerSeat, PlayerStatus, Table, TableStatus,
 };
@@ -113,7 +114,8 @@ fn calculate_side_pots(all_bets: &[(u8, u64, bool)]) -> Vec<SidePot> {
 
 #[derive(Accounts)]
 pub struct Showdown<'info> {
-    /// Anyone can call showdown, but non-authority must wait for timeout
+    /// Anyone can call. Authority and seated players may settle immediately;
+    /// everyone else must wait for the timeout.
     #[account(mut)]
     pub caller: Signer<'info>,
 
@@ -138,12 +140,17 @@ pub fn handler(ctx: Context<Showdown>) -> Result<()> {
     let caller = &ctx.accounts.caller;
     let clock = Clock::get()?;
 
-    // Authorization check:
-    // - Authority can call showdown immediately
-    // - Anyone else can call after timeout (prevents authority from abandoning game)
+    // Authorization: authority or a seated player (proven via remaining seats)
+    // may settle immediately; anyone else waits for timeout. Checked before
+    // distribution so a non-seated caller cannot skip the wait.
     let is_authority = table.authority == caller.key();
-
-    if !is_authority {
+    let seated = signer_is_seated(
+        &caller.key(),
+        &table.key(),
+        ctx.remaining_accounts,
+        &crate::ID,
+    );
+    if !(is_authority || seated) {
         let elapsed = clock.unix_timestamp - hand_state.last_action_time;
         require!(
             elapsed >= ACTION_TIMEOUT_SECONDS,

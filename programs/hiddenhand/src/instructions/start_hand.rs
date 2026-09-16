@@ -2,11 +2,13 @@ use anchor_lang::prelude::*;
 
 use crate::constants::*;
 use crate::error::HiddenHandError;
+use crate::instructions::reveal_common::signer_is_seated;
 use crate::state::{DeckState, GamePhase, HandState, PlayerSeat, Table, TableStatus};
 
 #[derive(Accounts)]
 pub struct StartHand<'info> {
-    /// Anyone can call, but non-authority must wait for timeout
+    /// Anyone can call. Authority and seated players may call immediately;
+    /// everyone else must wait for the timeout.
     #[account(mut)]
     pub caller: Signer<'info>,
 
@@ -37,19 +39,25 @@ pub struct StartHand<'info> {
 
     pub system_program: Program<'info, System>,
     // remaining_accounts: every occupied PlayerSeat (readonly). Used to sit out
-    // 0-chip seats so busted players are not dealt free hands.
+    // 0-chip seats so busted players are not dealt free hands, and to prove a
+    // seated caller may start immediately.
 }
 
-/// Start a new hand
-/// Authority can call immediately, anyone else must wait for timeout
+/// Start a new hand.
+/// Authority and seated players may call immediately; anyone else waits for timeout.
 pub fn handler(ctx: Context<StartHand>) -> Result<()> {
     let table = &mut ctx.accounts.table;
     let caller = &ctx.accounts.caller;
     let clock = Clock::get()?;
 
-    // Authorization check: authority can call immediately, others must wait for timeout
     let is_authority = table.authority == caller.key();
-    if !is_authority {
+    let seated = signer_is_seated(
+        &caller.key(),
+        &table.key(),
+        ctx.remaining_accounts,
+        &crate::ID,
+    );
+    if !(is_authority || seated) {
         let elapsed = clock.unix_timestamp - table.last_ready_time;
         require!(
             elapsed >= ACTION_TIMEOUT_SECONDS,

@@ -68,7 +68,8 @@ pub mod hiddenhand {
         instructions::leave_table::handler(ctx)
     }
 
-    /// Start a new hand (table authority only)
+    /// Start a new hand. Authority and seated players may call immediately;
+    /// anyone else must wait for the action timeout.
     pub fn start_hand(ctx: Context<StartHand>) -> Result<()> {
         instructions::start_hand::handler(ctx)
     }
@@ -78,8 +79,9 @@ pub mod hiddenhand {
         instructions::player_action::handler(ctx, action)
     }
 
-    /// Showdown - evaluate hands and distribute pot
-    /// Remaining accounts should be all player seat accounts
+    /// Showdown - evaluate hands and distribute pot.
+    /// Remaining accounts should be all player seat accounts. Authority and
+    /// seated players may settle immediately; anyone else waits for timeout.
     pub fn showdown(ctx: Context<Showdown>) -> Result<()> {
         instructions::showdown::handler(ctx)
     }

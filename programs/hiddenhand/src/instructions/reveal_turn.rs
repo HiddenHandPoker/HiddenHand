@@ -51,6 +51,8 @@ pub fn handler(ctx: Context<RevealTurn>, computation_offset: u64) -> Result<()> 
         &ctx.accounts.table,
         &ctx.accounts.hand_state,
         &ctx.accounts.caller,
+        ctx.remaining_accounts,
+        &crate::ID,
     )?;
 
     ctx.accounts.sign_pda_account.bump = ctx.bumps.sign_pda_account;
@@ -170,6 +172,9 @@ pub struct RevealTurn<'info> {
     pub deck_state: Box<Account<'info, DeckState>>,
     #[session(signer = caller, authority = table.authority)]
     pub session_token: Option<Account<'info, SessionToken>>,
+    // remaining_accounts: occupied PlayerSeat PDAs (readonly). Seated callers
+    // pass them so authorize_reveal can skip the 60s timeout. Not forwarded
+    // to the circuit callback account list.
 }
 
 #[callback_accounts("reveal_turn")]
