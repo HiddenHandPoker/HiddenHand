@@ -41,6 +41,7 @@ import {
   parseStoredHoleDealt,
   serializeStoredHoleDealt,
 } from "@/lib/holeCardsStorage";
+import { nextCommunityRevealAllowed } from "@/lib/communityReveal";
 import { Transaction, Keypair } from "@solana/web3.js";
 import { getDefaultToken, getTokenByMint, TOKEN_PROGRAM_ID, type TokenInfo } from "@/lib/tokens";
 import { getAssociatedTokenAddressSync, createAssociatedTokenAccountInstruction } from "@solana/spl-token";
@@ -623,8 +624,10 @@ export function usePokerGame(sessionKey?: SessionKeyParam | null): UsePokerGameR
           ? null
           : ((deckState?.isShuffled ?? false) ? currentHandNumber : prev.encryptionHandNumber),
         awaitingCommunityReveal: handState?.awaitingCommunityReveal ?? false,
-        // Reset reveal state when not awaiting
-        isRevealingCommunity: (handState?.awaitingCommunityReveal ?? false) ? prev.isRevealingCommunity : false,
+        // In-flight UI follows the ref, not "awaiting". All-in runout keeps
+        // awaiting true across streets; preserving isRevealingCommunity there
+        // blocked the river after a successful turn.
+        isRevealingCommunity: communityRevealInProgressRef.current,
         isShuffling: deckState?.isShuffled ? false : prev.isShuffling,
       }));
 
@@ -633,7 +636,6 @@ export function usePokerGame(sessionKey?: SessionKeyParam | null): UsePokerGameR
       if (tableStatus === "Waiting" && (phase === "Settled" || !handState)) {
         showdownSettleInProgressRef.current = false;
       }
-      if (!handState?.awaitingCommunityReveal) communityRevealInProgressRef.current = false;
       const allRevealed =
         phase !== "Showdown" ||
         players
@@ -1477,6 +1479,7 @@ export function usePokerGame(sessionKey?: SessionKeyParam | null): UsePokerGameR
     communityRevealInProgressRef.current = true;
     setGameState((prev) => ({ ...prev, isRevealingCommunity: true }));
 
+    let tx = "";
     try {
       const handNumber = BigInt(gameState.table.handNumber.toNumber());
       const [handPDA] = getHandPDA(gameState.tablePDA, handNumber);
@@ -1512,27 +1515,29 @@ export function usePokerGame(sessionKey?: SessionKeyParam | null): UsePokerGameR
         deckState: deckPDA,
         sessionToken: null,
       };
-      const tx = await builder.accountsPartial(revealAccts).remainingAccounts(seatMetas).rpc();
+      tx = await builder.accountsPartial(revealAccts).remainingAccounts(seatMetas).rpc();
 
       await provider.connection.confirmTransaction(tx, "confirmed");
       // Callback writes the board on-chain and advances the phase.
       await awaitFinalization(provider, computationOffset, program.programId);
-
-      setGameState((prev) => ({ ...prev, isRevealingCommunity: false, awaitingCommunityReveal: false }));
-      await refreshState();
-      return tx;
     } catch (e) {
-      communityRevealInProgressRef.current = false;
-      setGameState((prev) => ({ ...prev, isRevealingCommunity: false }));
-      if (isProtocolRaceError(e)) {
-        setError(null);
-        await refreshState();
-        return "";
+      if (!isProtocolRaceError(e)) {
+        setGameState((prev) => ({ ...prev, isRevealingCommunity: false }));
+        const message = parseAnchorError(e);
+        setError(message);
+        throw e;
       }
-      const message = parseAnchorError(e);
-      setError(message);
-      throw e;
+      setError(null);
+    } finally {
+      // Drop the lock after THIS street, even when runout keeps awaiting true.
+      communityRevealInProgressRef.current = false;
     }
+
+    // Refresh after the lock is down so auto-reveal can queue the next street
+    // (turn → river) on all-in runout.
+    setGameState((prev) => ({ ...prev, isRevealingCommunity: false }));
+    await refreshState();
+    return tx;
   }, [program, provider, publicKey, gameState.tablePDA, gameState.table, gameState.handState, gameState.phase, gameState.isAuthority, gameState.currentPlayerSeat, gameState.awaitingCommunityReveal, buildQueueAccounts, refreshState]);
 
   const isProtocolLeader = gameState.isAuthority || gameState.currentPlayerSeat !== null;
@@ -1554,16 +1559,14 @@ export function usePokerGame(sessionKey?: SessionKeyParam | null): UsePokerGameR
   // ============================================================
   useEffect(() => {
     if (!publicKey) return;
-    // Check if we're waiting for community reveal and not already revealing
-    // Also check ref to prevent duplicate attempts from useEffect re-runs
-    if (!gameState.awaitingCommunityReveal || gameState.isRevealingCommunity || communityRevealInProgressRef.current) {
-      return;
-    }
-
-    // Only reveal during valid phases (PreFlop, Flop, Turn)
-    const phase = gameState.phase;
-    if (phase !== "PreFlop" && phase !== "Flop" && phase !== "Turn") {
-      console.log(`[Auto-reveal] Skipping - invalid phase for community reveal: ${phase}`);
+    if (
+      !nextCommunityRevealAllowed({
+        awaiting: gameState.awaitingCommunityReveal,
+        inFlight: communityRevealInProgressRef.current,
+        revealingUi: gameState.isRevealingCommunity,
+        phase: gameState.phase,
+      })
+    ) {
       return;
     }
 
